@@ -99,6 +99,29 @@ internal static class ReceivingTests
             Check.Equal(received.Data.Gross, dossier!.PurchaseGross);
             Check.Equal("Egér", dossier.Frequent.Single().Name);
         });
+        yield return Case("nav connection encrypts secrets for one company and one windows user", async f =>
+        {
+            Check.Equal(false, NavConnectionStore.Status(f.Companies.ModuleDataDirectory(f.Second.Id, "receiving"), f.Second.Id).Configured);
+            var directory = f.Companies.ModuleDataDirectory(f.First.Id, "receiving");
+            var saved = NavConnectionStore.Save(directory, f.First.Id, new(f.First.Id, "12345678-2-42", "technikai", "TitokJelszo99", "AlairoKulcs1234", "CsereKulcs12345", true));
+            Check.Equal("12345678", saved.TaxNumber);
+            Check.True(saved.TestMode);
+            var file = File.ReadAllBytes(Path.Combine(directory, NavConnectionStore.FileName));
+            var text = Encoding.UTF8.GetString(file);
+            Check.True(!text.Contains("TitokJelszo99", StringComparison.Ordinal));
+            Check.True(!text.Contains("AlairoKulcs1234", StringComparison.Ordinal));
+            Check.True(!text.Contains("CsereKulcs12345", StringComparison.Ordinal));
+            Check.True(!text.Contains("technikai", StringComparison.Ordinal));
+            var opened = NavConnectionStore.Read(directory, f.First.Id);
+            Check.Equal("TitokJelszo99", opened!.Password);
+            var kept = NavConnectionStore.Save(directory, f.First.Id, new(f.First.Id, "12345678", "technikai", "", "", "", false));
+            Check.True(!kept.TestMode);
+            Check.Equal("TitokJelszo99", NavConnectionStore.Read(directory, f.First.Id)!.Password);
+            var other = f.Companies.ModuleDataDirectory(f.Second.Id, "receiving");
+            Directory.CreateDirectory(other);
+            File.Copy(Path.Combine(directory, NavConnectionStore.FileName), Path.Combine(other, NavConnectionStore.FileName));
+            await Check.ThrowsAsync<IOException>(async () => await Task.Run(() => NavConnectionStore.Read(other, f.Second.Id)));
+        });
         yield return Case("export prefixes a formula and the signed module lists one page", async f =>
         {
             var supplier = await f.Supplier("=Nagyker", "33333333-2-42");

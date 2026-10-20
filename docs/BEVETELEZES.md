@@ -13,7 +13,9 @@ A bevételezés bejövő számlát tart. A lista elején lehet választani, honn
 
 ## NAV és import
 
-A NAV-gomb ebben a körben a már letöltött NAV-számla XML-t olvassa. Az élő Online Számla lekérdezéshez technikai felhasználó kell, az a következő kör. A PDF tételsorainak kiolvasása szintén a következő kör. Most Excel (xlsx) és CSV olvasható: termék neve, mennyiség, nettó egységár. A cikkszám és a vonalkód a párosítást segíti.
+A NAV-gomb ebben a körben a már letöltött NAV-számla XML-t olvassa. Az élő Online Számla lekérdezés a Beállításokban mentett technikai felhasználót használja majd. A kapcsolat cégenként külön van.
+
+A Beállítások oldalon adható meg az adószám, a technikai felhasználó, a jelszó, az aláírókulcs, a cserekulcs és a teszt mód. A jelszó és a két kulcs a Windows-felhasználóhoz kötött titkosítással kerül a cég `modules/receiving/nav-connection.bin` fájljába. A fájl nem tartalmazza olvashatóan a titkot, másik felhasználó vagy másik gép nem nyitja meg. A képernyő a mentés után nem írja vissza a jelszót és a kulcsokat. Üresen hagyva a már mentett titok marad. A demó cég adatainak törlése ezt a fájlt is törli. A PDF tételsorainak kiolvasása szintén a következő kör. Most Excel (xlsx) és CSV olvasható: termék neve, mennyiség, nettó egységár. A cikkszám és a vonalkód a párosítást segíti.
 
 Az import és a NAV-számla is új állapotba kerül. A besorolás ugyanaz, mint a kézi számlánál.
 
