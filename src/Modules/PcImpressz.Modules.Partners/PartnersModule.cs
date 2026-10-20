@@ -36,7 +36,9 @@ public sealed class PartnersModule : IModule
         context.RegisterCommand(new Handler("dossier", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerDossierQuery>(input);
-            return PartnerJson.Element(PartnerDossier.Open(await repository.Snapshot(query.CompanyId, ct), query.Id));
+            var view = PartnerDossier.Open(await repository.Snapshot(query.CompanyId, ct), query.Id);
+            var snapshot = PartnerDossier.Read(context.GetCompanyDataDirectory(query.CompanyId), query.Id);
+            return PartnerJson.Element(PartnerDossier.Apply(view, snapshot));
         }));
         context.RegisterPage(new("partners", context.ModuleId, "Partnertörzs",
             "Vevők, szállítók és gyártók. A mentett partner dossziéja mutatja, honnan jön majd a számla és a forgalom.", "\uE716",

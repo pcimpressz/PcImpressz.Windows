@@ -31,6 +31,8 @@ A párosítás a régiben adószám, azon belül az első nyolc számjegy, adós
 
 A `dossier` parancs `partners.read` jogosultságot kér, lejárt licenc mellett is olvasható. Bemenete a cég és a partner azonosítója. Kimenete a fejléc, a nyolc összesítő hely és a hat hiányzó forrás leírása. Új partnernél, mentés előtt a gomb nem nyílik meg. Ha a partner nem található, a parancs hibát ad, üres dossziét nem gyárt.
 
+A cég partnerkönyvtárában a `dossiers.json` egy partnerhez bejövő számlákat csatolhat, amíg nincs bevételezés modul. Ha a fájlban van számla, a Beszerzés és a Bejövő számla kártya kitöltődik, a többi hely kötőjel marad. A fájl helyi adat, nem kerül a forráskezelőbe.
+
 A következő fejlesztési lépés a bevételezés: a bejövő számla fej- és tételsora hivatkozzon a partner azonosítójára, és a dosszié `incoming` szakasza onnan töltse a számlalistát és a beszerzés összegét. Utána jöhet a kimenő számla ugyanezzel a partnerkapoccsal, a forgalom kártyához. Amíg a forrásmodul nincs, a szakasz állapota `waiting` marad.
 
 ## InvenTree-import

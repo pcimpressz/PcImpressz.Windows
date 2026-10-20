@@ -1,14 +1,25 @@
+using System.Globalization;
+using System.Text.Json;
+
 namespace PcImpressz.Modules.Partners;
 
 public sealed record PartnerDossierQuery(Guid CompanyId, Guid Id);
 public sealed record PartnerDossierCard(string Id, string Label, string Value, string Status);
-public sealed record PartnerDossierSection(string Id, string Title, string Status, string Source, string Detail);
+public sealed record PartnerDossierLine(string Title, string Detail, string Amount);
+public sealed record PartnerDossierSection(string Id, string Title, string Status, string Source, string Detail, PartnerDossierLine[] Lines);
 public sealed record PartnerDossierView(Guid PartnerId, string Title, string Subtitle, bool FiguresAvailable,
     string Notice, PartnerDossierCard[] Cards, PartnerDossierSection[] Sections);
+public sealed record PartnerDossierItem(string Name, decimal Quantity, decimal Net);
+public sealed record PartnerDossierInvoice(string Number, string Date, decimal Net, decimal Gross, bool Paid, string Status, PartnerDossierItem[] Items);
+public sealed record PartnerDossierSnapshot(Guid PartnerId, decimal PurchaseNet, decimal PurchaseGross, string? First, string? Last,
+    PartnerDossierItem[] Frequent, PartnerDossierInvoice[] Invoices);
+public sealed record PartnerDossierDocument(int SchemaVersion, PartnerDossierSnapshot[] Items);
 
 public static class PartnerDossier
 {
     public const string Waiting = "waiting";
+    public const string Ready = "ready";
+    private static readonly CultureInfo Hungarian = CultureInfo.GetCultureInfo("hu-HU");
 
     public static PartnerDossierView Open(PartnerState state, Guid id)
     {
@@ -46,8 +57,58 @@ public static class PartnerDossier
 
     private static PartnerDossierCard Card(string id, string label) => new(id, label, "—", Waiting);
 
+    public static PartnerDossierView Apply(PartnerDossierView view, PartnerDossierSnapshot? snapshot)
+    {
+        if (snapshot is null || snapshot.PartnerId != view.PartnerId || snapshot.Invoices is not { Length: > 0 }) return view;
+        var cards = view.Cards.Select(card => card.Id switch
+        {
+            "purchase" => card with { Value = Money(snapshot.PurchaseGross), Status = Ready },
+            "incoming" => card with { Value = snapshot.Invoices.Length.ToString(Hungarian), Status = Ready },
+            _ => card
+        }).ToArray();
+        var lines = snapshot.Frequent.Take(6).Select(item => new PartnerDossierLine(item.Name, "gyakori tétel · " + Quantity(item.Quantity) + " db", Money(item.Net)))
+            .Concat(snapshot.Invoices.Select(InvoiceLine)).ToArray();
+        var sections = view.Sections.Select(section => section.Id == "incoming"
+            ? section with
+            {
+                Status = Ready,
+                Detail = "Bejövő számlák a jelenlegi raktárból, " + (snapshot.First ?? "—") + " — " + (snapshot.Last ?? "—") + ". Nettó " + Money(snapshot.PurchaseNet) + ".",
+                Lines = lines
+            }
+            : section).ToArray();
+        return view with
+        {
+            FiguresAvailable = true, Cards = cards, Sections = sections,
+            Notice = "A beszerzés és a bejövő számlák a jelenlegi raktárból lettek átvéve. Kimenő forgalom, árajánlat, díjbekérő és megrendelés ennél a partnernél nincs."
+        };
+    }
+
+    public static PartnerDossierSnapshot? Read(string directory, Guid partnerId)
+    {
+        var file = Path.Combine(directory, "dossiers.json");
+        if (!File.Exists(file)) return null;
+        if (new FileInfo(file).Length > 32 * 1024 * 1024) throw new IOException("A partnerdosszié túl nagy.");
+        PartnerDossierDocument? document;
+        try { document = JsonSerializer.Deserialize<PartnerDossierDocument>(File.ReadAllText(file), PartnerJson.Options); }
+        catch (JsonException) { throw new IOException("A partnerdosszié fájl sérült."); }
+        if (document is null || document.SchemaVersion != 1 || document.Items is null)
+            throw new IOException("A partnerdosszié fájl sérült.");
+        return document.Items.FirstOrDefault(item => item.PartnerId == partnerId);
+    }
+
+    private static PartnerDossierLine InvoiceLine(PartnerDossierInvoice invoice)
+    {
+        var names = string.Join(", ", invoice.Items.Take(3).Select(item => item.Name).Where(name => name.Length > 0));
+        var paid = invoice.Paid ? "fizetve" : "nincs fizetve";
+        var detail = string.Join(" · ", new[] { invoice.Date, paid, invoice.Status, names }.Where(part => part.Length > 0));
+        return new(invoice.Number.Length > 0 ? invoice.Number : "számla", detail, Money(invoice.Gross));
+    }
+
+    private static string Money(decimal value) => value.ToString("N2", Hungarian) + " Ft";
+    private static string Quantity(decimal value) => value.ToString(value == decimal.Truncate(value) ? "0" : "0.##", Hungarian);
+
     private static PartnerDossierSection Section(string id, string title, string source, string detail) =>
-        new(id, title, Waiting, source, detail);
+        new(id, title, Waiting, source, detail, []);
 
     private static string Subtitle(PartnerData data)
     {

@@ -24,6 +24,15 @@ internal static class PartnerTests
             Check.Equal(8, view.Cards.Length);
             Check.True(view.Cards.All(card => card.Value == "—" && card.Status == PartnerDossier.Waiting));
             Check.Equal("incoming", view.Sections.Single(section => section.Source == "Bevételezés").Id);
+            Check.Equal(0, view.Sections.Single(section => section.Id == "incoming").Lines.Length);
+            var filled = PartnerDossier.Apply(view, new(saved.Id, 1000m, 1270m, "2026-08-04", "2026-10-14",
+                [new("Szállítás", 2, 400m)], [new("2026/1", "2026-10-14", 1000m, 1270m, false, "bevételezve", [new("Egérpad", 1, 1000m)])]));
+            Check.True(filled.FiguresAvailable);
+            var purchase = filled.Cards.Single(card => card.Id == "purchase").Value;
+            Check.True(purchase.EndsWith(" Ft", StringComparison.Ordinal) && purchase.Contains("270,00", StringComparison.Ordinal));
+            Check.Equal("1", filled.Cards.Single(card => card.Id == "incoming").Value);
+            Check.Equal("—", filled.Cards.Single(card => card.Id == "turnover").Value);
+            Check.Equal("2026/1", filled.Sections.Single(section => section.Id == "incoming").Lines[1].Title);
             Check.True(view.Sections.All(section => section.Status == PartnerDossier.Waiting && section.Detail.Length > 20));
             var state = await f.Repository.Snapshot(f.First.Id);
             Check.Throws<ArgumentException>(() => PartnerDossier.Open(state, Guid.NewGuid()));

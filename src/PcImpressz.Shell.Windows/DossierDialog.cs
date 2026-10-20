@@ -66,6 +66,24 @@ internal static class DossierDialog
         source.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
         var detail = new TextBlock { Text = Text(section, "detail"), TextWrapping = TextWrapping.Wrap };
         block.Children.Add(source); block.Children.Add(detail);
+        if (section.TryGetProperty("lines", out var lines))
+            foreach (var line in lines.EnumerateArray()) block.Children.Add(Line(line));
         return block;
+    }
+
+    private static Grid Line(JsonElement line)
+    {
+        var row = new Grid { Margin = new(0, 8, 0, 0) };
+        row.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        var text = new StackPanel();
+        text.Children.Add(new TextBlock { Text = Text(line, "title"), TextWrapping = TextWrapping.Wrap });
+        var extra = new TextBlock { Text = Text(line, "detail"), FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        extra.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        text.Children.Add(extra);
+        var amount = new TextBlock { Text = Text(line, "amount"), FontWeight = FontWeights.SemiBold, Margin = new(12, 0, 0, 0) };
+        Grid.SetColumn(amount, 1);
+        row.Children.Add(text); row.Children.Add(amount);
+        return row;
     }
 }
