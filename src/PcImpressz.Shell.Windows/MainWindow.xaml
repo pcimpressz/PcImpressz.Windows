@@ -10,17 +10,17 @@
  <Border BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /><RowDefinition Height="30" /></Grid.RowDefinitions>
-   <Border Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,0,0,1">
+   <Border Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,0,0,1" TextElement.Foreground="{DynamicResource TextBrush}">
     <Grid Margin="20,0,6,0">
      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-      <TextBlock Text="PC-IMPRESSZ" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+      <TextBlock Text="PC-IMPRESSZ" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
       <Border Width="1" Height="14" Background="{DynamicResource StrokeBrush}" Margin="16,0" />
       <TextBlock Text="WINDOWS EDITION" Style="{StaticResource Eyebrow}" VerticalAlignment="Center" />
      </StackPanel>
      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-      <Button Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource GhostButton}" Width="44" Padding="0" Click="MinimizeClick" ToolTip="Kis méret" AutomationProperties.Name="Kis méret" />
-      <Button Content="&#xE922;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource GhostButton}" Width="44" Padding="0" Click="MaximizeClick" ToolTip="Teljes méret" AutomationProperties.Name="Teljes méret" />
-      <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource GhostButton}" Width="44" Padding="0" Click="CloseClick" ToolTip="Bezárás" AutomationProperties.Name="Bezárás" />
+      <Button Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource GhostButton}" Foreground="{DynamicResource TextBrush}" Width="44" Padding="0" Click="MinimizeClick" ToolTip="Kis méret" AutomationProperties.Name="Kis méret" />
+      <Button Content="&#xE922;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource GhostButton}" Foreground="{DynamicResource TextBrush}" Width="44" Padding="0" Click="MaximizeClick" ToolTip="Teljes méret" AutomationProperties.Name="Teljes méret" />
+      <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource GhostButton}" Foreground="{DynamicResource TextBrush}" Width="44" Padding="0" Click="CloseClick" ToolTip="Bezárás" AutomationProperties.Name="Bezárás" />
      </StackPanel>
     </Grid>
    </Border>

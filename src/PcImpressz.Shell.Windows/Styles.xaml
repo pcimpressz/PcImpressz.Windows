@@ -150,4 +150,165 @@
  </Style>
  <Style TargetType="ScrollViewer"><Setter Property="HorizontalScrollBarVisibility" Value="Disabled" /><Setter Property="VerticalScrollBarVisibility" Value="Auto" /></Style>
  <Style TargetType="ScrollBar"><Setter Property="Width" Value="8" /><Setter Property="Opacity" Value="0.55" /></Style>
+ <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+  <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+  <Setter Property="RowBackground" Value="{DynamicResource SurfaceBrush}" />
+  <Setter Property="AlternatingRowBackground" Value="{DynamicResource ElevatedBrush}" />
+  <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource StrokeBrush}" />
+  <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource StrokeBrush}" />
+  <Setter Property="GridLinesVisibility" Value="Horizontal" />
+ </Style>
+ <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+  <Setter Property="Background" Value="{DynamicResource ElevatedBrush}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+  <Setter Property="BorderThickness" Value="0,0,1,1" />
+  <Setter Property="Padding" Value="12,8" />
+  <Setter Property="FontWeight" Value="SemiBold" />
+  <Setter Property="HorizontalContentAlignment" Value="Left" />
+  <Setter Property="VerticalContentAlignment" Value="Center" />
+  <Setter Property="SeparatorBrush" Value="{DynamicResource StrokeBrush}" />
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="DataGridColumnHeader">
+     <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+      <DockPanel>
+       <TextBlock x:Name="SortMark" DockPanel.Dock="Right" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" Foreground="{TemplateBinding Foreground}" />
+       <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" RecognizesAccessKey="True">
+        <ContentPresenter.Resources>
+         <Style TargetType="TextBlock">
+          <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=DataGridColumnHeader}}" />
+          <Setter Property="TextWrapping" Value="NoWrap" />
+          <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+         </Style>
+        </ContentPresenter.Resources>
+       </ContentPresenter>
+      </DockPanel>
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="SortDirection" Value="Ascending"><Setter TargetName="SortMark" Property="Text" Value="&#xE70E;" /><Setter TargetName="SortMark" Property="Visibility" Value="Visible" /></Trigger>
+      <Trigger Property="SortDirection" Value="Descending"><Setter TargetName="SortMark" Property="Text" Value="&#xE70D;" /><Setter TargetName="SortMark" Property="Visibility" Value="Visible" /></Trigger>
+      <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource SurfaceBrush}" /></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
+ <Style TargetType="CalendarDayButton">
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="Background" Value="Transparent" />
+  <Setter Property="MinWidth" Value="32" /><Setter Property="MinHeight" Value="32" />
+  <Setter Property="FontSize" Value="13" />
+  <Setter Property="HorizontalContentAlignment" Value="Center" />
+  <Setter Property="VerticalContentAlignment" Value="Center" />
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="CalendarDayButton">
+     <Border x:Name="Day" Background="{TemplateBinding Background}" CornerRadius="6" Margin="1">
+      <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="IsInactive" Value="True"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /></Trigger>
+      <Trigger Property="IsBlackedOut" Value="True"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /></Trigger>
+      <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Day" Property="Background" Value="{DynamicResource ElevatedBrush}" /></Trigger>
+      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Day" Property="Background" Value="{DynamicResource ElevatedBrush}" /></Trigger>
+      <Trigger Property="IsToday" Value="True"><Setter TargetName="Day" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter TargetName="Day" Property="BorderThickness" Value="1" /></Trigger>
+      <Trigger Property="IsSelected" Value="True"><Setter TargetName="Day" Property="Background" Value="{DynamicResource AccentBrush}" /><Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" /></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
+ <Style TargetType="CalendarButton">
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="Background" Value="Transparent" />
+  <Setter Property="MinWidth" Value="42" /><Setter Property="MinHeight" Value="40" />
+  <Setter Property="FontSize" Value="13" />
+  <Setter Property="HorizontalContentAlignment" Value="Center" />
+  <Setter Property="VerticalContentAlignment" Value="Center" />
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="CalendarButton">
+     <Border x:Name="Cell" Background="{TemplateBinding Background}" CornerRadius="6" Margin="2" Padding="6,4">
+      <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="IsInactive" Value="True"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /></Trigger>
+      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Cell" Property="Background" Value="{DynamicResource ElevatedBrush}" /></Trigger>
+      <Trigger Property="HasSelectedDays" Value="True"><Setter TargetName="Cell" Property="Background" Value="{DynamicResource AccentSoftBrush}" /></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
+ <Style x:Key="ThemedCalendarItem" TargetType="CalendarItem">
+  <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="CalendarItem">
+     <ControlTemplate.Resources>
+      <DataTemplate x:Key="{ComponentResourceKey TypeInTargetAssembly=CalendarItem, ResourceId=DayTitleTemplate}">
+       <TextBlock Text="{Binding}" FontWeight="SemiBold" FontSize="11" Margin="0,6,0,6" HorizontalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+      </DataTemplate>
+     </ControlTemplate.Resources>
+     <Grid Name="PART_Root">
+      <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="6">
+       <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Button Name="PART_PreviousButton" Grid.Column="0" Width="28" Height="28" Padding="0" Focusable="False" Foreground="{DynamicResource TextBrush}" Background="Transparent" BorderThickness="0">
+         <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+        </Button>
+        <Button Name="PART_HeaderButton" Grid.Column="1" Padding="4,0" Focusable="False" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Background="Transparent" BorderThickness="0" HorizontalAlignment="Center" />
+        <Button Name="PART_NextButton" Grid.Column="2" Width="28" Height="28" Padding="0" Focusable="False" Foreground="{DynamicResource TextBrush}" Background="Transparent" BorderThickness="0">
+         <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+        </Button>
+        <Grid Name="PART_MonthView" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,4,0,0" HorizontalAlignment="Center">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        </Grid>
+        <Grid Name="PART_YearView" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,4,0,0" HorizontalAlignment="Center" Visibility="Hidden">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        </Grid>
+       </Grid>
+      </Border>
+     </Grid>
+     <ControlTemplate.Triggers>
+      <DataTrigger Binding="{Binding DisplayMode, RelativeSource={RelativeSource AncestorType=Calendar}}" Value="Year">
+       <Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden" />
+       <Setter TargetName="PART_YearView" Property="Visibility" Value="Visible" />
+      </DataTrigger>
+      <DataTrigger Binding="{Binding DisplayMode, RelativeSource={RelativeSource AncestorType=Calendar}}" Value="Decade">
+       <Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden" />
+       <Setter TargetName="PART_YearView" Property="Visibility" Value="Visible" />
+      </DataTrigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
+ <Style x:Key="ThemedCalendar" TargetType="Calendar" BasedOn="{StaticResource {x:Type Calendar}}">
+  <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="CalendarItemStyle" Value="{StaticResource ThemedCalendarItem}" />
+ </Style>
+ <Style x:Key="ThemedDatePicker" TargetType="DatePicker" BasedOn="{StaticResource {x:Type DatePicker}}">
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="Background" Value="{DynamicResource ElevatedBrush}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="CalendarStyle" Value="{StaticResource ThemedCalendar}" />
+ </Style>
+ <Style TargetType="DatePicker" BasedOn="{StaticResource ThemedDatePicker}" />
+ <Style TargetType="DatePickerTextBox" BasedOn="{StaticResource {x:Type DatePickerTextBox}}">
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  <Setter Property="Background" Value="{DynamicResource ElevatedBrush}" />
+  <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
+ </Style>
 </ResourceDictionary>
