@@ -11,3 +11,5 @@ artifacts/
 *.pem
 
 .issuer/
+operation-secrets.bin
+operation-secrets.bin.bak

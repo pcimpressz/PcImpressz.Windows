@@ -27,8 +27,8 @@ internal static class MenuTests
             Check.Equal("partners.partners", menu[2].PageKey);
             Check.Equal("Bevételezés", menu[3].Children[0].Title);
             Check.Equal("stock.issues", menu[3].PageKey);
-            Check.Equal("Megjelenés|Licenc|Modulok", string.Join("|", menu[4].Children.Select(item => item.Title)));
-            Check.Equal("appearance|license|modules", string.Join("|", menu[4].Children.Select(item => item.PageKey)));
+            Check.Equal("Megjelenés|Licenc|Modulok|Számlázás|Nyomtató|Biztonsági mentés|Nagykereskedések|E-mail", string.Join("|", menu[4].Children.Select(item => item.Title)));
+            Check.Equal("appearance|license|modules|billing|printer|backup|wholesale|mail", string.Join("|", menu[4].Children.Select(item => item.PageKey)));
         });
         yield return Test("module point does not repeat its own page title", () =>
         {
@@ -53,7 +53,7 @@ internal static class MenuTests
                 Page("partners", "dossier", "Partnerdosszié", "\uE8A5")
             ], disabled);
             Check.Equal("Áttekintés|Terméktörzs|Beállítások", string.Join("|", menu.Select(item => item.Title)));
-            Check.Equal("Megjelenés|Licenc|Modulok", string.Join("|", menu[^1].Children.Select(item => item.Title)));
+            Check.Equal("Megjelenés|Licenc|Modulok|Számlázás|Nyomtató|Biztonsági mentés|Nagykereskedések|E-mail", string.Join("|", menu[^1].Children.Select(item => item.Title)));
             Check.Equal(0, menu.Count(item => item.Title == "Partnertörzs" || item.Children.Any(child => child.Title == "Partnerdosszié")));
         });
         yield return Test("shell menu stays usable before modules arrive", () =>

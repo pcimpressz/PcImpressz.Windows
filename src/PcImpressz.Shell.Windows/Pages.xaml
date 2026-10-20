@@ -175,11 +175,15 @@
   </StackPanel>
  </DataTemplate>
 
+ <DataTemplate DataType="{x:Type local:OperationSettingsPage}">
+  <local:OperationSettingsView DataContext="{Binding DataContext.Operations, RelativeSource={RelativeSource AncestorType=Window}}" />
+ </DataTemplate>
+
  <DataTemplate DataType="{x:Type local:SettingsPage}">
   <StackPanel DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
    <Border Style="{StaticResource Card}"><StackPanel>
     <TextBlock Text="Helyi munkaterület" Style="{StaticResource SectionTitle}" />
-    <TextBlock Text="Az alkalmazás saját beállításai, naplói és moduljai ebben a mappában találhatók." Style="{StaticResource Muted}" />
+    <TextBlock Text="Az alkalmazás saját beállításai, naplói és moduljai ebben a mappában találhatók. A számlázás, a nyomtató, a helyi mentés, a nagykereskedések és az e-mail a bal oldali menüben állítható. A NAV-kapcsolat cégenként itt lent marad." Style="{StaticResource Muted}" />
     <TextBox Text="{Binding DataDirectory, Mode=OneWay}" IsReadOnly="True" Background="{DynamicResource ElevatedBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0" Padding="14" Margin="0,18,0,18" TextWrapping="Wrap" />
     <StackPanel Orientation="Horizontal"><Button Content="Adatmappa megnyitása" Command="{Binding OpenDataCommand}" Margin="0,0,12,0" /><Button Content="Naplók megnyitása" Command="{Binding OpenLogsCommand}" /></StackPanel>
    </StackPanel></Border>

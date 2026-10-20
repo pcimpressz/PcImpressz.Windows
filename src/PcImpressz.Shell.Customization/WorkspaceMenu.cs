@@ -12,14 +12,18 @@ public static class WorkspaceMenu
         if (disabledModuleIds is { Count: > 0 })
             pages = pages.Where(page => !disabledModuleIds.Contains(page.ModuleId)).ToArray();
         var modules = pages.GroupBy(page => page.ModuleId, StringComparer.Ordinal).Select(Module).ToArray();
+        var settings = new List<MenuEntry>
+        {
+            Shell("appearance", "Megjelenés", "\uE790", "Egy munkafelület, ami hozzád igazodik."),
+            Shell("license", "Licenc", "\uE72E", "A telepítéshez tartozó használati jogosultságok."),
+            Shell("modules", "Modulok", "\uE74C", "A telepített bővítmények és állapotuk.")
+        };
+        settings.AddRange(OperationCatalog.Groups.Select(group => Shell(group.Id, group.Title, group.Icon, group.Description)));
         return
         [
             Shell("home", "Áttekintés", "\uE80F", "A munkaterületed állapota egy helyen."),
             .. modules,
-            Shell("settings", "Beállítások", "\uE713", "Helyi működés, adatok és diagnosztika.",
-                Shell("appearance", "Megjelenés", "\uE790", "Egy munkafelület, ami hozzád igazodik."),
-                Shell("license", "Licenc", "\uE72E", "A telepítéshez tartozó használati jogosultságok."),
-                Shell("modules", "Modulok", "\uE74C", "A telepített bővítmények és állapotuk."))
+            Shell("settings", "Beállítások", "\uE713", "A program működésének beállításai.", settings.ToArray())
         ];
     }
 
