@@ -11,6 +11,44 @@ internal static class PartnerTests
 {
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
+        yield return Case("dossier names the missing sources and invents no turnover", async f =>
+        {
+            var saved = await f.Repository.Save(new(f.First.Id, null, 0, Data("Beszállító Kft.") with
+            { TaxId = "12345678-2-42", City = "Budapest", IsCustomer = false, IsSupplier = true }), "operator");
+            var view = PartnerDossier.Open(await f.Repository.Snapshot(f.First.Id), saved.Id);
+            Check.Equal(saved.Id, view.PartnerId);
+            Check.Equal("Beszállító Kft. dossziéja", view.Title);
+            Check.True(view.Subtitle.Contains("szállító", StringComparison.Ordinal));
+            Check.True(view.Subtitle.Contains("12345678-2-42", StringComparison.Ordinal));
+            Check.True(!view.FiguresAvailable);
+            Check.Equal(8, view.Cards.Length);
+            Check.True(view.Cards.All(card => card.Value == "—" && card.Status == PartnerDossier.Waiting));
+            Check.Equal("incoming", view.Sections.Single(section => section.Source == "Bevételezés").Id);
+            Check.Equal(0, view.Sections.Single(section => section.Id == "incoming").Lines.Length);
+            var filled = PartnerDossier.Apply(view, new(saved.Id, 1000m, 1270m, "2026-08-04", "2026-10-14",
+                [new("Szállítás", 2, 400m)], [new("2026/1", "2026-10-14", 1000m, 1270m, false, "bevételezve", [new("Egérpad", 1, 1000m)])]));
+            Check.True(filled.FiguresAvailable);
+            var purchase = filled.Cards.Single(card => card.Id == "purchase").Value;
+            Check.True(purchase.EndsWith(" Ft", StringComparison.Ordinal) && purchase.Contains("270,00", StringComparison.Ordinal));
+            Check.Equal("1", filled.Cards.Single(card => card.Id == "incoming").Value);
+            Check.Equal("—", filled.Cards.Single(card => card.Id == "turnover").Value);
+            Check.Equal("2026/1", filled.Sections.Single(section => section.Id == "incoming").Lines[1].Title);
+            var both = new PartnerDossierSnapshot(saved.Id, 2000m, 2540m, "2026-08-04", "2026-10-14", [],
+                [new("2026/1", "2026-10-14", 1000m, 1270m, false, "bevételezve", [new("Egérpad", 1, 1000m)]),
+                 new("2026/2", "2026-08-04", 1000m, 1270m, true, "bevételezve", [new("Egérpad", 2, 1000m)])]);
+            var october = PartnerDossier.Within(both, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31));
+            Check.Equal(1, october.Invoices.Length);
+            Check.Equal(1270m, october.PurchaseGross);
+            Check.Equal("2026/1", october.Invoices[0].Number);
+            var outside = PartnerDossier.Apply(view, PartnerDossier.Within(both, new DateOnly(2020, 1, 1), new DateOnly(2020, 1, 31)), true);
+            Check.Equal("0", outside.Cards.Single(card => card.Id == "incoming").Value);
+            Check.Equal("—", outside.Cards.Single(card => card.Id == "turnover").Value);
+            Check.True(outside.Notice.Contains("időszakban", StringComparison.Ordinal));
+            Check.Throws<ArgumentException>(() => PartnerDossier.Period("2026-12-01", "2026-01-01"));
+            Check.True(view.Sections.All(section => section.Status == PartnerDossier.Waiting && section.Detail.Length > 20));
+            var state = await f.Repository.Snapshot(f.First.Id);
+            Check.Throws<ArgumentException>(() => PartnerDossier.Open(state, Guid.NewGuid()));
+        });
         yield return Case("new company starts completely empty", async f =>
         { Check.Equal(0, (await f.Repository.Snapshot(f.First.Id)).Partners.Length); });
         yield return Case("partner data is isolated by company", async f =>

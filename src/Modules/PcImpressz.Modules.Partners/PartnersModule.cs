@@ -33,8 +33,17 @@ public sealed class PartnersModule : IModule
             PartnerJson.Element(await importer.Preview(PartnerJson.Read<ImportOptions>(input), actor, ct))));
         context.RegisterCommand(new Handler("import-commit", "partners.import", CommandAccess.Licensed, async (input, actor, ct) =>
             PartnerJson.Element(new { imported = await importer.Commit(PartnerJson.Read<ImportCommit>(input), actor, ct) })));
+        context.RegisterCommand(new Handler("dossier", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
+        {
+            var query = PartnerJson.Read<PartnerDossierQuery>(input);
+            var (from, to) = PartnerDossier.Period(query.From, query.To);
+            var view = PartnerDossier.Open(await repository.Snapshot(query.CompanyId, ct), query.Id);
+            var snapshot = PartnerDossier.Read(context.GetCompanyDataDirectory(query.CompanyId), query.Id);
+            if (snapshot is not null) snapshot = PartnerDossier.Within(snapshot, from, to);
+            return PartnerJson.Element(PartnerDossier.Apply(view, snapshot, from is not null || to is not null));
+        }));
         context.RegisterPage(new("partners", context.ModuleId, "Partnertörzs",
-            "Vevők, szállítók és gyártók egy helyen.", "\uE716",
+            "Vevők, szállítók és gyártók. A mentett partner dossziéja mutatja, honnan jön majd a számla és a forgalom.", "\uE716",
             [new("name", "Partner neve", Required: true), new("taxId", "Adószám"), new("email", "E-mail"),
              new("phone", "Telefon"), new("website", "Weboldal"), new("country", "Ország", DefaultText: "HU"),
              new("postalCode", "Irányítószám"), new("city", "Település"), new("address", "Cím"),

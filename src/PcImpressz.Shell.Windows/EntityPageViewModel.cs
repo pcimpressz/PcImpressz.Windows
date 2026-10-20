@@ -51,6 +51,13 @@ public sealed class EntityPageViewModel : Observable
     private int _total;
     private string _search = "";
     private string _filter = "all";
+    private bool _dossierOpen;
+    private DateTime? _periodFrom;
+    private DateTime? _periodTo;
+    private string _dossierTitle = "Dosszié";
+    private string _dossierSubtitle = "";
+    private string _dossierNotice = "";
+    private int _dossierRevision;
     public EntityPageDescriptor Definition { get; }
     public ObservableCollection<EntityRow> Rows { get; } = [];
     public ObservableCollection<EntityFieldViewModel> Fields { get; } = [];
@@ -60,8 +67,21 @@ public sealed class EntityPageViewModel : Observable
     public EntityPageLabels Labels { get; }
     public EntityFilterOption[] Filters { get; }
     public string EditorTitle => (_editId is null ? Labels.NewTitle : Labels.EditTitle) + (IsDirty ? " · nincs mentve" : "");
-    public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); } }
+    public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); Changed(nameof(CanOpenDossier)); } }
     public bool IsNotBusy => !IsBusy;
+    // The dossier command belongs to the partner page. The page contract stays unchanged so already loaded modules keep starting.
+    public bool HasDossier => Definition.ModuleId == "partners" && Definition.Id == "partners";
+    public bool CanOpenDossier => HasDossier && _editId is not null && !IsBusy;
+    public bool IsDossierOpen { get => _dossierOpen; private set { _dossierOpen = value; Changed(); Changed(nameof(ShowEditor)); } }
+    public bool ShowEditor => !IsDossierOpen;
+    public DateTime? PeriodFrom { get => _periodFrom; set { _periodFrom = value; Changed(); } }
+    public DateTime? PeriodTo { get => _periodTo; set { _periodTo = value; Changed(); } }
+    public string DossierTitle { get => _dossierTitle; private set { _dossierTitle = value; Changed(); } }
+    public string DossierSubtitle { get => _dossierSubtitle; private set { _dossierSubtitle = value; Changed(); } }
+    public string DossierNotice { get => _dossierNotice; private set { _dossierNotice = value; Changed(); } }
+    public int DossierRevision { get => _dossierRevision; private set { _dossierRevision = value; Changed(); } }
+    public IReadOnlyList<DossierCardRow> DossierCards { get; private set; } = [];
+    public IReadOnlyList<DossierSectionRow> DossierSections { get; private set; } = [];
     public string Message { get => _message; private set { _message = value; Changed(); } }
     public string CountLabel => _total + " " + Labels.CountNoun + " · " + (_page + 1) + ". oldal";
     public bool CanImport => Definition.Commands.ImportPreview is not null;
@@ -84,6 +104,13 @@ public sealed class EntityPageViewModel : Observable
     public ICommand ImportCommand { get; }
     public ICommand NextCommand { get; }
     public ICommand PreviousCommand { get; }
+    public ICommand DossierCommand { get; }
+    public ICommand DossierBackCommand { get; }
+    public ICommand DossierFilterCommand { get; }
+    public ICommand PeriodAllCommand { get; }
+    public ICommand PeriodYearCommand { get; }
+    public ICommand PeriodPreviousYearCommand { get; }
+    public ICommand PeriodQuarterCommand { get; }
 
     internal EntityPageViewModel(EntityPageDescriptor definition, HostConnection connection, Func<Guid?> company, CancellationToken shutdown)
     {
@@ -104,6 +131,13 @@ public sealed class EntityPageViewModel : Observable
         ImportCommand = new RelayCommand(() => ImportDialog.Show(this));
         NextCommand = new RelayCommand(() => { if ((_page + 1) * 50 < _total && CanDiscard()) { _page++; _ = LoadAsync(); } });
         PreviousCommand = new RelayCommand(() => { if (_page > 0 && CanDiscard()) { _page--; _ = LoadAsync(); } });
+        DossierCommand = new RelayCommand(() => _ = LoadDossierAsync());
+        DossierBackCommand = new RelayCommand(() => IsDossierOpen = false);
+        DossierFilterCommand = new RelayCommand(() => _ = LoadDossierAsync());
+        PeriodAllCommand = new RelayCommand(() => SetPeriod(null, null));
+        PeriodYearCommand = new RelayCommand(() => SetPeriod(new DateTime(DateTime.Today.Year, 1, 1), DateTime.Today));
+        PeriodPreviousYearCommand = new RelayCommand(() => SetPeriod(new DateTime(DateTime.Today.Year - 1, 1, 1), new DateTime(DateTime.Today.Year - 1, 12, 31)));
+        PeriodQuarterCommand = new RelayCommand(() => SetPeriod(DateTime.Today.AddDays(-90), DateTime.Today));
         Populate(null);
     }
 
@@ -124,8 +158,42 @@ public sealed class EntityPageViewModel : Observable
                 field.Checked = row?[field.Definition.Id] is bool b ? b : field.Definition.DefaultChecked;
             else field.Text = row?[field.Definition.Id]?.ToString() ?? field.Definition.DefaultText ?? "";
         }
-        _populating = false; IsDirty = false; Changed(nameof(EditorTitle));
+        _populating = false; IsDirty = false; Changed(nameof(EditorTitle)); Changed(nameof(CanOpenDossier));
+        if (IsDossierOpen && row is not null) _ = LoadDossierAsync();
+        else IsDossierOpen = false;
     }
+
+    private void SetPeriod(DateTime? from, DateTime? to)
+    {
+        PeriodFrom = from; PeriodTo = to; _ = LoadDossierAsync();
+    }
+
+    private async Task LoadDossierAsync()
+    {
+        if (!HasDossier || _editId is not Guid id || IsBusy) return;
+        if (PeriodFrom is DateTime from && PeriodTo is DateTime to && from.Date > to.Date)
+        { Message = "A kezdő dátum nem lehet későbbi, mint a záró."; return; }
+        IsBusy = true;
+        try
+        {
+            var result = await ExecuteAsync("dossier", new
+            {
+                id, from = PeriodFrom?.ToString("yyyy-MM-dd"), to = PeriodTo?.ToString("yyyy-MM-dd")
+            });
+            DossierTitle = Text(result, "title");
+            DossierSubtitle = Text(result, "subtitle");
+            DossierNotice = Text(result, "notice");
+            DossierCards = result.GetProperty("cards").EnumerateArray().Select(card => new DossierCardRow(Text(card, "label"), Text(card, "value"))).ToArray();
+            DossierSections = result.GetProperty("sections").EnumerateArray().Select(section => new DossierSectionRow(Text(section, "title"), Text(section, "source"), Text(section, "detail"),
+                section.TryGetProperty("lines", out var lines) ? lines.EnumerateArray().Select(line => new DossierLineRow(Text(line, "title"), Text(line, "detail"), Text(line, "amount"))).ToArray() : [])).ToArray();
+            DossierRevision++; IsDossierOpen = true;
+        }
+        catch (Exception ex) { Message = ex.Message; DossierNotice = ex.Message; IsDossierOpen = true; DossierRevision++; }
+        finally { IsBusy = false; }
+    }
+
+    private static string Text(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
 
     private Guid CompanyId => _company() ?? throw new InvalidOperationException("Először válassz céget.");
     internal async Task<JsonElement> ExecuteAsync(string command, object input) =>
@@ -205,6 +273,9 @@ public sealed class EntityPageViewModel : Observable
         finally { IsBusy = false; }
     }
     internal void Notify(string message) => Message = message;
+    public sealed record DossierCardRow(string Label, string Value);
+    public sealed record DossierLineRow(string Title, string Detail, string Amount);
+    public sealed record DossierSectionRow(string Title, string Source, string Detail, DossierLineRow[] Lines);
     private static readonly EntityFilterOption[] PartnerFilters =
     [
         new("all", "Aktív partnerek"), new("customer", "Vevők"), new("supplier", "Szállítók"),
