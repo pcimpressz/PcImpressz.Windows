@@ -29,18 +29,8 @@ security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullContro
 issuerDirectory.SetAccessControl(security);
 using var moduleKey = ReadKey("module-signing.pem");
 using var licenseKey = ReadKey("license-signing.pem");
-var dll = Path.Combine(root, "src", "Modules", "PcImpressz.Modules.Partners", "bin", "Release", "net10.0", "PcImpressz.Modules.Partners.dll");
-var moduleBytes = File.ReadAllBytes(dll);
-var manifest = new ModuleManifest
-{
-    SchemaVersion = 1, Id = "partners", Version = "0.3.0", ApiVersion = PlatformContract.ApiVersion,
-    EntryAssembly = "PcImpressz.Modules.Partners.dll", EntryType = "PcImpressz.Modules.Partners.PartnersModule",
-    Files = new() { ["PcImpressz.Modules.Partners.dll"] = Convert.ToHexString(SHA256.HashData(moduleBytes)) }, Dependencies = []
-};
-var package = Path.Combine(data, "modules", "partners");
-Directory.CreateDirectory(package);
-Atomic(Path.Combine(package, manifest.EntryAssembly), moduleBytes);
-AtomicText(Path.Combine(package, "manifest.jws"), Sign(moduleKey, "dev-module-key", ModuleManifest.DocumentType, manifest));
+InstallModule(moduleKey, "partners", "PcImpressz.Modules.Partners", "PcImpressz.Modules.Partners.PartnersModule");
+InstallModule(moduleKey, "catalog", "PcImpressz.Modules.Catalog", "PcImpressz.Modules.Catalog.CatalogModule");
 AddPublicKey("module-public-keys.json", "dev-module-key", moduleKey);
 AddPublicKey("license-public-keys.json", "dev-license-key", licenseKey);
 product["Issuer"] = "pcimpressz-development";
@@ -60,8 +50,9 @@ var license = new EntitlementDocument
 {
     SchemaVersion = 1, Iss = "pcimpressz-development", Aud = PlatformContract.ProductId, LicenseId = licenseId,
     OrganizationId = "development", Revision = revision, Iat = now, Nbf = now - 30, Exp = now + 30 * 86400,
-    Modules = [new() { ModuleId = "partners", Capabilities = ["partners.write", "partners.import", "partners.read", "partners.export"],
-        ExpiresAt = now + 30 * 86400 }]
+    Modules = [
+        new() { ModuleId = "partners", Capabilities = ["partners.write", "partners.import", "partners.read", "partners.export"], ExpiresAt = now + 30 * 86400 },
+        new() { ModuleId = "catalog", Capabilities = ["catalog.write", "catalog.import", "catalog.read", "catalog.export"], ExpiresAt = now + 30 * 86400 }]
 };
 var lease = new LeaseDocument
 {
@@ -70,9 +61,24 @@ var lease = new LeaseDocument
 };
 AtomicText(Path.Combine(data, "license.jws"), Sign(licenseKey, "dev-license-key", LicenseDocumentTypes.Entitlement, license));
 AtomicText(Path.Combine(data, "lease.jws"), Sign(licenseKey, "dev-license-key", LicenseDocumentTypes.Lease, lease));
-Console.WriteLine("Aláírt partnermodul telepítve. Fejlesztői jogosultság: 30 nap, működési engedély: 7 nap.");
+Console.WriteLine("Aláírt partner- és terméktörzsmodul telepítve. Fejlesztői jogosultság: 30 nap, működési engedély: 7 nap.");
 Console.WriteLine("Kiadói kulcsok kizárólag a .issuer mappában; ügyfélkiadásba nem kerülnek.");
 
+void InstallModule(ECDsa key, string id, string assemblyName, string entryType)
+{
+    var dll = Path.Combine(root, "src", "Modules", assemblyName, "bin", "Release", "net10.0", assemblyName + ".dll");
+    var moduleBytes = File.ReadAllBytes(dll);
+    var manifest = new ModuleManifest
+    {
+        SchemaVersion = 1, Id = id, Version = "0.3.0", ApiVersion = PlatformContract.ApiVersion,
+        EntryAssembly = assemblyName + ".dll", EntryType = entryType,
+        Files = new() { [assemblyName + ".dll"] = Convert.ToHexString(SHA256.HashData(moduleBytes)) }, Dependencies = []
+    };
+    var package = Path.Combine(data, "modules", id);
+    Directory.CreateDirectory(package);
+    Atomic(Path.Combine(package, manifest.EntryAssembly), moduleBytes);
+    AtomicText(Path.Combine(package, "manifest.jws"), Sign(key, "dev-module-key", ModuleManifest.DocumentType, manifest));
+}
 ECDsa ReadKey(string name)
 {
     var file = Path.Combine(issuerDirectory.FullName, name);

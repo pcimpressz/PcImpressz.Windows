@@ -30,7 +30,7 @@ A **Megjelenés** oldalon azonnal válthatsz az Éjkék, Porcelán és Grafit t�
 
 Saját skinhez használd a **Jelenlegi skin exportálása** gombot, vagy másold a `skins/sajat-skin.json` mintát. A fájl színeit `#RRGGBB` formában lehet szerkeszteni, majd a **Skin importálása** gombbal visszatölteni. A skin kizárólag ellenőrzött színadatokat tartalmazhat, futtatható kódot vagy XAML-t nem. A túl alacsony szövegkontrasztú palettát a program elutasítja.
 
-A felület a valódi helyi állapotot, a modulokat, licencet és megjelenést kezeli. Az első üzleti modul a Partnertörzs: üres cégek, külön céges partneradatok, keresés, szerkesztés, archiválás, CSV-export és InvenTree-importelőnézet. Használata: docs/PARTNERTORZS.md. Online előfizetési aktiválás és drag & drop szerkesztőmód még nincs benne.
+A felület a valódi helyi állapotot, a modulokat, licencet és megjelenést kezeli. Üzleti modul a Partnertörzs és a Terméktörzs. A partnerek használata: docs/PARTNERTORZS.md. A terméktörzs kategóriát, mértékegységet, cikkszámot és alapparamétert tart, CSV-exporttal és csak olvasó InvenTree-importtal: docs/TERMEKTORZS.md. Online előfizetési aktiválás és drag & drop szerkesztőmód még nincs benne.
 
 ## Mi működik?
 
@@ -55,6 +55,7 @@ A mag üzleti modul nélkül is fut. Nincs beépített raktár, terméktörzs, p
 - `src/PcImpressz.Shell.Windows`: natív WPF-ablak, oldalak, stílusok és a maghoz kapcsolódás.
 - `src/PcImpressz.Shell.Customization`: felülettől független skin- és beállításkezelés, kontrasztellenőrzéssel.
 - `tests/PcImpressz.Core.Tests`: külső tesztkeretrendszer nélküli tesztfuttató, hiba esetén nem nulla kilépési kóddal.
+- `src/Modules/PcImpressz.Modules.Catalog`: terméktörzs, kategória és mértékegység. Nem készletmodul.
 - `tests/PcImpressz.TestModule`: kizárólag teszteléshez fordított modulszerelvény; nem része a kiadásnak.
 
 A Core nem hivatkozik a Hostra vagy a grafikus felületre. A Shell nem hivatkozik a Core-ra: a Contracts diagnosztikai szerződését használja. Egy modul csak a Contracts csomagra hivatkozzon. Új üzleti modul hozzáadásához a Core és Host forrását nem kell módosítani; a mező- és oszlopleírásokat a modul regisztrálja, a Shell ebből építi fel a képernyőt.
@@ -105,4 +106,4 @@ A `CallerIdentity` egy későbbi megbízható hitelesítési réteg eredménye. 
 
 ## Következő lépés
 
-A következő üzleti alap a terméktörzs lehet, erre épülhet az eladás és a készletkezelés. A modulképernyők regisztrációja és az InvenTree csak olvasó partnerimportja már elkészült; élő import API-kulccsal, a felületen indítható. A kiadói aktiválás, gépkulcsos megújítás és a drag & drop szerkesztő külön későbbi fejlesztés.
+A terméktörzs helyi JSON-adat, a Partnertörzs mintájára; az InvenTree-ből csak kategóriát, mértékegységet és termékalapot olvas. Készlet, beszerzés, eladás és gyártás még nincs. A kiadói aktiválás, gépkulcsos megújítás és a drag & drop szerkesztő külön későbbi fejlesztés.

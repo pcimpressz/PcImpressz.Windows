@@ -6,7 +6,10 @@
     <Project Path="src/PcImpressz.Shell.Customization/PcImpressz.Shell.Customization.csproj" />
     <Project Path="src/PcImpressz.Shell.Windows/PcImpressz.Shell.Windows.csproj" />
   </Folder>
-  <Folder Name="/modules/"><Project Path="src/Modules/PcImpressz.Modules.Partners/PcImpressz.Modules.Partners.csproj" /></Folder>
+  <Folder Name="/modules/">
+    <Project Path="src/Modules/PcImpressz.Modules.Partners/PcImpressz.Modules.Partners.csproj" />
+    <Project Path="src/Modules/PcImpressz.Modules.Catalog/PcImpressz.Modules.Catalog.csproj" />
+  </Folder>
   <Folder Name="/tools/"><Project Path="tools/PcImpressz.DevelopmentIssuer/PcImpressz.DevelopmentIssuer.csproj" /></Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PcImpressz.Core.Tests/PcImpressz.Core.Tests.csproj" />

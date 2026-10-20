@@ -14,15 +14,12 @@ public sealed class EntityPageView : UserControl
         var toolbar = new WrapPanel { Margin = new(0,0,0,18) };
         var search = Input(); search.Width = 230; search.Margin = new(0,0,10,10);
         search.SetBinding(TextBox.TextProperty, new Binding("Search") { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
-        search.ToolTip = "Keresés név, adószám, e-mail, telefon vagy település alapján"; toolbar.Children.Add(search);
-        var filter = new ComboBox { Width = 150, Margin = new(0,0,10,10), DisplayMemberPath = "Label", SelectedValuePath = "Value",
-            ItemsSource = new[] { new { Label = "Aktív partnerek", Value = "all" }, new { Label = "Vevők", Value = "customer" },
-                new { Label = "Szállítók", Value = "supplier" }, new { Label = "Gyártók", Value = "manufacturer" },
-                new { Label = "Archiváltak", Value = "archived" } } };
+        toolbar.Children.Add(search);
+        var filter = new ComboBox { Width = 180, Margin = new(0,0,10,10), DisplayMemberPath = "Label", SelectedValuePath = "Value" };
         filter.SetBinding(ComboBox.SelectedValueProperty, new Binding("Filter") { Mode = BindingMode.TwoWay });
         toolbar.Children.Add(filter);
         toolbar.Children.Add(ActionButton("Keresés", "SearchCommand"));
-        toolbar.Children.Add(ActionButton("Új partner", "NewCommand"));
+        var create = ActionButton("Új", "NewCommand"); toolbar.Children.Add(create);
         toolbar.Children.Add(ActionButton("CSV export", "ExportCommand"));
         var import = ActionButton("Import InvenTree-ből", "ImportCommand");
         import.SetBinding(VisibilityProperty, new Binding("CanImport") { Converter = new BooleanToVisibilityConverter() });
@@ -82,6 +79,10 @@ public sealed class EntityPageView : UserControl
         DataContextChanged += (_, _) =>
         {
             if (DataContext is not EntityPageViewModel vm) return;
+            search.ToolTip = vm.Labels.SearchHint;
+            create.Content = vm.Labels.NewLabel;
+            filter.ItemsSource = vm.Filters;
+            if (filter.SelectedValue is null) filter.SelectedValue = vm.Filters[0].Value;
             grid.Columns.Clear();
             foreach (var column in vm.Definition.Columns)
                 grid.Columns.Add(new DataGridTextColumn { Header = column.Label, Binding = new Binding("[" + column.Id + "]"), Width = column.Width });

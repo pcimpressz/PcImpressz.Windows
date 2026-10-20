@@ -5,6 +5,7 @@
     <ProjectReference Include="../../src/PcImpressz.Shell.Customization/PcImpressz.Shell.Customization.csproj" />
     <ProjectReference Include="../PcImpressz.TestModule/PcImpressz.TestModule.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../src/Modules/PcImpressz.Modules.Partners/PcImpressz.Modules.Partners.csproj" />
+    <ProjectReference Include="../../src/Modules/PcImpressz.Modules.Catalog/PcImpressz.Modules.Catalog.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <Target Name="CopyFixture" AfterTargets="Build">

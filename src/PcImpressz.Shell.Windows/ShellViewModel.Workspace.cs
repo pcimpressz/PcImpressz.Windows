@@ -74,7 +74,7 @@ public sealed partial class ShellViewModel
         window.SetResourceReference(Window.ForegroundProperty, "TextBrush");
         var panel = new StackPanel { Margin = new Thickness(28) };
         panel.Children.Add(new TextBlock { Text = "Indulj tiszta lappal.", FontSize = 23, FontWeight = FontWeights.SemiBold, Margin = new(0,0,0,16) });
-        panel.Children.Add(new TextBlock { Text = "Az új cégben nem lesznek partnerek vagy mintaadatok.", TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,14) });
+        panel.Children.Add(new TextBlock { Text = "Az új cégben nem lesznek partner-, termék- vagy mintaadatok.", TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,14) });
         var name = new TextBox { MinHeight = 40, Padding = new(10), Margin = new(0,0,0,14) };
         name.SetResourceReference(Control.BackgroundProperty, "ElevatedBrush"); name.SetResourceReference(Control.ForegroundProperty, "TextBrush");
         panel.Children.Add(name);

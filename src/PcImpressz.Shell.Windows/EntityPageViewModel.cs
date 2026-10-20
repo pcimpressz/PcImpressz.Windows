@@ -57,11 +57,13 @@ public sealed class EntityPageViewModel : Observable
     public string Search { get => _search; set { _search = value; Changed(); } }
     public string Filter { get => _filter; set { _filter = value; Changed(); } }
     public bool IsDirty { get => _dirty; private set { _dirty = value; Changed(); Changed(nameof(EditorTitle)); } }
-    public string EditorTitle => (_editId is null ? "Új partner" : "Partner szerkesztése") + (IsDirty ? " · nincs mentve" : "");
+    public EntityPageLabels Labels { get; }
+    public EntityFilterOption[] Filters { get; }
+    public string EditorTitle => (_editId is null ? Labels.NewTitle : Labels.EditTitle) + (IsDirty ? " · nincs mentve" : "");
     public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); } }
     public bool IsNotBusy => !IsBusy;
     public string Message { get => _message; private set { _message = value; Changed(); } }
-    public string CountLabel => _total + " partner · " + (_page + 1) + ". oldal";
+    public string CountLabel => _total + " " + Labels.CountNoun + " · " + (_page + 1) + ". oldal";
     public bool CanImport => Definition.Commands.ImportPreview is not null;
     public EntityRow? SelectedRow
     {
@@ -86,6 +88,8 @@ public sealed class EntityPageViewModel : Observable
     internal EntityPageViewModel(EntityPageDescriptor definition, HostConnection connection, Func<Guid?> company, CancellationToken shutdown)
     {
         (Definition, _connection, _company, _shutdown) = (definition, connection, company, shutdown);
+        Labels = definition.Labels ?? new EntityPageLabels();
+        Filters = definition.Filters ?? PartnerFilters;
         foreach (var field in definition.Fields)
         {
             var vm = new EntityFieldViewModel(field);
@@ -138,7 +142,7 @@ public sealed class EntityPageViewModel : Observable
             Rows.Clear();
             foreach (var row in result.GetProperty("rows").EnumerateArray()) Rows.Add(new(row));
             _total = result.GetProperty("total").GetInt32();
-            Message = _total == 0 ? "Ebben a nézetben még nincs partner. Az Új partner gombbal vehetsz fel egyet." : "A lista naprakész.";
+            Message = _total == 0 ? Labels.EmptyMessage : "A lista naprakész.";
             Changed(nameof(CountLabel));
         }
         catch (Exception ex) { Message = ex.Message; }
@@ -163,42 +167,47 @@ public sealed class EntityPageViewModel : Observable
             var result = await ExecuteAsync(Definition.Commands.Save, new { id = _editId, version = _version, data });
             _selected = new(result); Populate(_selected);
             saved = true;
-            Message = "A partner mentése sikerült.";
+            Message = Labels.SavedMessage;
         }
         catch (Exception ex) { Message = ex.Message; }
         finally { IsBusy = false; }
-        if (saved) { await LoadAsync(); Message = "A partner mentése sikerült."; }
+        if (saved) { await LoadAsync(); Message = Labels.SavedMessage; }
     }
     private async Task ArchiveAsync()
     {
-        if (IsBusy || _editId is null) { Message = "Először válassz meglévő partnert."; return; }
-        if (MessageBox.Show("A partner inaktív állapotba kerül. Az adatai megmaradnak.", "Partner archiválása",
+        if (IsBusy || _editId is null) { Message = Labels.NeedSelection; return; }
+        if (MessageBox.Show(Labels.ArchiveQuestion, Labels.ArchiveTitle,
             MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         var archived = false;
         IsBusy = true;
         try
         {
             await ExecuteAsync(Definition.Commands.Archive, new { id = _editId, version = _version });
-            _selected = null; Populate(null); archived = true; Message = "A partner archiválva.";
+            _selected = null; Populate(null); archived = true; Message = Labels.ArchivedMessage;
         }
         catch (Exception ex) { Message = ex.Message; }
         finally { IsBusy = false; }
-        if (archived) { await LoadAsync(); Message = "A partner archiválva."; }
+        if (archived) { await LoadAsync(); Message = Labels.ArchivedMessage; }
     }
     private async Task ExportAsync()
     {
         if (IsBusy) return;
-        var dialog = new SaveFileDialog { Filter = "CSV fájl (*.csv)|*.csv", FileName = "partnerek.csv" };
+        var dialog = new SaveFileDialog { Filter = "CSV fájl (*.csv)|*.csv", FileName = Labels.ExportFileName };
         if (dialog.ShowDialog() != true) return;
         IsBusy = true;
         try
         {
             var result = await ExecuteAsync(Definition.Commands.Export, new { search = Search, filter = Filter });
             await File.WriteAllTextAsync(dialog.FileName, result.GetProperty("csv").GetString(), new UTF8Encoding(true), _shutdown);
-            Message = "A szűrt partnerlista exportálva.";
+            Message = Labels.ExportedMessage;
         }
         catch (Exception ex) { Message = ex.Message; }
         finally { IsBusy = false; }
     }
     internal void Notify(string message) => Message = message;
+    private static readonly EntityFilterOption[] PartnerFilters =
+    [
+        new("all", "Aktív partnerek"), new("customer", "Vevők"), new("supplier", "Szállítók"),
+        new("manufacturer", "Gyártók"), new("archived", "Archiváltak")
+    ];
 }
