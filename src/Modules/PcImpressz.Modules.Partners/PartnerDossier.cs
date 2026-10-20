@@ -43,7 +43,7 @@ public static class PartnerDossier
                 Section("sales", "Kimenő számlák és forgalom", "Eladás és kimenő számla",
                     "A régi dosszié a pultos eladásból és a lekért kimenő számlákból számolta a forgalmat, a számlaszámot és a gyakran vett tételeket. Eladás és kimenő számla modul még nincs."),
                 Section("incoming", "Bejövő számlák és beszerzés", "Bevételezés",
-                    "Beszállítónál a régi dosszié a bevételezés számláiból mutatta a bejövő számlaszámot, a bruttó és nettó beszerzést, a fizetettséget és a gyakori tételeket. Bevételezés modul még nincs."),
+                    "A bevételezés a szállítóhoz kötött számlákat tartja. Ha ennél a partnernél még nincs számla, a beszerzés és a bejövő lista üres marad. A fizetettség külön pénzügy modul, ezért itt nem jelenik meg."),
                 Section("quotes", "Árajánlatok", "Árajánlat",
                     "A régi dosszié a partnerhez kötött árajánlatokat listázta. Árajánlat modul még nincs."),
                 Section("proforma", "Díjbekérők", "Bizonylat",
@@ -79,8 +79,53 @@ public static class PartnerDossier
         return view with
         {
             FiguresAvailable = true, Cards = cards, Sections = sections,
-            Notice = "A beszerzés és a bejövő számlák a jelenlegi raktárból lettek átvéve. Kimenő forgalom, árajánlat, díjbekérő és megrendelés ennél a partnernél nincs."
+            Notice = "A beszerzés és a bejövő számlák a partner számláiból jönnek. Kimenő forgalom, árajánlat, díjbekérő és megrendelés ennél a partnernél nincs."
         };
+    }
+
+    public static PartnerDossierSnapshot? FromReceipts(string partnerDirectory, Guid partnerId)
+    {
+        var modules = Directory.GetParent(partnerDirectory)?.FullName;
+        if (modules is null) return null;
+        var file = Path.Combine(modules, "receiving", "receipts.json");
+        if (!File.Exists(file)) return null;
+        if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("A bevételezés hivatkozás, ezért a dosszié nem olvassa.");
+        if (new FileInfo(file).Length > 64 * 1024 * 1024) throw new IOException("A bevételezés túl nagy.");
+        JsonDocument document;
+        try { document = JsonDocument.Parse(File.ReadAllText(file)); }
+        catch (JsonException) { throw new IOException("A bevételezés sérült, a dosszié nem tudja olvasni."); }
+        using (document)
+        {
+            if (!document.RootElement.TryGetProperty("receipts", out var rows) || rows.ValueKind != JsonValueKind.Array) return null;
+            var invoices = new List<PartnerDossierInvoice>();
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!row.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object) continue;
+                if (!Guid.TryParse(JsonText(data, "supplierId"), out var supplier) || supplier != partnerId) continue;
+                var items = new List<PartnerDossierItem>();
+                if (data.TryGetProperty("lines", out var lines) && lines.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var line in lines.EnumerateArray())
+                    {
+                        var quantity = JsonAmount(line, "quantity");
+                        items.Add(new(JsonText(line, "name"), quantity, quantity * JsonAmount(line, "netUnitPrice")));
+                    }
+                }
+                invoices.Add(new(JsonText(data, "number"), JsonText(data, "issuedOn"), JsonAmount(data, "net"), JsonAmount(data, "gross"),
+                    false, ReceiptStatus(JsonText(data, "status")), items.ToArray()));
+            }
+            if (invoices.Count == 0) return null;
+            var received = invoices.Where(invoice => invoice.Status == "Bevételezve").ToArray();
+            var frequent = received.SelectMany(invoice => invoice.Items)
+                .GroupBy(item => item.Name, StringComparer.Create(Hungarian, true))
+                .Select(group => new PartnerDossierItem(group.First().Name, group.Sum(item => item.Quantity), group.Sum(item => item.Net)))
+                .OrderByDescending(item => item.Quantity).Take(6).ToArray();
+            var dates = invoices.Select(invoice => invoice.Date).Where(date => date.Length > 0).Order(StringComparer.Ordinal).ToArray();
+            return new(partnerId, received.Sum(invoice => invoice.Net), received.Sum(invoice => invoice.Gross),
+                dates.FirstOrDefault(), dates.LastOrDefault(), frequent,
+                invoices.OrderByDescending(invoice => invoice.Date, StringComparer.Ordinal).ToArray());
+        }
     }
 
     public static PartnerDossierSnapshot? Read(string directory, Guid partnerId)
@@ -104,6 +149,20 @@ public static class PartnerDossier
         return new(invoice.Number.Length > 0 ? invoice.Number : "számla", detail, Money(invoice.Gross));
     }
 
+    private static string JsonText(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? "" : "";
+    private static decimal JsonAmount(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var amount)
+            ? amount : 0;
+    private static string ReceiptStatus(string status) => status switch
+    {
+        "uj" => "Új, besorolásra vár",
+        "bevetelezve" => "Bevételezve",
+        "koltseg" => "Költség",
+        "fuggo" => "Függő",
+        _ => status
+    };
     private static string Money(decimal value) => value.ToString("N2", Hungarian) + " Ft";
     private static string Quantity(decimal value) => value.ToString(value == decimal.Truncate(value) ? "0" : "0.##", Hungarian);
 

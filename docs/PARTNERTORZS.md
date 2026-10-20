@@ -15,7 +15,7 @@ A partner lehet egyszerre vevő, szállító és gyártó. Egy aktív, azonos ad
 
 A listában kiválasztott, már mentett partner adatlapján a Dosszié gomb egy ablakot nyit. Az ablak a partner nevét, szerepét, adószámát és elérhetőségét mutatja, majd a régi raktárkezelő dossziéjának helyeit: forgalom, kimenő számla, beszerzés, bejövő számla, árajánlat, díjbekérő, megrendelés, munkalap.
 
-Ezek a számok és listák most üresek. A Windows kiadásban csak a partnertörzs és a terméktörzs van meg. Nincs eladás, kimenő számla, bevételezés, árajánlat, bizonylat és rendeléskönyv, ezért a dosszié nem számol forgalmat és nem sorol számlát. A kötőjel szándékos: nem helyettesítjük nullával vagy kitalált összeggel.
+A bejövő számla és a beszerzés a bevételezésből jön, ha ennél a szállítónál van számla. A beszerzés összege csak a bevételezett számlákat számolja. Kimenő forgalom, árajánlat, díjbekérő, megrendelés és munkalap továbbra is üres, amíg a hozzájuk tartozó modul nincs meg. A kötőjel azt jelenti, hogy az a forrás még nem tárol adatot.
 
 A régi `szamlazas.py` partnerdossziéja (`/api/ugyfel/<id>/torzs`) ezekből állt össze:
 
@@ -27,13 +27,13 @@ A régi `szamlazas.py` partnerdossziéja (`/api/ugyfel/<id>/torzs`) ezekből ál
 | Díjbekérők | `bizonylat_dokumentum`, típus `dijbekero` | Bizonylat |
 | Megrendelés, munkalap, garancia, teendő | rendeléskönyv `/api/gep/partner-kapcsolodo` | Rendeléskönyv |
 
-A párosítás a régiben adószám, azon belül az első nyolc számjegy, adószám nélkül a név. A beszállítói ranglista ugyanezt a bejövő számlatáblát összegezte; a dossziéba akkor kerülhet, ha a bevételezés megvan.
+A párosítás a régiben adószám, azon belül az első nyolc számjegy, adószám nélkül a név. A Windows-dosszié a bevételezésben tárolt szállító-azonosítót használja. A beszállítói ranglista későbbi összesítés.
 
 A `dossier` parancs `partners.read` jogosultságot kér, lejárt licenc mellett is olvasható. Bemenete a cég és a partner azonosítója. Kimenete a fejléc, a nyolc összesítő hely és a hat hiányzó forrás leírása. Új partnernél, mentés előtt a gomb nem nyílik meg. Ha a partner nem található, a parancs hibát ad, üres dossziét nem gyárt.
 
-A cég partnerkönyvtárában a `dossiers.json` egy partnerhez bejövő számlákat csatolhat, amíg nincs bevételezés modul. Ha a fájlban van számla, a Beszerzés és a Bejövő számla kártya kitöltődik, a többi hely kötőjel marad. A fájl helyi adat, nem kerül a forráskezelőbe.
+Ha a cég bevételezésében van számla ehhez a szállítóhoz, a dosszié onnan tölti a listát. A `dossiers.json` csak akkor számít, ha a bevételezésben ennél a partnernél nincs számla. A fájl helyi adat, nem kerül a forráskezelőbe.
 
-A következő fejlesztési lépés a bevételezés: a bejövő számla fej- és tételsora hivatkozzon a partner azonosítójára, és a dosszié `incoming` szakasza onnan töltse a számlalistát és a beszerzés összegét. Utána jöhet a kimenő számla ugyanezzel a partnerkapoccsal, a forgalom kártyához. Amíg a forrásmodul nincs, a szakasz állapota `waiting` marad.
+A következő fejlesztési lépés a kimenő számla ugyanezzel a partnerkapoccsal, a forgalom kártyához. Amíg az a modul nincs, a szakasz állapota `waiting` marad.
 
 ## InvenTree-import
 

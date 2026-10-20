@@ -10,7 +10,7 @@ namespace PcImpressz.Shell.Windows;
 
 public sealed partial class ShellViewModel
 {
-    private readonly Dictionary<string, EntityPageViewModel> _entityPages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IWorkspacePage> _entityPages = new(StringComparer.Ordinal);
     private CompanyInfo? _selectedCompany;
     private bool _companiesLoaded;
     public ObservableCollection<CompanyInfo> Companies { get; } = [];
@@ -54,9 +54,12 @@ public sealed partial class ShellViewModel
         {
             var key = page.ModuleId + "." + page.Id;
             if (_entityPages.ContainsKey(key)) continue;
-            var vm = new EntityPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token);
-            vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(EntityPageViewModel.IsBusy)) Changed(nameof(WorkspaceIsIdle)); };
+            IWorkspacePage vm = page.ModuleId == "receiving" && page.Id == "receiving"
+                ? new ReceivingPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token)
+                : new EntityPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token);
+            vm.PropertyChanged += (_, e) => { if (e.PropertyName == "IsBusy") Changed(nameof(WorkspaceIsIdle)); };
             _entityPages.Add(key, vm);
+            if (_companiesLoaded && SelectedCompany is not null) vm.CompanyChanged();
             addedPage = true;
         }
         if (addedPage || disabledChanged) SyncNavigation();
