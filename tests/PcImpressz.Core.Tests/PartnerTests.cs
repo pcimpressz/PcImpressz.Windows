@@ -11,6 +11,23 @@ internal static class PartnerTests
 {
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
+        yield return Case("dossier names the missing sources and invents no turnover", async f =>
+        {
+            var saved = await f.Repository.Save(new(f.First.Id, null, 0, Data("Beszállító Kft.") with
+            { TaxId = "12345678-2-42", City = "Budapest", IsCustomer = false, IsSupplier = true }), "operator");
+            var view = PartnerDossier.Open(await f.Repository.Snapshot(f.First.Id), saved.Id);
+            Check.Equal(saved.Id, view.PartnerId);
+            Check.Equal("Beszállító Kft. dossziéja", view.Title);
+            Check.True(view.Subtitle.Contains("szállító", StringComparison.Ordinal));
+            Check.True(view.Subtitle.Contains("12345678-2-42", StringComparison.Ordinal));
+            Check.True(!view.FiguresAvailable);
+            Check.Equal(8, view.Cards.Length);
+            Check.True(view.Cards.All(card => card.Value == "—" && card.Status == PartnerDossier.Waiting));
+            Check.Equal("incoming", view.Sections.Single(section => section.Source == "Bevételezés").Id);
+            Check.True(view.Sections.All(section => section.Status == PartnerDossier.Waiting && section.Detail.Length > 20));
+            var state = await f.Repository.Snapshot(f.First.Id);
+            Check.Throws<ArgumentException>(() => PartnerDossier.Open(state, Guid.NewGuid()));
+        });
         yield return Case("new company starts completely empty", async f =>
         { Check.Equal(0, (await f.Repository.Snapshot(f.First.Id)).Partners.Length); });
         yield return Case("partner data is isolated by company", async f =>

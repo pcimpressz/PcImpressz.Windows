@@ -73,7 +73,11 @@ public sealed class EntityPageView : UserControl
         editor.Children.Add(fields);
         var save = new WrapPanel { Margin = new(0,20,0,0) };
         var saveButton = ActionButton("Mentés", "SaveCommand"); saveButton.SetResourceReference(StyleProperty, "PrimaryButton");
-        save.Children.Add(saveButton); save.Children.Add(ActionButton("Archiválás", "ArchiveCommand")); editor.Children.Add(save);
+        save.Children.Add(saveButton); save.Children.Add(ActionButton("Archiválás", "ArchiveCommand"));
+        var dossier = ActionButton("Dosszié", "DossierCommand");
+        dossier.SetBinding(VisibilityProperty, new Binding("HasDossier") { Converter = new BooleanToVisibilityConverter() });
+        dossier.SetBinding(IsEnabledProperty, new Binding("CanOpenDossier"));
+        save.Children.Add(dossier); editor.Children.Add(save);
         editorBorder.Child = editor; Grid.SetColumn(editorBorder,1); body.Children.Add(editorBorder); root.Children.Add(body);
         Content = root;
         DataContextChanged += (_, _) =>

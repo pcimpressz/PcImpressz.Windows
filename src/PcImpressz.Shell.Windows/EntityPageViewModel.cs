@@ -60,8 +60,11 @@ public sealed class EntityPageViewModel : Observable
     public EntityPageLabels Labels { get; }
     public EntityFilterOption[] Filters { get; }
     public string EditorTitle => (_editId is null ? Labels.NewTitle : Labels.EditTitle) + (IsDirty ? " · nincs mentve" : "");
-    public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); } }
+    public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); Changed(nameof(CanOpenDossier)); } }
     public bool IsNotBusy => !IsBusy;
+    // The dossier command belongs to the partner page. The page contract stays unchanged so already loaded modules keep starting.
+    public bool HasDossier => Definition.ModuleId == "partners" && Definition.Id == "partners";
+    public bool CanOpenDossier => HasDossier && _editId is not null && !IsBusy;
     public string Message { get => _message; private set { _message = value; Changed(); } }
     public string CountLabel => _total + " " + Labels.CountNoun + " · " + (_page + 1) + ". oldal";
     public bool CanImport => Definition.Commands.ImportPreview is not null;
@@ -84,6 +87,7 @@ public sealed class EntityPageViewModel : Observable
     public ICommand ImportCommand { get; }
     public ICommand NextCommand { get; }
     public ICommand PreviousCommand { get; }
+    public ICommand DossierCommand { get; }
 
     internal EntityPageViewModel(EntityPageDescriptor definition, HostConnection connection, Func<Guid?> company, CancellationToken shutdown)
     {
@@ -104,6 +108,7 @@ public sealed class EntityPageViewModel : Observable
         ImportCommand = new RelayCommand(() => ImportDialog.Show(this));
         NextCommand = new RelayCommand(() => { if ((_page + 1) * 50 < _total && CanDiscard()) { _page++; _ = LoadAsync(); } });
         PreviousCommand = new RelayCommand(() => { if (_page > 0 && CanDiscard()) { _page--; _ = LoadAsync(); } });
+        DossierCommand = new RelayCommand(() => { if (_editId is Guid id && HasDossier) DossierDialog.Show(this, id); });
         Populate(null);
     }
 
@@ -124,7 +129,7 @@ public sealed class EntityPageViewModel : Observable
                 field.Checked = row?[field.Definition.Id] is bool b ? b : field.Definition.DefaultChecked;
             else field.Text = row?[field.Definition.Id]?.ToString() ?? field.Definition.DefaultText ?? "";
         }
-        _populating = false; IsDirty = false; Changed(nameof(EditorTitle));
+        _populating = false; IsDirty = false; Changed(nameof(EditorTitle)); Changed(nameof(CanOpenDossier));
     }
 
     private Guid CompanyId => _company() ?? throw new InvalidOperationException("Először válassz céget.");

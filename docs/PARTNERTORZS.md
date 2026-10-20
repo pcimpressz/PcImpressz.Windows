@@ -5,11 +5,33 @@
 1. Indítás: a projekt gyökerében a Start.cmd.
 2. Az oldalsáv AKTÍV CÉG listájában választhatsz céget.
 3. Az Üres cég létrehozása gomb saját vagy demócéget készít, partner- és mintaadatok nélkül.
-4. A Partnertörzs menüben kereshetsz, új partnert vihetsz fel, módosíthatsz és archiválhatsz.
+4. A Partnertörzs menüben kereshetsz, új partnert vihetsz fel, módosíthatsz és archiválhatsz. Mentett partnernél a Dosszié gomb nyitja a forgalmi nézetet.
 5. A CSV-export az aktuális keresésnek és szerepszűrőnek megfelelő partnereket menti.
 6. Az archivált partnereket az Archiváltak szűrővel éred el; az Aktív mező visszakapcsolásával helyreállíthatók.
 
 A partner lehet egyszerre vevő, szállító és gyártó. Egy aktív, azonos adószámú partner újbóli felvételét a program megakadályozza. Két ablak közül a régebbi adatlap nem írhatja felül észrevétlenül a frissebb módosítást.
+
+## Dosszié
+
+A listában kiválasztott, már mentett partner adatlapján a Dosszié gomb egy ablakot nyit. Az ablak a partner nevét, szerepét, adószámát és elérhetőségét mutatja, majd a régi raktárkezelő dossziéjának helyeit: forgalom, kimenő számla, beszerzés, bejövő számla, árajánlat, díjbekérő, megrendelés, munkalap.
+
+Ezek a számok és listák most üresek. A Windows kiadásban csak a partnertörzs és a terméktörzs van meg. Nincs eladás, kimenő számla, bevételezés, árajánlat, bizonylat és rendeléskönyv, ezért a dosszié nem számol forgalmat és nem sorol számlát. A kötőjel szándékos: nem helyettesítjük nullával vagy kitalált összeggel.
+
+A régi `szamlazas.py` partnerdossziéja (`/api/ugyfel/<id>/torzs`) ezekből állt össze:
+
+| Dossziéhely | Régi forrás | Következő Windows-modul |
+| --- | --- | --- |
+| Kimenő számlák és forgalom | `eladas`, `kimeno_szamla`, `kimeno_tetel` | Eladás és kimenő számla |
+| Bejövő számlák és beszerzés | `szamla`, `szamla_tetel` | Bevételezés |
+| Árajánlatok | `arajanlat` | Árajánlat |
+| Díjbekérők | `bizonylat_dokumentum`, típus `dijbekero` | Bizonylat |
+| Megrendelés, munkalap, garancia, teendő | rendeléskönyv `/api/gep/partner-kapcsolodo` | Rendeléskönyv |
+
+A párosítás a régiben adószám, azon belül az első nyolc számjegy, adószám nélkül a név. A beszállítói ranglista ugyanezt a bejövő számlatáblát összegezte; a dossziéba akkor kerülhet, ha a bevételezés megvan.
+
+A `dossier` parancs `partners.read` jogosultságot kér, lejárt licenc mellett is olvasható. Bemenete a cég és a partner azonosítója. Kimenete a fejléc, a nyolc összesítő hely és a hat hiányzó forrás leírása. Új partnernél, mentés előtt a gomb nem nyílik meg. Ha a partner nem található, a parancs hibát ad, üres dossziét nem gyárt.
+
+A következő fejlesztési lépés a bevételezés: a bejövő számla fej- és tételsora hivatkozzon a partner azonosítójára, és a dosszié `incoming` szakasza onnan töltse a számlalistát és a beszerzés összegét. Utána jöhet a kimenő számla ugyanezzel a partnerkapoccsal, a forgalom kártyához. Amíg a forrásmodul nincs, a szakasz állapota `waiting` marad.
 
 ## InvenTree-import
 
