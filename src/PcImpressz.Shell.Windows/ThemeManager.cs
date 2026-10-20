@@ -6,6 +6,8 @@ namespace PcImpressz.Shell.Windows;
 
 internal static class ThemeManager
 {
+    public static event Action? Applied;
+
     public static void Apply(SkinDefinition skin, AppearancePreferences preferences)
     {
         SkinValidation.Validate(skin);
@@ -35,5 +37,6 @@ internal static class ThemeManager
             preferences.CompactDensity ? 8 : 12);
         resources["NavigationWidth"] = preferences.CollapsedNavigation ? 78d : 240d;
         resources["NavigationLabelVisibility"] = preferences.CollapsedNavigation ? Visibility.Collapsed : Visibility.Visible;
+        Applied?.Invoke();
     }
 }
