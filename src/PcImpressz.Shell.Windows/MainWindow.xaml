@@ -58,28 +58,28 @@
          <TextBlock Text="Oldalsáv" Margin="14,0,0,0" Visibility="{DynamicResource NavigationLabelVisibility}" /></StackPanel>
        </Button>
       </StackPanel>
-      <ListBox ItemsSource="{Binding Navigation}" SelectedItem="{Binding SelectedNavigation}" Background="Transparent" BorderThickness="0"
-       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
-       <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem">
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Margin" Value="0,0,0,7" />
-        <Setter Property="Cursor" Value="Hand" /><Setter Property="ToolTip" Value="{Binding Title}" />
-        <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
-         <Border x:Name="NavFrame" CornerRadius="9" Background="Transparent" Padding="14,14">
-          <ContentPresenter />
-         </Border>
-         <ControlTemplate.Triggers>
-          <Trigger Property="IsSelected" Value="True"><Setter TargetName="NavFrame" Property="Background" Value="{DynamicResource AccentSoftBrush}" /></Trigger>
-          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="NavFrame" Property="BorderBrush" Value="{DynamicResource StrokeBrush}" /><Setter TargetName="NavFrame" Property="BorderThickness" Value="1" /></Trigger>
-          <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="NavFrame" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter TargetName="NavFrame" Property="BorderThickness" Value="1" /></Trigger>
-         </ControlTemplate.Triggers>
-        </ControlTemplate></Setter.Value></Setter>
-       </Style></ListBox.ItemContainerStyle>
-       <ListBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal">
-        <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" />
-        <TextBlock Text="{Binding Title}" Margin="16,0,0,0" FontWeight="SemiBold" Visibility="{DynamicResource NavigationLabelVisibility}" />
-       </StackPanel></DataTemplate></ListBox.ItemTemplate>
-      </ListBox>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+       <ItemsControl ItemsSource="{Binding Navigation}">
+        <ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,0,0,4">
+         <Button Command="{Binding SelectCommand}" Style="{StaticResource NavButton}">
+          <StackPanel Orientation="Horizontal">
+           <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" />
+           <TextBlock Text="{Binding Title}" Margin="14,0,0,0" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Visibility="{DynamicResource NavigationLabelVisibility}" />
+          </StackPanel>
+         </Button>
+         <ItemsControl ItemsSource="{Binding Children}" Margin="14,2,0,0" Visibility="{Binding HasChildren, Converter={StaticResource BoolVisibility}}">
+          <ItemsControl.ItemTemplate><DataTemplate>
+           <Button Command="{Binding SelectCommand}" Style="{StaticResource NavButton}" Margin="0,0,0,4">
+            <StackPanel Orientation="Horizontal">
+             <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="15" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" />
+             <TextBlock Text="{Binding Title}" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Visibility="{DynamicResource NavigationLabelVisibility}" />
+            </StackPanel>
+           </Button>
+          </DataTemplate></ItemsControl.ItemTemplate>
+         </ItemsControl>
+        </StackPanel></DataTemplate></ItemsControl.ItemTemplate>
+       </ItemsControl>
+      </ScrollViewer>
      </DockPanel>
     </Border>
     <ScrollViewer Grid.Column="1">

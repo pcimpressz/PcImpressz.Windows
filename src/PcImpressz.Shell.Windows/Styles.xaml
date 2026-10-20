@@ -135,6 +135,19 @@
    </ControlTemplate>
   </Setter.Value></Setter>
  </Style>
+ <Style x:Key="NavButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+  <Setter Property="HorizontalContentAlignment" Value="Left" />
+  <Setter Property="HorizontalAlignment" Value="Stretch" />
+  <Setter Property="Padding" Value="10,10" />
+  <Setter Property="Background" Value="Transparent" />
+  <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+  <Setter Property="ToolTip" Value="{Binding Title}" />
+  <Style.Triggers>
+   <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" /></DataTrigger>
+   <Trigger Property="IsMouseOver" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" /><Setter Property="BorderThickness" Value="1" /></Trigger>
+   <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter Property="BorderThickness" Value="1" /></Trigger>
+  </Style.Triggers>
+ </Style>
  <Style TargetType="ScrollViewer"><Setter Property="HorizontalScrollBarVisibility" Value="Disabled" /><Setter Property="VerticalScrollBarVisibility" Value="Auto" /></Style>
  <Style TargetType="ScrollBar"><Setter Property="Width" Value="8" /><Setter Property="Opacity" Value="0.55" /></Style>
 </ResourceDictionary>

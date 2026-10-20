@@ -4,7 +4,7 @@ internal static class Program
 {
     public static async Task<int> Main()
     {
-        var cases = LicenseTests.Cases().Concat(ModuleTests.Cases()).Concat(AppearanceTests.Cases()).Concat(PartnerTests.Cases()).Concat(CatalogTests.Cases()).Concat(HostIntegrationTests.Cases()).ToArray();
+        var cases = LicenseTests.Cases().Concat(ModuleTests.Cases()).Concat(AppearanceTests.Cases()).Concat(MenuTests.Cases()).Concat(PartnerTests.Cases()).Concat(CatalogTests.Cases()).Concat(HostIntegrationTests.Cases()).ToArray();
         var failures = 0;
         foreach (var (name, test) in cases)
         {

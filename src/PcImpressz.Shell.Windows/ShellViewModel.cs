@@ -11,7 +11,30 @@ using PcImpressz.Shell.Customization;
 
 namespace PcImpressz.Shell.Windows;
 
-public sealed record NavigationItem(string Id, string Title, string Icon, string Description);
+public sealed class NavigationItem : Observable
+{
+    private bool _selected;
+    public NavigationItem(string id, string title, string icon, string description, string pageKey)
+    {
+        (Id, Title, Icon, Description, PageKey) = (id, title, icon, description, pageKey);
+        Children.CollectionChanged += (_, _) => Changed(nameof(HasChildren));
+    }
+    public string Id { get; }
+    public string Title { get; private set; }
+    public string Icon { get; private set; }
+    public string Description { get; private set; }
+    public string PageKey { get; private set; }
+    public ObservableCollection<NavigationItem> Children { get; } = [];
+    public bool HasChildren => Children.Count > 0;
+    public bool IsSelected { get => _selected; set { if (_selected == value) return; _selected = value; Changed(); } }
+    public ICommand SelectCommand { get; set; } = null!;
+    public void Apply(string title, string icon, string description, string pageKey)
+    {
+        if (Title == title && Icon == icon && Description == description && PageKey == pageKey) return;
+        (Title, Icon, Description, PageKey) = (title, icon, description, pageKey);
+        Changed(nameof(Title)); Changed(nameof(Icon)); Changed(nameof(Description)); Changed(nameof(PageKey));
+    }
+}
 public sealed record AccentOption(string Name, string Color);
 public sealed record FontOption(string Name, double Scale);
 public sealed record DashboardPage;
@@ -55,13 +78,15 @@ public sealed partial class ShellViewModel : Observable
         Skins = new(store.ReadSkins());
         _selectedSkin = Skins.FirstOrDefault(s => s.Id == _preferences.SkinId) ?? Skins[0];
         _preferences = _preferences with { SkinId = _selectedSkin.Id };
+        ApplyMenu(Navigation, WorkspaceMenu.Compose([]));
         _selectedNavigation = Navigation[0];
+        _selectedNavigation.IsSelected = true;
         ThemeManager.Apply(_selectedSkin, _preferences);
         _notice = store.LastWarning ?? _notice;
         ToggleNavigationCommand = new RelayCommand(() => CollapsedNavigation = !CollapsedNavigation);
-        GoModulesCommand = new RelayCommand(() => SelectedNavigation = Navigation.First(n => n.Id == "modules"));
-        GoLicenseCommand = new RelayCommand(() => SelectedNavigation = Navigation.First(n => n.Id == "license"));
-        GoAppearanceCommand = new RelayCommand(() => SelectedNavigation = Navigation.First(n => n.Id == "appearance"));
+        GoModulesCommand = new RelayCommand(() => SelectedNavigation = FindNavigation("modules"));
+        GoLicenseCommand = new RelayCommand(() => SelectedNavigation = FindNavigation("license"));
+        GoAppearanceCommand = new RelayCommand(() => SelectedNavigation = FindNavigation("appearance"));
         RefreshCommand = new RelayCommand(() => _ = RefreshAsync());
         ImportSkinCommand = new RelayCommand(ImportSkin);
         ExportSkinCommand = new RelayCommand(ExportSkin);
@@ -73,12 +98,7 @@ public sealed partial class ShellViewModel : Observable
         _ready = true;
     }
 
-    public ObservableCollection<NavigationItem> Navigation { get; } = new([
-        new("home", "Áttekintés", "\uE80F", "A munkaterületed állapota egy helyen."),
-        new("modules", "Modulok", "\uE74C", "A telepített bővítmények és állapotuk."),
-        new("license", "Licenc", "\uE72E", "A telepítéshez tartozó használati jogosultságok."),
-        new("appearance", "Megjelenés", "\uE790", "Egy munkafelület, ami hozzád igazodik."),
-        new("settings", "Beállítások", "\uE713", "Helyi működés, adatok és diagnosztika.")]);
+    public ObservableCollection<NavigationItem> Navigation { get; } = [];
     public ObservableCollection<SkinDefinition> Skins { get; }
     public ObservableCollection<ModuleDiagnostic> Modules { get; } = [];
     public IReadOnlyList<AccentOption> Accents { get; } = [new("Menta", "#38D9BC"), new("Kék", "#78B2FF"),
@@ -110,13 +130,31 @@ public sealed partial class ShellViewModel : Observable
     public NavigationItem SelectedNavigation
     {
         get => _selectedNavigation;
-        set { if (value is null) return; _selectedNavigation = value; Changed(); Changed(nameof(PageTitle)); Changed(nameof(PageDescription)); Changed(nameof(CurrentPage)); }
+        set
+        {
+            if (value is null || ReferenceEquals(value, _selectedNavigation)) return;
+            _selectedNavigation.IsSelected = false;
+            _selectedNavigation = value;
+            value.IsSelected = true;
+            Changed(); Changed(nameof(PageTitle)); Changed(nameof(PageDescription)); Changed(nameof(CurrentPage));
+        }
     }
     public string PageTitle => SelectedNavigation.Title;
     public string PageDescription => SelectedNavigation.Description;
-    public object CurrentPage => _entityPages.TryGetValue(SelectedNavigation.Id, out var entityPage)
-        ? entityPage : SelectedNavigation.Id switch
+    public object CurrentPage => _entityPages.TryGetValue(SelectedNavigation.PageKey, out var entityPage)
+        ? entityPage : SelectedNavigation.PageKey switch
     { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(), _ => new DashboardPage() };
+
+    private NavigationItem FindNavigation(string id)
+    {
+        foreach (var item in Navigation)
+        {
+            if (item.Id == id) return item;
+            foreach (var child in item.Children)
+                if (child.Id == id) return child;
+        }
+        throw new InvalidOperationException("Hiányzó menüpont: " + id);
+    }
 
     public SkinDefinition SelectedSkin
     {

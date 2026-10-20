@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using PcImpressz.Contracts;
+using PcImpressz.Shell.Customization;
 
 namespace PcImpressz.Shell.Windows;
 
@@ -41,6 +42,7 @@ public sealed partial class ShellViewModel
     private async Task UpdateWorkspaceAsync(HostDiagnostic status)
     {
         if (status.State != "Ready") return;
+        var addedPage = false;
         foreach (var page in status.Pages ?? [])
         {
             var key = page.ModuleId + "." + page.Id;
@@ -48,9 +50,9 @@ public sealed partial class ShellViewModel
             var vm = new EntityPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token);
             vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(EntityPageViewModel.IsBusy)) Changed(nameof(WorkspaceIsIdle)); };
             _entityPages.Add(key, vm);
-            Navigation.Insert(Math.Min(1 + _entityPages.Count - 1, Navigation.Count),
-                new(key, page.Title, page.Icon, page.Description));
+            addedPage = true;
         }
+        if (addedPage) SyncNavigation();
         if (!_companiesLoaded)
         {
             var response = await _connection.SendAsync("companies.list", new { }, _shutdown.Token);
@@ -64,6 +66,54 @@ public sealed partial class ShellViewModel
     public bool CanClose() => !_entityPages.Values.Any(p => p.IsDirty) || MessageBox.Show(
         "Elveted a nem mentett adatlapváltozásokat?", "Kilépés", MessageBoxButton.YesNo,
         MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    private void SyncNavigation()
+    {
+        var selectedId = _selectedNavigation.Id;
+        ApplyMenu(Navigation, WorkspaceMenu.Compose(_entityPages.Values.Select(page => page.Definition).ToArray()));
+        var match = FindNavigationOrNull(selectedId);
+        if (ReferenceEquals(match, _selectedNavigation)) return;
+        _selectedNavigation.IsSelected = false;
+        _selectedNavigation = match ?? Navigation[0];
+        _selectedNavigation.IsSelected = true;
+        Changed(nameof(SelectedNavigation)); Changed(nameof(PageTitle)); Changed(nameof(PageDescription)); Changed(nameof(CurrentPage));
+    }
+
+    private void ApplyMenu(ObservableCollection<NavigationItem> items, IReadOnlyList<MenuEntry> desired)
+    {
+        var ids = desired.Select(entry => entry.Id).ToHashSet(StringComparer.Ordinal);
+        for (var index = items.Count - 1; index >= 0; index--)
+            if (!ids.Contains(items[index].Id)) items.RemoveAt(index);
+        for (var index = 0; index < desired.Count; index++)
+        {
+            var entry = desired[index];
+            var existing = items.FirstOrDefault(item => item.Id == entry.Id);
+            if (existing is null) { items.Insert(index, CreateItem(entry)); continue; }
+            var current = items.IndexOf(existing);
+            if (current != index) items.Move(current, index);
+            existing.Apply(entry.Title, entry.Icon, entry.Description, entry.PageKey);
+            ApplyMenu(existing.Children, entry.Children);
+        }
+    }
+
+    private NavigationItem CreateItem(MenuEntry entry)
+    {
+        var item = new NavigationItem(entry.Id, entry.Title, entry.Icon, entry.Description, entry.PageKey);
+        item.SelectCommand = new RelayCommand(() => SelectedNavigation = item);
+        foreach (var child in entry.Children) item.Children.Add(CreateItem(child));
+        return item;
+    }
+
+    private NavigationItem? FindNavigationOrNull(string id)
+    {
+        foreach (var item in Navigation)
+        {
+            if (item.Id == id) return item;
+            foreach (var child in item.Children)
+                if (child.Id == id) return child;
+        }
+        return null;
+    }
 
     private void CreateCompany()
     {
