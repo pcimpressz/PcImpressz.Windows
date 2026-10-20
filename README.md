@@ -1,0 +1,108 @@
+# PC-Impressz Windows Edition – Core + Windows Shell + Partnertörzs v0.3
+
+A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
+
+## Indítás
+
+A `Start.cmd` lefordítja a programot, majd megnyitja a grafikus Windows-ablakot. A mag szükség esetén automatikusan elindul a háttérben. A felületet az ablak bezárásával állíthatod le; az általa indított háttérfolyamat is kilép. Egy már korábban, külön elindított maghoz is tud kapcsolódni, és annak életciklusát nem veszi át.
+
+PowerShellből:
+
+```powershell
+.\dev.ps1 -Action Status   # Fordítás, állapotellenőrzés, kilépés
+.\dev.ps1 -Action Test     # Fordítás és önálló ellenőrzőprogram
+.\dev.ps1 -Action Run      # Grafikus Windows-felület
+.\dev.ps1 -Action Core     # Csak a mag, konzolban (Ctrl+C)
+.\dev.ps1 -Action Publish  # Kiadási állományok: artifacts/desktop
+```
+
+A fordításhoz .NET SDK 10.0.402 szükséges, vagy a `global.json` által elfogadott újabb javítókiadás. A helyi SDK a projekt `.tools/dotnet` könyvtárában van, a forrásoktól elkülönítve. Másik gépen telepíthető a [Microsoft .NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). A helyi SDK hivatalos kiadási metaadat szerinti SHA-512 ellenőrzéssel került letöltésre.
+
+Nincs külső NuGet-csomag, npm, Python vagy adatbázis-előfeltétel. A .NET SDK mellett a Microsoft ASP.NET Core megosztott keretrendszerét használjuk konfigurációhoz, naplózáshoz és a folyamat életciklusához. A NuGet-forráslista szándékosan üres.
+
+A `Publish` jelenleg keretrendszerfüggő kiadást ad: másik gépen .NET Desktop 10 és ASP.NET Core 10 futtatókörnyezet kell hozzá. A grafikus alkalmazás az `artifacts/desktop`, a mag annak `host` alkönyvtárába kerül. Ez még nem ügyféltelepítő és nem Windows-szolgáltatásként regisztrált alkalmazás.
+
+Ellenőrzött állapot: Release fordítás 0 hibával és 0 figyelmeztetéssel; 82/82 sikeres teszt. A teszteket a `Test` művelet futtatja, nem a `dotnet test`. A grafikus ablak külön, ugyanazon Windows-felhasználóra korlátozott helyi csatornán olvassa a mag aktuális állapotát; a diagnosztikai csatorna üzleti parancsot nem fogad. A cég- és modulműveletek külön, ugyanazon Windows-felhasználóra korlátozott helyi parancscsatornán futnak.
+
+## A felület testreszabása
+
+A **Megjelenés** oldalon azonnal válthatsz az Éjkék, Porcelán és Grafit témák között, megválaszthatod a kiemelőszínt, a betűméretet (100%, 110%, 125%), az oldalsáv szélességét és a kompakt térközöket. A választások és az ablak mérete automatikusan mentődnek a `.local/appearance.json` fájlba.
+
+Saját skinhez használd a **Jelenlegi skin exportálása** gombot, vagy másold a `skins/sajat-skin.json` mintát. A fájl színeit `#RRGGBB` formában lehet szerkeszteni, majd a **Skin importálása** gombbal visszatölteni. A skin kizárólag ellenőrzött színadatokat tartalmazhat, futtatható kódot vagy XAML-t nem. A túl alacsony szövegkontrasztú palettát a program elutasítja.
+
+A felület a valódi helyi állapotot, a modulokat, licencet és megjelenést kezeli. Az első üzleti modul a Partnertörzs: üres cégek, külön céges partneradatok, keresés, szerkesztés, archiválás, CSV-export és InvenTree-importelőnézet. Használata: docs/PARTNERTORZS.md. Online előfizetési aktiválás és drag & drop szerkesztőmód még nincs benne.
+
+## Mi működik?
+
+- Külön `Contracts` szerződéscsomag, UI- és üzleti függőség nélkül.
+- Modulok felderítése, külön kulcskészlettel ellenőrzött ES256 csomagaláírás és SHA-256 fájlellenőrzés.
+- Modulonkénti betöltési környezet; verzió- és függőségellenőrzés; körkörös függések tiltása; részleges parancsregisztráció visszatartása sikertelen indításnál.
+- Központi parancsvégrehajtás: pontos felhasználói jogosultság, modullicenc és a szükséges modulfüggőségek licencének ellenőrzése minden új parancs előtt.
+- ES256-aláírt jogosultság és lease ellenőrzése: kibocsátó, termék, szervezet, telepítés, verzió, időablak, modulonkénti lejárat és képességek.
+- Legfeljebb 7 napos lease, kis jövőbeli kibocsátási/óra-visszaállítási tolerancia; a lejáratnak nincs automatikus türelmi ideje.
+- Korábban látott jogosultságverzió és idő helyi megőrzése, atomi állapotfájlcsere, sérült vagy nem menthető állapotnál az írási jog megtagadása.
+- Kifejezetten adatmegtekintéshez/exporthoz regisztrált helyreállítási parancsok licenc nélkül is hívhatók, de csak megfelelő felhasználói jogosultsággal.
+- Konfiguráció, konzolnapló és méretkorlátos JSON-napló; egy adatmappához egy futó Host.
+- Elkülönített, automatikus kriptográfiai és modulbetöltési tesztek. A tesztkulcsok csak futás közben, memóriában keletkeznek.
+
+A mag üzleti modul nélkül is fut. Nincs beépített raktár, terméktörzs, próbalicenc, tesztadat vagy fejlesztői feloldókód a futtatható alkalmazásban.
+
+## Szerkezet
+
+- `src/PcImpressz.Contracts`: a modulok és a mag közös szerződései.
+- `src/PcImpressz.Core`: modulrendszer, parancsengedélyezés, aláírás- és licencellenőrzés, állapottárolás.
+- `src/PcImpressz.ApplicationHost`: konfiguráció, összekapcsolás és futtatható folyamat.
+- `src/PcImpressz.Shell.Windows`: natív WPF-ablak, oldalak, stílusok és a maghoz kapcsolódás.
+- `src/PcImpressz.Shell.Customization`: felülettől független skin- és beállításkezelés, kontrasztellenőrzéssel.
+- `tests/PcImpressz.Core.Tests`: külső tesztkeretrendszer nélküli tesztfuttató, hiba esetén nem nulla kilépési kóddal.
+- `tests/PcImpressz.TestModule`: kizárólag teszteléshez fordított modulszerelvény; nem része a kiadásnak.
+
+A Core nem hivatkozik a Hostra vagy a grafikus felületre. A Shell nem hivatkozik a Core-ra: a Contracts diagnosztikai szerződését használja. Egy modul csak a Contracts csomagra hivatkozzon. Új üzleti modul hozzáadásához a Core és Host forrását nem kell módosítani; a mező- és oszlopleírásokat a modul regisztrálja, a Shell ebből építi fel a képernyőt.
+
+## Saját adatok és konfiguráció
+
+A fejlesztői indító a `.local` mappát használja. Közvetlen indításnál megadható `--data-dir <mappa>`; enélkül a saját felhasználó helyi alkalmazásadat-mappájának `PcImpressz/WindowsEdition` alkönyvtára lesz az alapértelmezés.
+
+Az adatmappában:
+
+- `installation-id.txt`: első induláskor létrejövő telepítésazonosító.
+- `settings.json`: opcionális felülírás, például `{"Product":{"Issuer":"sajat-kiado","OrganizationId":"ceg-azonosito"}}`.
+- `license-public-keys.json`: licencaláírást ellenőrző kulcsok; JSON objektum, amelyben a kulcsazonosítóhoz PUBLIC KEY formátumú PEM szöveg tartozik.
+- `module-public-keys.json`: ettől külön, ugyanilyen formátumú modulkiadói nyilvános kulcskészlet.
+- `license.jws`, `lease.jws`: a kiadó által aláírt jogosultság és működési engedély.
+- `license-checkpoint.json`: legnagyobb észlelt helyi idő és jogosultságverziók, nem titkos adat.
+- `modules/<csomag>/manifest.jws` és a jegyzékben felsorolt DLL-ek: telepített modulok.
+- `logs/core.jsonl`, legfeljebb két forgatott előzménnyel: működési napló.
+- `appearance.json`, `skins/*.json`: saját megjelenési beállítások és importált témák.
+
+Az alapértelmezett szervezet üres, megbízható kulcs nincs. Így új telepítés nem kap üzleti írási jogot. A `pcimpressz-issuer` csak helyi konfigurációs alapérték, nem létező aktiválási végpont.
+
+A licencfájlokat frissítéskor ideiglenes fájl és atomi átnevezés segítségével kell cserélni. A két dokumentum eltérő verziója átmenetileg elutasítást okoz, nem túlzott jogosultságot. A kulcskészlet és a szervezeti konfiguráció változtatása újraindítást igényel; a licencdokumentumokat a mag minden ellenőrzésnél újraolvassa.
+
+## Modulcsomag v1
+
+A csomag lapos könyvtár: aláírt `manifest.jws` és csak a jegyzékben felsorolt managed DLL-ek. A jegyzék típusa `pcimpressz-module+jws`. Tartalma a `ModuleManifest` osztály mezőit követi; verziói háromtagúak, például `1.0.0`, a Contracts API pontosan `1.0`.
+
+Az egyes DLL-ekhez SHA-256 kivonat tartozik. A fő DLL és a függőségek az ellenőrzött memóriabeli bájtokból töltődnek be. A Contracts DLL nem csomagolható a modul mellé. Natív függőségek, alkönyvtárak, csatolt útvonalak, forró modulcsere és részleges csomagfrissítés nem támogatottak ebben a verzióban.
+
+A modul paraméter nélküli belépési típusa az `IModule` szerződést valósítja meg. `StartAsync` alatt parancsokat regisztrálhat; az indítás befejezése után a regisztráció lezárul. Egy modulon belül minden parancs egyedi nevet és stabil jogosultságazonosítót kap. Az üzleti validáció és az atomi tranzakció az üzleti modul felelőssége.
+
+Az `Active` állapot azt jelenti, hogy a megbízható modul technikailag betöltődött, és például megtekintési/exportálási felületet biztosíthat. Ez önmagában nem ad fizetős műveleti jogot. A hosszú háttérfolyamatoknak minden új biztonságos feldolgozási egységnél újra be kell lépniük az engedélyezési kapun.
+
+## Licencformátum v1 és védelmi határok
+
+A `LicenseDocuments.cs` rögzíti a dokumentummezőket. Mindkét dokumentum JWS Compact, kizárólag `ES256` algoritmussal és ismert `kid` kulcsazonosítóval. A típusok: `pcimpressz-license+jwt`, illetve `pcimpressz-lease+jwt`. Az `iat`, `nbf`, `exp` és `expiresAt` egész UTC Unix-másodperc. Az `nbf` befoglaló, az `exp` kizáró időhatár.
+
+A jogosultság és a lease azonos licenchez, szervezethez és jogosultságverzióhoz tartozzon. A lease legfeljebb 7 napos és nem nyúlhat túl a teljes jogosultságdokumentum élettartamán. A modul tényleges határideje a modul-előfizetés, a jogosultságdokumentum és a lease lejárata közül a legkorábbi.
+
+Ez jelenleg **helyi ellenőrzési alap**, nem kész kereskedelmi licencszolgáltatás. Még nincs aktiválószerver, szériaszám-kezelés, automatikus megújítás, fizetési kapcsolat, felhasználószám-korlát, online visszavonás, kulcsváltási terítés vagy offline kérés–válasz fájlkezelő. A telepítésazonosító nem hardverhez kötött gépkulcs; a TPM/DPAPI-alapú gépkötés későbbi feladat.
+
+A helyi idő-/verzióellenőrzési fájl szerkeszthető, illetve korábbi állapotra visszaállítható helyi rendszergazdaként. Emiatt nem hiteles időforrás és nem teljes védelem gépklónozás vagy virtuálisgép-pillanatkép ellen. A leállított alkalmazás ideje sem bizonyítható offline. A modulkód ugyanabban a folyamatban fut; a külön betöltési környezet nem biztonsági homokozó. Csak a kiadó által ellenőrzött és aláírt saját modulokhoz használható.
+
+A `CallerIdentity` egy későbbi megbízható hitelesítési réteg eredménye. Külső kérésből kapott felhasználói azonosító vagy jogosultságlista nem adható közvetlenül a parancsvégrehajtónak. Emiatt most nincs hálózati API vagy távolról elérhető parancsvégpont.
+
+Élesítés előtt külön kulcskezelés, OS-hozzáférésvédelem, megbízható hitelesítés, támogatott frissítési/telepítési eljárás, helyreállítási próba és a licencellenőrzés független biztonsági felülvizsgálata szükséges.
+
+## Következő lépés
+
+A következő üzleti alap a terméktörzs lehet, erre épülhet az eladás és a készletkezelés. A modulképernyők regisztrációja és az InvenTree csak olvasó partnerimportja már elkészült; élő import API-kulccsal, a felületen indítható. A kiadói aktiválás, gépkulcsos megújítás és a drag & drop szerkesztő külön későbbi fejlesztés.

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "sajat-skin",
+  "name": "Saját éjkék",
+  "palette": {
+    "background": "#0D121A",
+    "surface": "#141C27",
+    "elevated": "#1D2837",
+    "sidebar": "#101721",
+    "stroke": "#2A3748",
+    "text": "#EDF3FA",
+    "muted": "#A2B1C5",
+    "accent": "#78B2FF"
+  }
+}

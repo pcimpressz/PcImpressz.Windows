@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>PcImpressz.Windows</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../PcImpressz.Contracts/PcImpressz.Contracts.csproj" />
+    <ProjectReference Include="../PcImpressz.Shell.Customization/PcImpressz.Shell.Customization.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.local/
+artifacts/
+.vs/
+.tools/
+*.user
+*.suo
+*.pfx
+*.key
+*.pem
+
+.issuer/
