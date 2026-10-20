@@ -15,6 +15,7 @@ public sealed class EntityPageView : UserControl
         var search = Input(); search.Width = 230; search.Margin = new(0,0,10,10);
         search.SetBinding(TextBox.TextProperty, new Binding("Search") { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
         toolbar.Children.Add(search);
+        toolbar.Children.Add(ListGrid.MatchCount());
         var filter = new ComboBox { Width = 180, Margin = new(0,0,10,10), DisplayMemberPath = "Label", SelectedValuePath = "Value" };
         filter.SetBinding(ComboBox.SelectedValueProperty, new Binding("Filter") { Mode = BindingMode.TwoWay });
         toolbar.Children.Add(filter);
@@ -24,6 +25,7 @@ public sealed class EntityPageView : UserControl
         var import = ActionButton("Import InvenTree-ből", "ImportCommand");
         import.SetBinding(VisibilityProperty, new Binding("CanImport") { Converter = new BooleanToVisibilityConverter() });
         toolbar.Children.Add(import);
+        toolbar.Children.Add(ListGrid.ColumnButton(() => DataContext as IColumnList));
         root.Children.Add(toolbar);
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,16) };
         message.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); message.SetBinding(TextBlock.TextProperty, new Binding("Message"));
@@ -33,7 +35,7 @@ public sealed class EntityPageView : UserControl
         body.RowDefinitions.Add(new() { Height = GridLength.Auto }); body.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var listPanel = new StackPanel();
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false,
-            CanUserDeleteRows = false, CanUserSortColumns = false, SelectionMode = DataGridSelectionMode.Single,
+            CanUserDeleteRows = false, SelectionMode = DataGridSelectionMode.Single,
             SelectionUnit = DataGridSelectionUnit.FullRow, HeadersVisibility = DataGridHeadersVisibility.Column,
             MinHeight = 360, MaxHeight = 480, GridLinesVisibility = DataGridGridLinesVisibility.None,
             BorderThickness = new(0), FontSize = 13, RowHeight = 44, ColumnHeaderHeight = 40 };
@@ -43,11 +45,14 @@ public sealed class EntityPageView : UserControl
         grid.SetResourceReference(DataGrid.AlternatingRowBackgroundProperty, "ElevatedBrush");
         grid.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Rows"));
         grid.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedRow") { Mode = BindingMode.TwoWay });
-        var headerStyle = new Style(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader));
+        var headerStyle = new Style(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader),
+            Application.Current?.TryFindResource(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader)) as Style);
         headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("ElevatedBrush")));
-        headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("MutedBrush")));
+        headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("TextBrush")));
         headerStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(12,8,8,8)));
+        headerStyle.Setters.Add(new Setter(FrameworkElement.CursorProperty, System.Windows.Input.Cursors.Hand));
         grid.ColumnHeaderStyle = headerStyle;
+        ListGrid.Prepare(grid, () => DataContext as IColumnList);
         ScrollViewer.SetHorizontalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
         ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
         var cellStyle = new Style(typeof(DataGridCell));
@@ -90,9 +95,7 @@ public sealed class EntityPageView : UserControl
             create.Content = vm.Labels.NewLabel;
             filter.ItemsSource = vm.Filters;
             if (filter.SelectedValue is null) filter.SelectedValue = vm.Filters[0].Value;
-            grid.Columns.Clear();
-            foreach (var column in vm.Definition.Columns)
-                grid.Columns.Add(new DataGridTextColumn { Header = column.Label, Binding = new Binding("[" + column.Id + "]"), Width = column.Width });
+            ListGrid.Show(grid, vm);
             fields.Children.Clear(); fields.RowDefinitions.Clear();
             var position = 0;
             foreach (var field in vm.Fields)
@@ -117,6 +120,7 @@ public sealed class EntityPageView : UserControl
             vm.PropertyChanged += (_, args) =>
             {
                 if (args.PropertyName == nameof(EntityPageViewModel.DossierRevision)) RenderDossier(vm);
+                if (args.PropertyName == nameof(EntityPageViewModel.LayoutRevision)) ListGrid.Show(grid, vm);
             };
             _ = vm.LoadAsync();
         };

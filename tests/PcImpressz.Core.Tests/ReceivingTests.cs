@@ -158,6 +158,19 @@ internal static class ReceivingTests
                 new CallerIdentity("operator", new HashSet<string> { "receiving.read" }));
             Check.Equal(1, listed.GetProperty("total").GetInt32());
         });
+        yield return ("receipt list narrows by supplier fragment and sorts by net", () =>
+        {
+            var now = DateTimeOffset.UnixEpoch;
+            ReceiptRecord Row(string number, string supplier, string issued, decimal net) =>
+                new(Guid.NewGuid(), 1, new() { Number = number, SupplierName = supplier, IssuedOn = issued, Status = "uj", Net = net, Source = "manual" }, now, "a", now, "a");
+            var rows = new[] { Row("B-2", "Nagyker", "2026-02-01", 10), Row("A-1", "Kisker", "2026-03-01", 50), Row("C-3", "Másik", "2026-01-01", 5) };
+            Check.Equal("A-1", ReceiptListing.Match(rows, new(Guid.NewGuid(), "kis")).Single().Data.Number);
+            Check.Equal("A-1", ReceiptListing.Match(rows, new(Guid.NewGuid(), Filter: "uj"))[0].Data.Number);
+            var byNet = ReceiptListing.Match(rows, new(Guid.NewGuid(), Filter: "mind", Sort: "net", Descending: true));
+            Check.Equal(50m, byNet[0].Data.Net);
+            Check.Equal(5m, byNet[^1].Data.Net);
+            return Task.CompletedTask;
+        });
     }
 
     private static ReceiptLineDraft Line(string name, decimal quantity, decimal price) => new(null, null, name, "", "", "DB", quantity, price, 27);

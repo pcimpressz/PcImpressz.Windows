@@ -70,7 +70,7 @@ public sealed class CatalogModule : IModule
         context.RegisterPage(Page("categories", context.ModuleId, "Kategóriák", "Termékcsoportok, egymásba ágyazható kóddal.", "\uE8FD",
             [new("name", "Kategória neve", Required: true), new("code", "Kód", Required: true), new("parentCode", "Szülő kódja"),
              new("description", "Leírás", "multiline"), new("isActive", "Aktív", "boolean", DefaultChecked: true)],
-            [new("name", "Kategória", 240), new("code", "Kód", 120), new("parentCode", "Szülő", 120)],
+            [new("name", "Kategória", 240), new("code", "Kód", 120), new("parentCode", "Szülő", 120), new("description", "Leírás", 220, false)],
             new("categories-list", "categories-save", "categories-archive", "categories-export"),
             Labels("kategória", "Kategória", "kategóriát", "kategoriak.csv", "Keresés név vagy kód alapján"),
             [new("all", "Aktív kategóriák"), new("archived", "Archiváltak")]));
@@ -87,7 +87,9 @@ public sealed class CatalogModule : IModule
              new("description", "Leírás", "multiline"), new("parameters", "Paraméterek (név=érték)", "multiline"),
              new("isPurchaseable", "Beszerzésre jelölhető", "boolean"), new("isSalable", "Eladásra jelölhető", "boolean"),
              new("isActive", "Aktív", "boolean", DefaultChecked: true), new("notes", "Megjegyzés", "multiline")],
-            [new("name", "Termék", 220), new("sku", "Cikkszám", 140), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90)],
+            [new("name", "Termék", 220), new("sku", "Cikkszám", 140), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90),
+             new("quantity", "Darabszám", 110), new("revision", "Revízió", 90, false), new("barcode", "Vonalkód", 140, false),
+             new("isPurchaseable", "Beszerzés", 110, false), new("isSalable", "Eladás", 100, false)],
             new("products-list", "products-save", "products-archive", "products-export", "products-import-preview", "products-import-commit"),
             new EntityPageLabels
             {
@@ -113,7 +115,7 @@ public sealed class CatalogModule : IModule
     private static CatalogQuery ReadQuery(JsonElement input)
     {
         var query = CatalogJson.Read<CatalogQuery>(input);
-        if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200)
+        if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200 || !IsSort(query.Sort))
             throw new ArgumentException("Érvénytelen listázási kérés.");
         return query;
     }
@@ -132,25 +134,20 @@ public sealed class CatalogModule : IModule
         ExportFileName = file, ExportedMessage = "A szűrt lista exportálva.", SearchHint = search
     };
     private static CategoryRecord[] FilterCategories(IEnumerable<CategoryRecord> source, CatalogQuery query) =>
-        source.Where(c => query.Filter == "archived" ? !c.Data.IsActive : c.Data.IsActive)
-        .Where(c => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", c.Data.Name, c.Data.Code, c.Data.ParentCode)
-            .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase))
-        .OrderBy(c => c.Data.Name, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true)).ToArray();
+        CatalogListing.Categories(source, query);
     private static UnitRecord[] FilterUnits(IEnumerable<UnitRecord> source, CatalogQuery query) =>
-        source.Where(u => query.Filter == "archived" ? !u.Data.IsActive : u.Data.IsActive)
-        .Where(u => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", u.Data.Name, u.Data.Code, u.Data.Symbol)
-            .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase))
-        .OrderBy(u => u.Data.Name, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true)).ToArray();
+        CatalogListing.Units(source, query);
     private static ProductRecord[] FilterProducts(IEnumerable<ProductRecord> source, CatalogQuery query) =>
-        source.Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
-        .Where(p => query.Filter switch
-        { "purchaseable" => p.Data.IsPurchaseable, "salable" => p.Data.IsSalable, _ => true })
-        .Where(p => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", p.Data.Name, p.Data.Sku, p.Data.Barcode, p.Data.CategoryCode, p.Data.UnitCode)
-            .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase))
-        .OrderBy(p => p.Data.Name, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true)).ToArray();
+        CatalogListing.Products(source, query);
+    private static bool IsSort(string sort) => sort.Length <= 40 && sort.All(char.IsAsciiLetterOrDigit);
     private static JsonElement CategoryRow(CategoryRecord record) => Row(record.Data, record.Id, record.Version);
     private static JsonElement UnitRow(UnitRecord record) => Row(record.Data, record.Id, record.Version);
-    private static JsonElement ProductRow(ProductRecord record) => Row(record.Data, record.Id, record.Version);
+    private static JsonElement ProductRow(ProductRecord record)
+    {
+        var node = JsonSerializer.SerializeToNode(record.Data, CatalogJson.Options)!;
+        node["id"] = record.Id; node["version"] = record.Version; node["quantity"] = "—";
+        return JsonSerializer.SerializeToElement(node);
+    }
     private static JsonElement Row<T>(T data, Guid id, long version)
     {
         var node = JsonSerializer.SerializeToNode(data, CatalogJson.Options)!;
@@ -164,4 +161,58 @@ public sealed class CatalogModule : IModule
         public ValueTask<JsonElement> ExecuteAsync(JsonElement input, CommandCallContext caller, CancellationToken ct) =>
             new(execute(input, caller.ActorId, ct));
     }
+}
+
+public static class CatalogListing
+{
+    private static readonly StringComparer NameOrder = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true);
+    public static CategoryRecord[] Categories(IEnumerable<CategoryRecord> source, CatalogQuery query)
+    {
+        RequireSort(query.Sort);
+        var rows = source.Where(c => query.Filter == "archived" ? !c.Data.IsActive : c.Data.IsActive)
+            .Where(c => Contains(query.Search, c.Data.Name, c.Data.Code, c.Data.ParentCode)).ToArray();
+        return Order(rows, query, CategoryKeys, c => c.Data.Name);
+    }
+    public static UnitRecord[] Units(IEnumerable<UnitRecord> source, CatalogQuery query)
+    {
+        RequireSort(query.Sort);
+        var rows = source.Where(u => query.Filter == "archived" ? !u.Data.IsActive : u.Data.IsActive)
+            .Where(u => Contains(query.Search, u.Data.Name, u.Data.Code, u.Data.Symbol)).ToArray();
+        return Order(rows, query, UnitKeys, u => u.Data.Name);
+    }
+    public static ProductRecord[] Products(IEnumerable<ProductRecord> source, CatalogQuery query)
+    {
+        RequireSort(query.Sort);
+        var rows = source.Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
+            .Where(p => query.Filter switch
+            { "purchaseable" => p.Data.IsPurchaseable, "salable" => p.Data.IsSalable, _ => true })
+            .Where(p => Contains(query.Search, p.Data.Name, p.Data.Sku, p.Data.Barcode, p.Data.CategoryCode, p.Data.UnitCode)).ToArray();
+        return Order(rows, query, ProductKeys, p => p.Data.Name);
+    }
+    private static T[] Order<T>(T[] rows, CatalogQuery query, Dictionary<string, Func<T, string>> keys, Func<T, string> name) =>
+        query.Sort.Length > 0 && keys.TryGetValue(query.Sort, out var key)
+            ? TextOrder.By(rows, query.Descending, key)
+            : rows.OrderBy(name, NameOrder).ToArray();
+    private static bool Contains(string search, params string[] parts) =>
+        string.IsNullOrWhiteSpace(search) || string.Join(" ", parts).Contains(search.Trim(), StringComparison.OrdinalIgnoreCase);
+    private static void RequireSort(string sort)
+    {
+        if (sort.Length > 40 || sort.Any(c => !char.IsAsciiLetterOrDigit(c)))
+            throw new ArgumentException("Érvénytelen listázási kérés.");
+    }
+    private static string Yes(bool value) => value ? "Igen" : "Nem";
+    private static readonly Dictionary<string, Func<CategoryRecord, string>> CategoryKeys = new(StringComparer.Ordinal)
+    {
+        ["name"] = c => c.Data.Name, ["code"] = c => c.Data.Code, ["parentCode"] = c => c.Data.ParentCode, ["description"] = c => c.Data.Description
+    };
+    private static readonly Dictionary<string, Func<UnitRecord, string>> UnitKeys = new(StringComparer.Ordinal)
+    {
+        ["name"] = u => u.Data.Name, ["code"] = u => u.Data.Code, ["symbol"] = u => u.Data.Symbol
+    };
+    private static readonly Dictionary<string, Func<ProductRecord, string>> ProductKeys = new(StringComparer.Ordinal)
+    {
+        ["name"] = p => p.Data.Name, ["sku"] = p => p.Data.Sku, ["categoryCode"] = p => p.Data.CategoryCode,
+        ["unitCode"] = p => p.Data.UnitCode, ["revision"] = p => p.Data.Revision, ["barcode"] = p => p.Data.Barcode,
+        ["quantity"] = _ => "—", ["isPurchaseable"] = p => Yes(p.Data.IsPurchaseable), ["isSalable"] = p => Yes(p.Data.IsSalable)
+    };
 }

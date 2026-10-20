@@ -105,6 +105,7 @@ public sealed class RelayCommand(Action execute) : ICommand
 public sealed partial class ShellViewModel : Observable
 {
     private readonly AppearanceStore _store;
+    private readonly ListLayoutStore _layouts;
     private readonly HostConnection _connection;
     private readonly CancellationTokenSource _shutdown = new();
     private AppearancePreferences _preferences;
@@ -120,6 +121,12 @@ public sealed partial class ShellViewModel : Observable
     public ShellViewModel(AppearanceStore store, string directory, string? hostPath)
     {
         (_store, DataDirectory) = (store, directory);
+        _layouts = new ListLayoutStore(directory);
+        _layouts.Changed += key =>
+        {
+            if (_selectedListPage?.Key == key)
+                Application.Current.Dispatcher.BeginInvoke(RefreshColumnChoices);
+        };
         _connection = new(directory, hostPath);
         _preferences = store.Load();
         Skins = new(store.ReadSkins());
@@ -138,6 +145,7 @@ public sealed partial class ShellViewModel : Observable
         ImportSkinCommand = new RelayCommand(ImportSkin);
         ExportSkinCommand = new RelayCommand(ExportSkin);
         ResetAppearanceCommand = new RelayCommand(ResetAppearance);
+        ResetListLayoutCommand = new RelayCommand(ResetSelectedList);
         OpenDataCommand = new RelayCommand(() => OpenFolder(DataDirectory));
         OpenLogsCommand = new RelayCommand(() => OpenFolder(Path.Combine(DataDirectory, "logs")));
         OpenModulesCommand = new RelayCommand(() => OpenFolder(Path.Combine(DataDirectory, "modules")));
