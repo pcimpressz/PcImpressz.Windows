@@ -14,6 +14,7 @@
   <Folder Name="/tools/"><Project Path="tools/PcImpressz.DevelopmentIssuer/PcImpressz.DevelopmentIssuer.csproj" /></Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PcImpressz.Core.Tests/PcImpressz.Core.Tests.csproj" />
+    <Project Path="tests/PcImpressz.Shell.WheelTests/PcImpressz.Shell.WheelTests.csproj" />
     <Project Path="tests/PcImpressz.TestModule/PcImpressz.TestModule.csproj" />
   </Folder>
 </Solution>

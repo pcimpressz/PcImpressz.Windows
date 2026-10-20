@@ -33,6 +33,8 @@ try {
         'Build' { exit 0 }
         'Test' {
             & $dotnetPath '.\tests\PcImpressz.Core.Tests\bin\Release\net10.0\PcImpressz.Core.Tests.dll'
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & '.\tests\PcImpressz.Shell.WheelTests\bin\Release\net10.0-windows\PcImpressz.Shell.WheelTests.exe'
         }
         'Publish' {
             & $dotnetPath publish '.\src\PcImpressz.Shell.Windows\PcImpressz.Shell.Windows.csproj' `
