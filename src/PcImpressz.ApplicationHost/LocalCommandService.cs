@@ -44,7 +44,7 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
                 {
                     logger.LogWarning("Local command failed: {ErrorType}", ex.GetType().Name);
                     response = new(false, Error: ex is IOException ? ex.Message
-                        : ex.GetType().Name is "PartnerConflictException" or "CatalogConflictException" ? ex.Message
+                        : ex.GetType().Name is "PartnerConflictException" or "CatalogConflictException" or "ReceivingConflictException" ? ex.Message
                         : ex is HttpRequestException ? ex.Message : "A művelet nem sikerült. Ellenőrizd az adatokat és a naplót.", Code: "failed");
                 }
                 await LocalProtocol.WriteAsync(pipe, response, deadline.Token);

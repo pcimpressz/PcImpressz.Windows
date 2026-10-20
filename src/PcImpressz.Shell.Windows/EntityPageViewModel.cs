@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -9,6 +10,14 @@ using Microsoft.Win32;
 using PcImpressz.Contracts;
 
 namespace PcImpressz.Shell.Windows;
+
+public interface IWorkspacePage : INotifyPropertyChanged
+{
+    EntityPageDescriptor Definition { get; }
+    bool IsDirty { get; }
+    bool IsBusy { get; }
+    void CompanyChanged();
+}
 
 public sealed class EntityFieldViewModel(EntityField definition) : Observable
 {
@@ -35,7 +44,7 @@ public sealed class EntityRow
     }
 }
 
-public sealed class EntityPageViewModel : Observable
+public sealed class EntityPageViewModel : Observable, IWorkspacePage
 {
     private readonly HostConnection _connection;
     private readonly Func<Guid?> _company;

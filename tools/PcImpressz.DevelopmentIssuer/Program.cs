@@ -31,6 +31,11 @@ using var moduleKey = ReadKey("module-signing.pem");
 using var licenseKey = ReadKey("license-signing.pem");
 InstallModule(moduleKey, "partners", "PcImpressz.Modules.Partners", "PcImpressz.Modules.Partners.PartnersModule");
 InstallModule(moduleKey, "catalog", "PcImpressz.Modules.Catalog", "PcImpressz.Modules.Catalog.CatalogModule");
+InstallModule(moduleKey, "receiving", "PcImpressz.Modules.Receiving", "PcImpressz.Modules.Receiving.ReceivingModule",
+[
+    new() { ModuleId = "partners", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" },
+    new() { ModuleId = "catalog", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" }
+]);
 AddPublicKey("module-public-keys.json", "dev-module-key", moduleKey);
 AddPublicKey("license-public-keys.json", "dev-license-key", licenseKey);
 product["Issuer"] = "pcimpressz-development";
@@ -52,7 +57,8 @@ var license = new EntitlementDocument
     OrganizationId = "development", Revision = revision, Iat = now, Nbf = now - 30, Exp = now + 30 * 86400,
     Modules = [
         new() { ModuleId = "partners", Capabilities = ["partners.write", "partners.import", "partners.read", "partners.export"], ExpiresAt = now + 30 * 86400 },
-        new() { ModuleId = "catalog", Capabilities = ["catalog.write", "catalog.import", "catalog.read", "catalog.export"], ExpiresAt = now + 30 * 86400 }]
+        new() { ModuleId = "catalog", Capabilities = ["catalog.write", "catalog.import", "catalog.read", "catalog.export"], ExpiresAt = now + 30 * 86400 },
+        new() { ModuleId = "receiving", Capabilities = ["receiving.write", "receiving.read", "receiving.export"], ExpiresAt = now + 30 * 86400 }]
 };
 var lease = new LeaseDocument
 {
@@ -61,10 +67,10 @@ var lease = new LeaseDocument
 };
 AtomicText(Path.Combine(data, "license.jws"), Sign(licenseKey, "dev-license-key", LicenseDocumentTypes.Entitlement, license));
 AtomicText(Path.Combine(data, "lease.jws"), Sign(licenseKey, "dev-license-key", LicenseDocumentTypes.Lease, lease));
-Console.WriteLine("Aláírt partner- és terméktörzsmodul telepítve. Fejlesztői jogosultság: 30 nap, működési engedély: 7 nap.");
+Console.WriteLine("Aláírt partner-, termék- és bevételezésmodul telepítve. Fejlesztői jogosultság: 30 nap, működési engedély: 7 nap.");
 Console.WriteLine("Kiadói kulcsok kizárólag a .issuer mappában; ügyfélkiadásba nem kerülnek.");
 
-void InstallModule(ECDsa key, string id, string assemblyName, string entryType)
+void InstallModule(ECDsa key, string id, string assemblyName, string entryType, ModuleDependency[]? dependencies = null)
 {
     var dll = Path.Combine(root, "src", "Modules", assemblyName, "bin", "Release", "net10.0", assemblyName + ".dll");
     var moduleBytes = File.ReadAllBytes(dll);
@@ -72,7 +78,8 @@ void InstallModule(ECDsa key, string id, string assemblyName, string entryType)
     {
         SchemaVersion = 1, Id = id, Version = "0.3.0", ApiVersion = PlatformContract.ApiVersion,
         EntryAssembly = assemblyName + ".dll", EntryType = entryType,
-        Files = new() { [assemblyName + ".dll"] = Convert.ToHexString(SHA256.HashData(moduleBytes)) }, Dependencies = []
+        Files = new() { [assemblyName + ".dll"] = Convert.ToHexString(SHA256.HashData(moduleBytes)) },
+        Dependencies = dependencies ?? []
     };
     var package = Path.Combine(data, "modules", id);
     Directory.CreateDirectory(package);

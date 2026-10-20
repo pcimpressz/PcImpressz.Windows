@@ -37,11 +37,12 @@ public sealed class PartnersModule : IModule
         {
             var query = PartnerJson.Read<PartnerDossierQuery>(input);
             var view = PartnerDossier.Open(await repository.Snapshot(query.CompanyId, ct), query.Id);
-            var snapshot = PartnerDossier.Read(context.GetCompanyDataDirectory(query.CompanyId), query.Id);
+            var directory = context.GetCompanyDataDirectory(query.CompanyId);
+            var snapshot = PartnerDossier.FromReceipts(directory, query.Id) ?? PartnerDossier.Read(directory, query.Id);
             return PartnerJson.Element(PartnerDossier.Apply(view, snapshot));
         }));
         context.RegisterPage(new("partners", context.ModuleId, "Partnertörzs",
-            "Vevők, szállítók és gyártók. A mentett partner dossziéja mutatja, honnan jön majd a számla és a forgalom.", "\uE716",
+            "Vevők, szállítók és gyártók. A dosszié a bevételezés számláit mutatja ennél a partnernél.", "\uE716",
             [new("name", "Partner neve", Required: true), new("taxId", "Adószám"), new("email", "E-mail"),
              new("phone", "Telefon"), new("website", "Weboldal"), new("country", "Ország", DefaultText: "HU"),
              new("postalCode", "Irányítószám"), new("city", "Település"), new("address", "Cím"),
