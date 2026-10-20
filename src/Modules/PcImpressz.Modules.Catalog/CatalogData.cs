@@ -44,7 +44,8 @@ public sealed record CatalogState(int SchemaVersion, long Revision, CategoryReco
 public sealed record CategorySave(Guid CompanyId, Guid? Id, long Version, CategoryData Data);
 public sealed record UnitSave(Guid CompanyId, Guid? Id, long Version, UnitData Data);
 public sealed record ProductSave(Guid CompanyId, Guid? Id, long Version, ProductData Data);
-public sealed record CatalogQuery(Guid CompanyId, string Search = "", string Filter = "all", int Page = 0, int PageSize = 50);
+public sealed record CatalogQuery(Guid CompanyId, string Search = "", string Filter = "all", int Page = 0, int PageSize = 50,
+    string Sort = "", bool Descending = false);
 public sealed record CatalogArchive(Guid CompanyId, Guid Id, long Version);
 public sealed record CatalogImportOptions(Guid CompanyId, string ServerUrl, string ApiToken, bool AllowLocalHttp = false);
 public sealed record CatalogImportCommit(Guid CompanyId, Guid PreviewId);

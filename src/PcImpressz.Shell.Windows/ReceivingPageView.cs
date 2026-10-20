@@ -8,6 +8,7 @@ namespace PcImpressz.Shell.Windows;
 public sealed class ReceivingPageView : UserControl
 {
     private readonly StackPanel _lines = new();
+    private DataGrid _receipts = null!;
     private ReceivingPageViewModel? _page;
     public ReceivingPageView()
     {
@@ -33,6 +34,7 @@ public sealed class ReceivingPageView : UserControl
         var tools = new WrapPanel();
         var search = Input(); search.Width = 240; search.SetBinding(TextBox.TextProperty, new Binding("Search") { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
         tools.Children.Add(search);
+        tools.Children.Add(ListGrid.MatchCount());
         var filter = new ComboBox { Width = 220, Margin = new(0, 0, 10, 10), DisplayMemberPath = "Label", SelectedValuePath = "Value" };
         filter.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Filters"));
         filter.SetBinding(ComboBox.SelectedValueProperty, new Binding("Filter"));
@@ -43,16 +45,16 @@ public sealed class ReceivingPageView : UserControl
         tools.Children.Add(Button("Költség", "ExpenseCommand"));
         tools.Children.Add(Button("Függő", "PendingCommand"));
         tools.Children.Add(Button("CSV", "ExportCommand"));
+        tools.Children.Add(ListGrid.ColumnButton(() => DataContext as IColumnList));
         panel.Children.Add(tools);
         panel.Children.Add(Bound(Muted(""), "Message"));
-        var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, CanUserDeleteRows = false,
+        _receipts = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, CanUserDeleteRows = false,
             HeadersVisibility = DataGridHeadersVisibility.Column, MinHeight = 280, MaxHeight = 460, Margin = new(0, 8, 0, 0) };
-        grid.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Rows"));
-        grid.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedRow"));
-        grid.MouseDoubleClick += (_, _) => { if (DataContext is ReceivingPageViewModel page) page.OpenCommand.Execute(null); };
-        foreach (var (header, path, width) in new[] { ("Számlaszám", "Number", 150d), ("Szállító", "SupplierName", 220d), ("Kelt", "IssuedOn", 110d), ("Forrás", "SourceLabel", 110d), ("Nettó", "Net", 110d), ("Állapot", "StatusLabel", 180d) })
-            grid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new Binding(path), Width = width });
-        panel.Children.Add(grid);
+        _receipts.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Rows"));
+        _receipts.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedRow"));
+        _receipts.MouseDoubleClick += (_, _) => { if (DataContext is ReceivingPageViewModel page) page.OpenCommand.Execute(null); };
+        ListGrid.Prepare(_receipts, () => DataContext as IColumnList);
+        panel.Children.Add(_receipts);
         return panel;
     }
     private UIElement Intake()
@@ -120,10 +122,24 @@ public sealed class ReceivingPageView : UserControl
     }
     private void Hook()
     {
-        if (_page is not null) _page.Lines.CollectionChanged -= LinesChanged;
+        if (_page is not null)
+        {
+            _page.Lines.CollectionChanged -= LinesChanged;
+            _page.PropertyChanged -= PageChanged;
+        }
         _page = DataContext as ReceivingPageViewModel;
-        if (_page is not null) _page.Lines.CollectionChanged += LinesChanged;
+        if (_page is not null)
+        {
+            _page.Lines.CollectionChanged += LinesChanged;
+            _page.PropertyChanged += PageChanged;
+            ListGrid.Show(_receipts, _page);
+        }
         Rebuild();
+    }
+    private void PageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(ReceivingPageViewModel.LayoutRevision) && _page is not null)
+            ListGrid.Show(_receipts, _page);
     }
     private void LinesChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();
     private void Rebuild()

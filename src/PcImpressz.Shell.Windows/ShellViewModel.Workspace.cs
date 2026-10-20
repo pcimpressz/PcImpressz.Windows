@@ -56,14 +56,15 @@ public sealed partial class ShellViewModel
             var key = page.ModuleId + "." + page.Id;
             if (_entityPages.ContainsKey(key)) continue;
             IWorkspacePage vm = page.ModuleId == "receiving" && page.Id == "receiving"
-                ? new ReceivingPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token)
-                : new EntityPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token);
+                ? new ReceivingPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts)
+                : new EntityPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts);
             vm.PropertyChanged += (_, e) => { if (e.PropertyName == "IsBusy") Changed(nameof(WorkspaceIsIdle)); };
             _entityPages.Add(key, vm);
             if (_companiesLoaded && SelectedCompany is not null) vm.CompanyChanged();
             addedPage = true;
         }
         if (addedPage || disabledChanged) SyncNavigation();
+        if (addedPage) SyncListSettings();
         if (!_companiesLoaded)
         {
             var response = await _connection.SendAsync("companies.list", new { }, _shutdown.Token);

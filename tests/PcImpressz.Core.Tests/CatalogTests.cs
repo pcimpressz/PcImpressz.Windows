@@ -204,6 +204,30 @@ internal static class CatalogTests
                 JsonSerializer.SerializeToElement(new { companyId = f.First.Id, version = 0, data = new { name = "Darab", code = "DB", isActive = true } })),
                 new CallerIdentity("operator", new HashSet<string> { "catalog.write" })));
         });
+        yield return Case("product search keeps a name fragment and the chosen column sort", async f =>
+        {
+            await f.Unit(f.First.Id, "Darab", "DB");
+            await f.Product(f.First.Id, "Alfa csavar", "BBB");
+            await f.Product(f.First.Id, "Zeta alátét", "AAA");
+            await f.Product(f.First.Id, "Másik", "CCC");
+            var products = (await f.Repository.Snapshot(f.First.Id)).Products;
+            Check.Equal("Alfa csavar", CatalogListing.Products(products, new(f.First.Id, "alfa")).Single().Data.Name);
+            var sorted = CatalogListing.Products(products, new(f.First.Id, Sort: "sku", Descending: true));
+            Check.Equal("CCC", sorted[0].Data.Sku);
+            Check.Equal("AAA", sorted[^1].Data.Sku);
+            Check.Equal(3, CatalogListing.Products(products, new(f.First.Id, Sort: "nincsilyen")).Length);
+            Check.Throws<ArgumentException>(() => CatalogListing.Products(products, new(f.First.Id, Sort: "sku;drop")));
+        });
+        yield return ("product page shows quantity and can hide the sku", () =>
+        {
+            var probe = new PageProbe("catalog");
+            new CatalogModule().StartAsync(probe, default).AsTask().GetAwaiter().GetResult();
+            var products = probe.Pages.Single(page => page.Id == "products");
+            Check.True(products.Columns.Single(column => column.Id == "quantity").Visible);
+            Check.True(products.Columns.Single(column => column.Id == "sku").Visible);
+            Check.True(!products.Columns.Single(column => column.Id == "barcode").Visible);
+            return Task.CompletedTask;
+        });
     }
 
     private static CategoryData Category(string name, string code) => new() { Name = name, Code = code, IsActive = true };
@@ -236,6 +260,15 @@ internal static class CatalogTests
             ? "{\"results\":[{\"pk\":10,\"name\":\"Csavarok\",\"description\":\"Kötőelem\",\"parent\":null}],\"next\":null}"
             : "{\"results\":[{\"pk\":1,\"name\":\"Hatlapfejű csavar\",\"description\":\"M6\",\"IPN\":\"CSV-M6\",\"category\":10,\"units\":\"db\",\"active\":true,\"purchaseable\":true,\"salable\":false,\"revision\":\"A\"}],\"next\":null}"));
         public void Dispose() => Directory.Dispose();
+    }
+    private sealed class PageProbe(string moduleId) : IModuleContext
+    {
+        public string ModuleId => moduleId;
+        public TimeProvider TimeProvider => TimeProvider.System;
+        public List<EntityPageDescriptor> Pages { get; } = [];
+        public void RegisterCommand(ICommandHandler handler) { }
+        public void RegisterPage(EntityPageDescriptor page) => Pages.Add(page);
+        public string GetCompanyDataDirectory(Guid companyId) => throw new NotSupportedException();
     }
     private sealed class FakeHandler(Func<HttpRequestMessage, string> response) : HttpMessageHandler
     {

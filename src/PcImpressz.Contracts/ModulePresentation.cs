@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace PcImpressz.Contracts;
 
 public sealed record EntityField(string Id, string Label, string Kind = "text", bool Required = false, string? DefaultText = null, bool DefaultChecked = false);
-public sealed record EntityColumn(string Id, string Label, double Width = 180);
+public sealed record EntityColumn(string Id, string Label, double Width = 180, bool Visible = true);
 public sealed record EntityPageCommands(string List, string Save, string Archive, string Export,
     string? ImportPreview = null, string? ImportCommit = null);
 public sealed record EntityFilterOption(string Value, string Label);

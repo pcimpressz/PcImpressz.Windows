@@ -83,6 +83,37 @@ internal static class AppearanceTests
             Check.Equal(DiagnosticChannel.ForDirectory(directory), DiagnosticChannel.ForDirectory(directory + Path.DirectorySeparatorChar));
             Check.True(DiagnosticChannel.ForDirectory(directory) != DiagnosticChannel.ForDirectory(Path.Combine(directory, "other")));
         });
+        yield return Test("list columns survive restart and keep one column visible", () =>
+        {
+            using var directory = new TestDirectory();
+            EntityColumn[] columns = [new("name", "Név", 100), new("sku", "Cikkszám", 80), new("barcode", "Vonalkód", 40, false)];
+            var store = new ListLayoutStore(directory.Path);
+            var initial = store.For("catalog.products", columns);
+            Check.True(initial.Columns.Single(column => column.Id == "name").Visible);
+            Check.True(!initial.Columns.Single(column => column.Id == "barcode").Visible);
+            Check.True(store.TrySetVisible("catalog.products", columns, "sku", false));
+            store.ToggleSort("catalog.products", columns, "name");
+            store.ToggleSort("catalog.products", columns, "name");
+            var again = new ListLayoutStore(directory.Path).For("catalog.products", columns);
+            Check.True(!again.Columns.Single(column => column.Id == "sku").Visible);
+            Check.Equal("name", again.SortColumn);
+            Check.True(again.SortDescending);
+            Check.True(!store.TrySetVisible("catalog.products", columns, "name", false));
+            Check.True(new ListLayoutStore(directory.Path).For("catalog.products", columns).Columns.Single(column => column.Id == "name").Visible);
+            store.Reset("catalog.products");
+            Check.True(new ListLayoutStore(directory.Path).For("catalog.products", columns).Columns.Single(column => column.Id == "sku").Visible);
+        });
+        yield return Test("corrupt list layout falls back without destroying the file", () =>
+        {
+            using var directory = new TestDirectory();
+            var path = Path.Combine(directory.Path, "list-layouts.json");
+            File.WriteAllText(path, "broken");
+            var store = new ListLayoutStore(directory.Path);
+            var page = store.For("partners.partners", [new("name", "Partner")]);
+            Check.True(page.Columns.Single().Visible);
+            Check.True(store.LastWarning is not null);
+            Check.Equal("broken", File.ReadAllText(path));
+        });
     }
     private static (string, Func<Task>) Test(string name, Action test) => (name, () => { test(); return Task.CompletedTask; });
 }

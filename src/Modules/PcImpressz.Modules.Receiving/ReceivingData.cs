@@ -47,7 +47,8 @@ public sealed record ReceiptLineDraft(Guid? Id, Guid? ProductId, string? Name, s
 public sealed record ReceiptDraft(string? Number, Guid SupplierId, string? IssuedOn, string? DueOn, string? Notes,
     string? Warehouse, ReceiptLineDraft[]? Lines);
 public sealed record ReceiptSave(Guid CompanyId, Guid? Id, long Version, ReceiptDraft? Draft);
-public sealed record ReceiptQuery(Guid CompanyId, string Search = "", string Filter = "uj", int Page = 0, int PageSize = 50);
+public sealed record ReceiptQuery(Guid CompanyId, string Search = "", string Filter = "uj", int Page = 0, int PageSize = 50,
+    string Sort = "", bool Descending = false);
 public sealed record ReceiptGet(Guid CompanyId, Guid Id);
 public sealed record ReceiptClassify(Guid CompanyId, Guid Id, long Version, string? Status);
 public sealed record ReceiptImport(Guid CompanyId, Guid? SupplierId, string? Number, string? IssuedOn, string? DueOn,

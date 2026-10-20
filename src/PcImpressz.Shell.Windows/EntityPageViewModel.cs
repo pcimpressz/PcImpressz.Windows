@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Win32;
 using PcImpressz.Contracts;
+using PcImpressz.Shell.Customization;
 
 namespace PcImpressz.Shell.Windows;
 
@@ -44,11 +45,15 @@ public sealed class EntityRow
     }
 }
 
-public sealed class EntityPageViewModel : Observable, IWorkspacePage
+public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnList
 {
     private readonly HostConnection _connection;
     private readonly Func<Guid?> _company;
     private readonly CancellationToken _shutdown;
+    private readonly ColumnList _columns;
+    private readonly TypedSearch _typed;
+    private readonly ListLoader _loader;
+    private bool _filtersReady;
     private EntityRow? _selected;
     private Guid? _editId;
     private long _version;
@@ -70,8 +75,17 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage
     public EntityPageDescriptor Definition { get; }
     public ObservableCollection<EntityRow> Rows { get; } = [];
     public ObservableCollection<EntityFieldViewModel> Fields { get; } = [];
-    public string Search { get => _search; set { _search = value; Changed(); } }
-    public string Filter { get => _filter; set { _filter = value; Changed(); } }
+    public string Search { get => _search; set { if (_search == value) return; _search = value; Changed(); _typed.Schedule(); } }
+    public string Filter
+    {
+        get => _filter;
+        set
+        {
+            if (string.IsNullOrEmpty(value) || _filter == value) return;
+            _filter = value; Changed();
+            if (_filtersReady) { _page = 0; _ = LoadAsync(); }
+        }
+    }
     public bool IsDirty { get => _dirty; private set { _dirty = value; Changed(); Changed(nameof(EditorTitle)); } }
     public EntityPageLabels Labels { get; }
     public EntityFilterOption[] Filters { get; }
@@ -93,6 +107,11 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage
     public IReadOnlyList<DossierSectionRow> DossierSections { get; private set; } = [];
     public string Message { get => _message; private set { _message = value; Changed(); } }
     public string CountLabel => _total + " " + Labels.CountNoun + " · " + (_page + 1) + ". oldal";
+    public string MatchCount => _total + " db találat";
+    public int LayoutRevision => _columns.Revision;
+    public string SortColumn => _columns.SortColumn;
+    public bool SortDescending => _columns.SortDescending;
+    public IReadOnlyList<EntityColumn> VisibleColumns => _columns.VisibleColumns;
     public bool CanImport => Definition.Commands.ImportPreview is not null;
     public EntityRow? SelectedRow
     {
@@ -121,9 +140,14 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage
     public ICommand PeriodPreviousYearCommand { get; }
     public ICommand PeriodQuarterCommand { get; }
 
-    internal EntityPageViewModel(EntityPageDescriptor definition, HostConnection connection, Func<Guid?> company, CancellationToken shutdown)
+    internal EntityPageViewModel(EntityPageDescriptor definition, HostConnection connection, Func<Guid?> company, CancellationToken shutdown, ListLayoutStore layouts)
     {
         (Definition, _connection, _company, _shutdown) = (definition, connection, company, shutdown);
+        _columns = new ColumnList(layouts, definition);
+        _typed = new TypedSearch(() => { _page = 0; _ = LoadAsync(); }, shutdown);
+        _loader = new ListLoader(LoadCore, shutdown);
+        _columns.Changed += () => Changed(nameof(LayoutRevision));
+        _columns.SortChanged += () => { _page = 0; _ = LoadAsync(); };
         Labels = definition.Labels ?? new EntityPageLabels();
         Filters = definition.Filters ?? PartnerFilters;
         foreach (var field in definition.Fields)
@@ -132,7 +156,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage
             vm.Edited = () => { if (!_populating) IsDirty = true; };
             Fields.Add(vm);
         }
-        SearchCommand = new RelayCommand(() => { if (CanDiscard()) { Populate(null); _page = 0; _ = LoadAsync(); } });
+        SearchCommand = new RelayCommand(() => { _typed.CancelPending(); _page = 0; _ = LoadAsync(); });
         NewCommand = new RelayCommand(() => { if (CanDiscard()) Populate(null); });
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
         ArchiveCommand = new RelayCommand(() => _ = ArchiveAsync());
@@ -148,7 +172,16 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage
         PeriodPreviousYearCommand = new RelayCommand(() => SetPeriod(new DateTime(DateTime.Today.Year - 1, 1, 1), new DateTime(DateTime.Today.Year - 1, 12, 31)));
         PeriodQuarterCommand = new RelayCommand(() => SetPeriod(DateTime.Today.AddDays(-90), DateTime.Today));
         Populate(null);
+        _filtersReady = true;
     }
+    public bool IsColumnVisible(string id) => _columns.IsColumnVisible(id);
+    public bool SetColumnVisible(string id, bool visible)
+    {
+        if (_columns.SetColumnVisible(id, visible)) return true;
+        Message = "Legalább egy oszlop maradjon látható.";
+        return false;
+    }
+    public void ToggleSort(string columnId) => _columns.ToggleSort(columnId);
 
     public void CompanyChanged()
     {
@@ -219,20 +252,31 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage
         await _connection.SendAsync("module.execute", new ModuleCommandRequest(CompanyId, Definition.ModuleId, command,
             JsonSerializer.SerializeToElement(input)), _shutdown);
 
-    public async Task LoadAsync()
+    public Task LoadAsync() => _loader.Run();
+    private async Task LoadCore(int generation)
     {
-        if (IsBusy || _shutdown.IsCancellationRequested) return;
+        while (IsBusy && _loader.IsCurrent(generation) && !_shutdown.IsCancellationRequested)
+        {
+            try { await Task.Delay(40, _shutdown); }
+            catch (OperationCanceledException) { return; }
+        }
+        if (!_loader.IsCurrent(generation) || _shutdown.IsCancellationRequested) return;
         IsBusy = true;
         try
         {
-            var result = await ExecuteAsync(Definition.Commands.List, new { search = Search, filter = Filter, page = _page, pageSize = 50 });
+            var result = await ExecuteAsync(Definition.Commands.List, new
+            {
+                search = Search, filter = Filter, page = _page, pageSize = 50,
+                sort = SortColumn, descending = SortDescending
+            });
+            if (!_loader.IsCurrent(generation)) return;
             Rows.Clear();
             foreach (var row in result.GetProperty("rows").EnumerateArray()) Rows.Add(new(row));
             _total = result.GetProperty("total").GetInt32();
             Message = _total == 0 ? Labels.EmptyMessage : "A lista naprakész.";
-            Changed(nameof(CountLabel));
+            Changed(nameof(CountLabel)); Changed(nameof(MatchCount));
         }
-        catch (Exception ex) { Message = ex.Message; }
+        catch (Exception ex) { if (_loader.IsCurrent(generation)) Message = ex.Message; }
         finally { IsBusy = false; }
     }
 
@@ -284,7 +328,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage
         IsBusy = true;
         try
         {
-            var result = await ExecuteAsync(Definition.Commands.Export, new { search = Search, filter = Filter });
+            var result = await ExecuteAsync(Definition.Commands.Export, new { search = Search, filter = Filter, sort = SortColumn, descending = SortDescending });
             await File.WriteAllTextAsync(dialog.FileName, result.GetProperty("csv").GetString(), new UTF8Encoding(true), _shutdown);
             Message = Labels.ExportedMessage;
         }

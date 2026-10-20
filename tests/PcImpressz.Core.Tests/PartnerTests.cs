@@ -169,6 +169,17 @@ internal static class PartnerTests
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header,int.MaxValue);stream.Write(header);stream.Position=0;
             await Check.ThrowsAsync<IOException>(async()=>await LocalProtocol.ReadAsync<LocalRequest>(stream,default));
         });
+        yield return Case("partner search keeps a name fragment and sorts by city", async f =>
+        {
+            await f.Repository.Save(new(f.First.Id, null, 0, Data("Alma Kft.") with { City = "Zalaegerszeg" }), "operator");
+            await f.Repository.Save(new(f.First.Id, null, 0, Data("Béla Bt.") with { City = "Ajka" }), "operator");
+            await f.Repository.Save(new(f.First.Id, null, 0, Data("Cédrus") with { City = "Pécs" }), "operator");
+            var partners = (await f.Repository.Snapshot(f.First.Id)).Partners;
+            Check.Equal("Alma Kft.", PartnerListing.Match(partners, new(f.First.Id, "kft")).Single().Data.Name);
+            var sorted = PartnerListing.Match(partners, new(f.First.Id, Sort: "city"));
+            Check.Equal("Ajka", sorted[0].Data.City);
+            Check.Equal("Zalaegerszeg", sorted[^1].Data.City);
+        });
     }
 
     private static PartnerData Data(string name)=>new(){Name=name,IsCustomer=true};

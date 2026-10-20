@@ -20,7 +20,7 @@ public sealed class ReceivingModule : IModule
                 fuggo = receipts.Count(receipt => receipt.Data.Status == "fuggo"),
                 mind = receipts.Length
             };
-            var matching = Filter(receipts, query);
+            var matching = ReceiptListing.Match(receipts, query);
             return ReceivingJson.Element(new { rows = matching.Skip(Skip(query)).Take(query.PageSize).Select(Summary), total = matching.Length, counts });
         });
         Register(context, "get", "receiving.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
@@ -58,7 +58,7 @@ public sealed class ReceivingModule : IModule
         Register(context, "export", "receiving.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = ReceivingJson.Read<ReceiptQuery>(input);
-            var rows = Filter((await repository.Snapshot(query.CompanyId, ct)).Receipts, query);
+            var rows = ReceiptListing.Match((await repository.Snapshot(query.CompanyId, ct)).Receipts, query);
             return ReceivingJson.Element(new { csv = ReceivingRepository.ExportCsv(rows) });
         });
         Register(context, "archive", "receiving.write", CommandAccess.Licensed, (_, _, _) =>
@@ -68,7 +68,8 @@ public sealed class ReceivingModule : IModule
             "\uE7BF",
             [new("number", "Számlaszám", Required: true), new("supplierName", "Szállító", Required: true),
              new("issuedOn", "Kelt"), new("notes", "Megjegyzés", "multiline")],
-            [new("number", "Számlaszám", 160), new("supplierName", "Szállító", 220), new("issuedOn", "Kelt", 120), new("statusLabel", "Állapot", 180)],
+            [new("number", "Számlaszám", 150), new("supplierName", "Szállító", 220), new("issuedOn", "Kelt", 110),
+             new("sourceLabel", "Forrás", 110), new("net", "Nettó", 110), new("statusLabel", "Állapot", 180)],
             new("list", "save", "archive", "export"),
             new EntityPageLabels
             {
@@ -90,20 +91,13 @@ public sealed class ReceivingModule : IModule
     private static ReceiptQuery ReadQuery(JsonElement input)
     {
         var query = ReceivingJson.Read<ReceiptQuery>(input);
-        if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200)
+        if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200 || !ReceiptListing.IsSort(query.Sort))
             throw new ArgumentException("Érvénytelen listázási kérés.");
         if (query.Filter is not ("uj" or "bevetelezve" or "koltseg" or "fuggo" or "mind"))
             throw new ArgumentException("Ismeretlen számlaszűrő.");
         return query;
     }
     private static int Skip(ReceiptQuery query) => query.Page * (long)query.PageSize > int.MaxValue ? int.MaxValue : query.Page * query.PageSize;
-    private static ReceiptRecord[] Filter(IEnumerable<ReceiptRecord> source, ReceiptQuery query) =>
-        source.Where(receipt => query.Filter == "mind" || receipt.Data.Status == query.Filter)
-        .Where(receipt => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", receipt.Data.Number, receipt.Data.SupplierName, receipt.Data.SupplierTaxId)
-            .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase))
-        .OrderByDescending(receipt => receipt.Data.IssuedOn, StringComparer.Ordinal)
-        .ThenBy(receipt => receipt.Data.SupplierName, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true))
-        .ToArray();
     private static JsonElement Summary(ReceiptRecord receipt)
     {
         var node = JsonSerializer.SerializeToNode(new
@@ -135,4 +129,30 @@ public sealed class ReceivingModule : IModule
         public ValueTask<JsonElement> ExecuteAsync(JsonElement input, CommandCallContext caller, CancellationToken ct) =>
             new(execute(input, caller.ActorId, ct));
     }
+}
+
+public static class ReceiptListing
+{
+    private static readonly StringComparer NameOrder = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true);
+    public static bool IsSort(string sort) => sort.Length <= 40 && sort.All(char.IsAsciiLetterOrDigit);
+    public static ReceiptRecord[] Match(IEnumerable<ReceiptRecord> source, ReceiptQuery query)
+    {
+        if (!IsSort(query.Sort)) throw new ArgumentException("Érvénytelen listázási kérés.");
+        var rows = source.Where(receipt => query.Filter == "mind" || receipt.Data.Status == query.Filter)
+            .Where(receipt => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", receipt.Data.Number, receipt.Data.SupplierName, receipt.Data.SupplierTaxId)
+                .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (query.Sort.Length > 0 && Keys.TryGetValue(query.Sort, out var key))
+            return TextOrder.By(rows, query.Descending, key);
+        return rows.OrderByDescending(receipt => receipt.Data.IssuedOn, StringComparer.Ordinal)
+            .ThenBy(receipt => receipt.Data.SupplierName, NameOrder).ToArray();
+    }
+    private static readonly Dictionary<string, Func<ReceiptRecord, string>> Keys = new(StringComparer.Ordinal)
+    {
+        ["number"] = receipt => receipt.Data.Number,
+        ["supplierName"] = receipt => receipt.Data.SupplierName,
+        ["issuedOn"] = receipt => receipt.Data.IssuedOn,
+        ["sourceLabel"] = receipt => ReceivingText.SourceLabel(receipt.Data.Source),
+        ["net"] = receipt => receipt.Data.Net.ToString("000000000000.00", System.Globalization.CultureInfo.InvariantCulture),
+        ["statusLabel"] = receipt => ReceivingText.StatusLabel(receipt.Data.Status)
+    };
 }

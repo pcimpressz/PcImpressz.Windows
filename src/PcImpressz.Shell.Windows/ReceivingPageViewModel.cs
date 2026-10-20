@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Win32;
 using PcImpressz.Contracts;
+using PcImpressz.Shell.Customization;
 
 namespace PcImpressz.Shell.Windows;
 
@@ -41,6 +42,11 @@ public sealed class ReceiptRow
     public string Net { get; }
     public string Status { get; }
     public string StatusLabel { get; }
+    public object? this[string key] => key switch
+    {
+        "number" => Number, "supplierName" => SupplierName, "issuedOn" => IssuedOn,
+        "sourceLabel" => SourceLabel, "net" => Net, "statusLabel" => StatusLabel, _ => ""
+    };
 }
 
 internal sealed class LineEditor : Observable
@@ -91,11 +97,15 @@ internal sealed class LineEditor : Observable
     private void Touch() { if (!_filling) _page.MarkDirty(); }
 }
 
-internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage
+internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColumnList
 {
     private readonly HostConnection _connection;
     private readonly Func<Guid?> _company;
     private readonly CancellationToken _shutdown;
+    private readonly ColumnList _columns;
+    private readonly TypedSearch _typed;
+    private readonly ListLoader _loader;
+    private int _matches;
     private string _mode = "home";
     private bool _busy, _dirty, _populating;
     private Guid? _editId;
@@ -107,9 +117,14 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage
     private string _net = "0", _gross = "0";
     private SupplierOption? _supplier;
     private ReceiptRow? _selected;
-    public ReceivingPageViewModel(EntityPageDescriptor definition, HostConnection connection, Func<Guid?> company, CancellationToken shutdown)
+    public ReceivingPageViewModel(EntityPageDescriptor definition, HostConnection connection, Func<Guid?> company, CancellationToken shutdown, ListLayoutStore layouts)
     {
         (Definition, _connection, _company, _shutdown) = (definition, connection, company, shutdown);
+        _columns = new ColumnList(layouts, definition);
+        _typed = new TypedSearch(() => _ = LoadAsync(), shutdown);
+        _loader = new ListLoader(LoadCore, shutdown);
+        _columns.Changed += () => Changed(nameof(LayoutRevision));
+        _columns.SortChanged += () => _ = LoadAsync();
         ManualCommand = new RelayCommand(BeginManual);
         NavCommand = new RelayCommand(() => BeginIntake("nav"));
         ImportCommand = new RelayCommand(() => BeginIntake("import"));
@@ -124,8 +139,20 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage
         NewSupplierCommand = new RelayCommand(() => _ = CreateSupplierAsync());
         PickFileCommand = new RelayCommand(() => _ = ImportFileAsync());
         ExportCommand = new RelayCommand(() => _ = ExportAsync());
-        SearchCommand = new RelayCommand(() => _ = LoadAsync());
+        SearchCommand = new RelayCommand(() => { _typed.CancelPending(); _ = LoadAsync(); });
     }
+    public int LayoutRevision => _columns.Revision;
+    public string SortColumn => _columns.SortColumn;
+    public bool SortDescending => _columns.SortDescending;
+    public IReadOnlyList<EntityColumn> VisibleColumns => _columns.VisibleColumns;
+    public bool IsColumnVisible(string id) => _columns.IsColumnVisible(id);
+    public bool SetColumnVisible(string id, bool visible)
+    {
+        if (_columns.SetColumnVisible(id, visible)) return true;
+        Message = "Legalább egy oszlop maradjon látható.";
+        return false;
+    }
+    public void ToggleSort(string columnId) => _columns.ToggleSort(columnId);
     public EntityPageDescriptor Definition { get; }
     public ObservableCollection<ReceiptRow> Rows { get; } = [];
     public ObservableCollection<LineEditor> Lines { get; } = [];
@@ -148,7 +175,8 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage
     public bool CanClassify => _editId is not null && _status is "uj" or "fuggo";
     public string Message { get => _message; private set { _message = value; Changed(); } }
     public string CountsLabel { get => _counts; private set { _counts = value; Changed(); } }
-    public string Search { get => _search; set { _search = value; Changed(); } }
+    public string MatchCount => _matches + " db találat";
+    public string Search { get => _search; set { if (_search == value) return; _search = value; Changed(); _typed.Schedule(); } }
     public string Filter { get => _filter; set { if (string.IsNullOrEmpty(value) || _filter == value) return; _filter = value; Changed(); if (!_populating) _ = LoadAsync(); } }
     public string Number { get => _number; set { _number = value; Changed(); MarkDirty(); Changed(nameof(EditorTitle)); } }
     public string IssuedOn { get => _issued; set { _issued = value; Changed(); MarkDirty(); } }
@@ -231,23 +259,36 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage
         finally { IsBusy = false; }
     }
 
-    private async Task LoadAsync()
+    private Task LoadAsync() => _loader.Run();
+    private async Task LoadCore(int generation)
     {
-        if (IsBusy || _shutdown.IsCancellationRequested) return;
+        while (IsBusy && _loader.IsCurrent(generation) && !_shutdown.IsCancellationRequested)
+        {
+            try { await Task.Delay(40, _shutdown); }
+            catch (OperationCanceledException) { return; }
+        }
+        if (!_loader.IsCurrent(generation) || _shutdown.IsCancellationRequested) return;
         IsBusy = true;
         try
         {
-            var result = await ModuleAsync("receiving", "list", new { search = Search, filter = Filter, page = 0, pageSize = 100 });
+            var result = await ModuleAsync("receiving", "list", new
+            {
+                search = Search, filter = Filter, page = 0, pageSize = 100,
+                sort = SortColumn, descending = SortDescending
+            });
+            if (!_loader.IsCurrent(generation)) return;
             Rows.Clear();
             foreach (var row in result.GetProperty("rows").EnumerateArray()) Rows.Add(new(row));
             var counts = result.GetProperty("counts");
             CountsLabel = counts.GetProperty("uj").GetInt32() + " új · " + counts.GetProperty("bevetelezve").GetInt32()
                 + " bevételezve · " + counts.GetProperty("koltseg").GetInt32() + " költség · " + counts.GetProperty("fuggo").GetInt32() + " függő";
-            if (IsHome) Message = result.GetProperty("total").GetInt32() == 0
+            _matches = result.GetProperty("total").GetInt32();
+            Changed(nameof(MatchCount));
+            if (IsHome) Message = _matches == 0
                 ? "Ebben a nézetben nincs számla. Kézi felvétel, NAV XML vagy import indítható."
                 : "A lista naprakész. Új számlánál döntesz: bevételezés, költség vagy függő.";
         }
-        catch (Exception ex) { Message = ex.Message; }
+        catch (Exception ex) { if (_loader.IsCurrent(generation)) Message = ex.Message; }
         finally { IsBusy = false; }
     }
     private async Task OpenAsync()
@@ -357,7 +398,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage
         IsBusy = true;
         try
         {
-            var result = await ModuleAsync("receiving", "export", new { search = Search, filter = Filter, page = 0, pageSize = 50 });
+            var result = await ModuleAsync("receiving", "export", new { search = Search, filter = Filter, page = 0, pageSize = 50, sort = SortColumn, descending = SortDescending });
             await File.WriteAllTextAsync(dialog.FileName, result.GetProperty("csv").GetString(), _shutdown);
             Message = "A szűrt számlalista exportálva.";
         }

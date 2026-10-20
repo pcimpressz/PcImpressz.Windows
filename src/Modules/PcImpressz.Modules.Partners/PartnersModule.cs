@@ -12,10 +12,10 @@ public sealed class PartnersModule : IModule
         context.RegisterCommand(new Handler("list", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerQuery>(input);
-            if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200)
+            if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200 || !PartnerListing.IsSort(query.Sort))
                 throw new ArgumentException("Érvénytelen listázási kérés.");
             var snapshot = await repository.Snapshot(query.CompanyId, ct);
-            var matching = Filter(snapshot.Partners, query);
+            var matching = PartnerListing.Match(snapshot.Partners, query);
             var rows = matching.Skip(query.Page * (long)query.PageSize > int.MaxValue ? int.MaxValue : query.Page * query.PageSize)
                 .Take(query.PageSize).Select(Row).ToArray();
             return PartnerJson.Element(new { rows, total = matching.Length });
@@ -27,7 +27,7 @@ public sealed class PartnersModule : IModule
         context.RegisterCommand(new Handler("export", "partners.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerQuery>(input);
-            return PartnerJson.Element(new { csv = PartnerRepository.ExportCsv(Filter((await repository.Snapshot(query.CompanyId, ct)).Partners, query)) });
+            return PartnerJson.Element(new { csv = PartnerRepository.ExportCsv(PartnerListing.Match((await repository.Snapshot(query.CompanyId, ct)).Partners, query)) });
         }));
         context.RegisterCommand(new Handler("import-preview", "partners.import", CommandAccess.Licensed, async (input, actor, ct) =>
             PartnerJson.Element(await importer.Preview(PartnerJson.Read<ImportOptions>(input), actor, ct))));
@@ -51,18 +51,13 @@ public sealed class PartnersModule : IModule
              new("isCustomer", "Vevő", "boolean"), new("isSupplier", "Szállító", "boolean"),
              new("isManufacturer", "Gyártó", "boolean"), new("isActive", "Aktív", "boolean", DefaultChecked: true),
              new("notes", "Megjegyzés", "multiline")],
-            [new("name", "Partner", 240), new("taxId", "Adószám", 150), new("city", "Település", 150), new("email", "E-mail", 230)],
+            [new("name", "Partner", 240), new("taxId", "Adószám", 150), new("city", "Település", 150), new("email", "E-mail", 230),
+             new("phone", "Telefon", 140, false), new("country", "Ország", 90, false),
+             new("isCustomer", "Vevő", 90, false), new("isSupplier", "Szállító", 100, false), new("isManufacturer", "Gyártó", 90, false)],
             new("list", "save", "archive", "export", "import-preview", "import-commit")));
         return ValueTask.CompletedTask;
     }
     public ValueTask StopAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
-    private static PartnerRecord[] Filter(IEnumerable<PartnerRecord> source, PartnerQuery query) =>
-        source.Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
-        .Where(p => query.Filter switch
-        { "customer" => p.Data.IsCustomer, "supplier" => p.Data.IsSupplier, "manufacturer" => p.Data.IsManufacturer, _ => true })
-        .Where(p => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", p.Data.Name, p.Data.TaxId, p.Data.Email, p.Data.Phone, p.Data.City)
-            .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase))
-        .OrderBy(p => p.Data.Name, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true)).ToArray();
     private static JsonElement Row(PartnerRecord partner)
     {
         var data = JsonSerializer.SerializeToNode(partner.Data, PartnerJson.Options)!;
@@ -76,4 +71,29 @@ public sealed class PartnersModule : IModule
         public ValueTask<JsonElement> ExecuteAsync(JsonElement input, CommandCallContext caller, CancellationToken ct) =>
             new(execute(input, caller.ActorId, ct));
     }
+}
+
+public static class PartnerListing
+{
+    private static readonly StringComparer NameOrder = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true);
+    public static bool IsSort(string sort) => sort.Length <= 40 && sort.All(char.IsAsciiLetterOrDigit);
+    public static PartnerRecord[] Match(IEnumerable<PartnerRecord> source, PartnerQuery query)
+    {
+        if (!IsSort(query.Sort)) throw new ArgumentException("Érvénytelen listázási kérés.");
+        var rows = source.Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
+            .Where(p => query.Filter switch
+            { "customer" => p.Data.IsCustomer, "supplier" => p.Data.IsSupplier, "manufacturer" => p.Data.IsManufacturer, _ => true })
+            .Where(p => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", p.Data.Name, p.Data.TaxId, p.Data.Email, p.Data.Phone, p.Data.City)
+                .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (query.Sort.Length > 0 && Keys.TryGetValue(query.Sort, out var key))
+            return TextOrder.By(rows, query.Descending, key);
+        return rows.OrderBy(p => p.Data.Name, NameOrder).ToArray();
+    }
+    private static string Yes(bool value) => value ? "Igen" : "Nem";
+    private static readonly Dictionary<string, Func<PartnerRecord, string>> Keys = new(StringComparer.Ordinal)
+    {
+        ["name"] = p => p.Data.Name, ["taxId"] = p => p.Data.TaxId, ["city"] = p => p.Data.City, ["email"] = p => p.Data.Email,
+        ["phone"] = p => p.Data.Phone, ["country"] = p => p.Data.Country,
+        ["isCustomer"] = p => Yes(p.Data.IsCustomer), ["isSupplier"] = p => Yes(p.Data.IsSupplier), ["isManufacturer"] = p => Yes(p.Data.IsManufacturer)
+    };
 }
