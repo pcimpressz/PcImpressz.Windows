@@ -28,7 +28,8 @@ public sealed partial class ShellViewModel
             _preferences = _preferences with { SelectedCompanyId = value.Id };
             try { _store.Save(_preferences); } catch (System.IO.IOException) { }
             foreach (var page in _entityPages.Values) page.CompanyChanged();
-            Changed(); Changed(nameof(CompanyMode));
+            Changed(); Changed(nameof(CompanyMode)); Changed(nameof(NavCompanyLabel));
+            _ = LoadNavAsync();
         }
     }
     public bool WorkspaceIsIdle => !_entityPages.Values.Any(p => p.IsBusy);

@@ -43,6 +43,18 @@ public sealed class ReceivingModule : IModule
             request = request with { Source = extension == ".xml" || request.Source == "nav" ? "nav" : "xls" };
             return Detail(await repository.Import(request, ReceivingImport.Read(request.FileName, request.ContentBase64), actor, ct));
         });
+        Register(context, "nav-status", "receiving.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
+        {
+            var query = ReceivingJson.Read<ReceiptQuery>(input);
+            var directory = context.GetCompanyDataDirectory(query.CompanyId);
+            return ReceivingJson.Element(await Task.Run(() => NavConnectionStore.Status(directory, query.CompanyId), ct));
+        });
+        Register(context, "nav-save", "receiving.write", CommandAccess.Licensed, async (input, _, ct) =>
+        {
+            var request = ReceivingJson.Read<NavConnectionSave>(input);
+            var directory = context.GetCompanyDataDirectory(request.CompanyId);
+            return ReceivingJson.Element(await Task.Run(() => NavConnectionStore.Save(directory, request.CompanyId, request), ct));
+        });
         Register(context, "export", "receiving.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = ReceivingJson.Read<ReceiptQuery>(input);
