@@ -32,7 +32,14 @@ internal static class PartnerTests
             Check.True(purchase.EndsWith(" Ft", StringComparison.Ordinal) && purchase.Contains("270,00", StringComparison.Ordinal));
             Check.Equal("1", filled.Cards.Single(card => card.Id == "incoming").Value);
             Check.Equal("—", filled.Cards.Single(card => card.Id == "turnover").Value);
-            Check.Equal("2026/1", filled.Sections.Single(section => section.Id == "incoming").Lines[1].Title);
+            var invoiceLine = filled.Sections.Single(section => section.Id == "incoming").Lines[1];
+            Check.Equal("2026/1", invoiceLine.Title);
+            Check.Equal("Egérpad", invoiceLine.Items[0].Name);
+            var both = new PartnerDossierSnapshot(saved.Id, 2000m, 2540m, "2026-08-04", "2026-10-14", [],
+                [new("2026/1", "2026-10-14", 1000m, 1270m, false, "bevételezve", [new("Egérpad", 1, 1000m)]),
+                 new("2026/2", "2026-08-04", 1000m, 1270m, true, "bevételezve", [new("Egérpad", 2, 1000m)])]);
+            Check.Equal(1, PartnerDossier.Within(both, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)).Invoices.Length);
+            Check.Throws<ArgumentException>(() => PartnerDossier.Period("2026-12-01", "2026-01-01"));
             Check.True(view.Sections.All(section => section.Status == PartnerDossier.Waiting && section.Detail.Length > 20));
             var state = await f.Repository.Snapshot(f.First.Id);
             Check.Throws<ArgumentException>(() => PartnerDossier.Open(state, Guid.NewGuid()));

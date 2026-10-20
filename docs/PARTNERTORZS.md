@@ -5,7 +5,7 @@
 1. Indítás: a projekt gyökerében a Start.cmd.
 2. Az oldalsáv AKTÍV CÉG listájában választhatsz céget.
 3. Az Üres cég létrehozása gomb saját vagy demócéget készít, partner- és mintaadatok nélkül.
-4. A Partnertörzs menüben kereshetsz, új partnert vihetsz fel, módosíthatsz és archiválhatsz. Mentett partnernél a Dosszié gomb nyitja a forgalmi nézetet.
+4. A Partnertörzs menüben kereshetsz, új partnert vihetsz fel, módosíthatsz és archiválhatsz. Mentett partnernél a Dosszié gomb a lista helyén nyitja a dossziét. A Vissza a partnerekhez gomb hozza vissza a listát.
 5. A CSV-export az aktuális keresésnek és szerepszűrőnek megfelelő partnereket menti.
 6. Az archivált partnereket az Archiváltak szűrővel éred el; az Aktív mező visszakapcsolásával helyreállíthatók.
 
@@ -13,7 +13,7 @@ A partner lehet egyszerre vevő, szállító és gyártó. Egy aktív, azonos ad
 
 ## Dosszié
 
-A listában kiválasztott, már mentett partner adatlapján a Dosszié gomb egy ablakot nyit. Az ablak a partner nevét, szerepét, adószámát és elérhetőségét mutatja, majd a régi raktárkezelő dossziéjának helyeit: forgalom, kimenő számla, beszerzés, bejövő számla, árajánlat, díjbekérő, megrendelés, munkalap.
+A listában kiválasztott, már mentett partner adatlapján a Dosszié gomb a partnertörzs oldalán, a lista helyén mutatja a dossziét. Felül az időszak szűrése van: kezdő nap, záró nap, Szűrés, illetve Mind, Idén, Tavaly és 3 hónap. A bejövő számla sorára kattintva lenyílnak a számlán lévő tételek. A fejléc a partner nevét, szerepét, adószámát és elérhetőségét mutatja, alatta a forgalom, a kimenő számla, a beszerzés, a bejövő számla, az árajánlat, a díjbekérő, a megrendelés és a munkalap helye.
 
 A bejövő számla és a beszerzés a bevételezésből jön, ha ennél a szállítónál van számla. A beszerzés összege csak a bevételezett számlákat számolja. Kimenő forgalom, árajánlat, díjbekérő, megrendelés és munkalap továbbra is üres, amíg a hozzájuk tartozó modul nincs meg. A kötőjel azt jelenti, hogy az a forrás még nem tárol adatot.
 

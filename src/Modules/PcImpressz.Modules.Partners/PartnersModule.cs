@@ -36,10 +36,12 @@ public sealed class PartnersModule : IModule
         context.RegisterCommand(new Handler("dossier", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerDossierQuery>(input);
+            var (from, to) = PartnerDossier.Period(query.From, query.To);
             var view = PartnerDossier.Open(await repository.Snapshot(query.CompanyId, ct), query.Id);
             var directory = context.GetCompanyDataDirectory(query.CompanyId);
             var snapshot = PartnerDossier.FromReceipts(directory, query.Id) ?? PartnerDossier.Read(directory, query.Id);
-            return PartnerJson.Element(PartnerDossier.Apply(view, snapshot));
+            if (snapshot is not null) snapshot = PartnerDossier.Within(snapshot, from, to);
+            return PartnerJson.Element(PartnerDossier.Apply(view, snapshot, from is not null || to is not null));
         }));
         context.RegisterPage(new("partners", context.ModuleId, "Partnertörzs",
             "Vevők, szállítók és gyártók. A dosszié a bevételezés számláit mutatja ennél a partnernél.", "\uE716",
