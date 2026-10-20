@@ -120,6 +120,7 @@ public sealed partial class ShellViewModel : Observable
     public ShellViewModel(AppearanceStore store, string directory, string? hostPath)
     {
         (_store, DataDirectory) = (store, directory);
+        Operations = new OperationWorkspace(directory);
         _connection = new(directory, hostPath);
         _preferences = store.Load();
         Skins = new(store.ReadSkins());
@@ -151,6 +152,7 @@ public sealed partial class ShellViewModel : Observable
     public IReadOnlyList<AccentOption> Accents { get; } = [new("Menta", "#38D9BC"), new("Kék", "#78B2FF"),
         new("Ibolya", "#B6A0FF"), new("Arany", "#EBC16C"), new("Korall", "#FF9C90")];
     public IReadOnlyList<FontOption> FontSizes { get; } = [new("Normál · 100%", 1), new("Nagyobb · 110%", 1.1), new("Nagy · 125%", 1.25)];
+    public OperationWorkspace Operations { get; }
     public string DataDirectory { get; }
     public string Notice => _notice;
     public string ActionMessage => _actionMessage;
@@ -191,7 +193,8 @@ public sealed partial class ShellViewModel : Observable
     public string PageDescription => SelectedNavigation.Description;
     public object CurrentPage => _entityPages.TryGetValue(SelectedNavigation.PageKey, out var entityPage)
         ? entityPage : SelectedNavigation.PageKey switch
-    { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(), _ => new DashboardPage() };
+    { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(),
+        _ when OperationCatalog.IsPage(SelectedNavigation.PageKey) => new OperationSettingsPage(SelectedNavigation.PageKey), _ => new DashboardPage() };
 
     private NavigationItem FindNavigation(string id)
     {
