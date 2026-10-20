@@ -45,12 +45,15 @@ internal static class HostIntegrationTests
             EntryAssembly="PcImpressz.Modules.Catalog.dll",EntryType="PcImpressz.Modules.Catalog.CatalogModule",
             Files=new(){["PcImpressz.Modules.Catalog.dll"]=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(catalogBytes))},Dependencies=[]};
         File.WriteAllText(Path.Combine(catalogFolder,"manifest.jws"),crypto.Sign(catalogManifest,ModuleManifest.DocumentType));
+        var hostDll=Environment.GetEnvironmentVariable("PCIMPRESSZ_TEST_HOST");
+        if(string.IsNullOrWhiteSpace(hostDll))
+            hostDll=Path.Combine(root,"src","PcImpressz.ApplicationHost","bin","Release","net10.0","PcImpressz.ApplicationHost.dll");
         var start=new ProcessStartInfo(Path.Combine(root,".tools","dotnet","dotnet.exe")){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
-        start.ArgumentList.Add(Path.Combine(root,"src","PcImpressz.ApplicationHost","bin","Release","net10.0","PcImpressz.ApplicationHost.dll"));
+        start.ArgumentList.Add(hostDll);
         start.ArgumentList.Add("--data-dir");start.ArgumentList.Add(dir.Path);
         using var host=Process.Start(start)??throw new IOException("Test Host did not start.");
         host.OutputDataReceived+=(_,_)=>{};host.ErrorDataReceived+=(_,_)=>{};host.BeginOutputReadLine();host.BeginErrorReadLine();
-        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(45));
         try
         {
             LocalResponse? first=null;
@@ -89,6 +92,46 @@ internal static class HostIntegrationTests
             Check.True(product.Success,product.Error??"Product save failed");
             Check.Equal(1,(await Catalog(a,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
             Check.Equal(0,(await Catalog(b,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            var turnedOff=await Send("modules.set-enabled",new SetModuleEnabledRequest("partners",false));
+            Check.True(turnedOff.Success,turnedOff.Error??"Disable failed");
+            var blocked=await Module(a,"save",new{id=(Guid?)null,version=0,data=new{name="Kikapcsolt",isActive=true}});
+            Check.True(!blocked.Success);Check.Equal("validation",blocked.Code);
+            Check.True(blocked.Error!.Contains("ki van kapcsolva",StringComparison.Ordinal),blocked.Error);
+            Check.True((await Catalog(a,"products-list",new{})).Success);
+            var disabledStatus=await Status();
+            Check.True(!disabledStatus.Modules.Single(m=>m.Id=="partners").Enabled);
+            Check.True(disabledStatus.Modules.Single(m=>m.Id=="catalog").Enabled);
+            var frame=await Send("modules.set-enabled",new SetModuleEnabledRequest("settings",false));
+            Check.True(!frame.Success);Check.True(frame.Error!.Contains("mindig elérhető",StringComparison.Ordinal),frame.Error??"");
+            Check.True((await Send("modules.set-enabled",new SetModuleEnabledRequest("partners",true))).Success);
+            Check.True((await Module(a,"list",new{})).Success);
+            var demo=first.Data!.Value[0].GetProperty("Id").GetGuid();
+            Check.True(first.Data.Value[0].GetProperty("IsDemo").GetBoolean());
+            var demoPartner=await Module(demo,"save",new{id=(Guid?)null,version=0,data=new{name="Demó partner",isCustomer=true,isActive=true}});
+            Check.True(demoPartner.Success,demoPartner.Error??"Demo save failed");
+            var otherDemo=await Module(b,"save",new{id=(Guid?)null,version=0,data=new{name="Másik demó",isCustomer=true,isActive=true}});
+            Check.True(otherDemo.Success,otherDemo.Error??"Other demo save failed");
+            var demoFolder=Path.Combine(dir.Path,"companies",demo.ToString("N"));
+            File.WriteAllText(Path.Combine(demoFolder,"jegyzet.txt"),"egyeb");
+            File.WriteAllText(Path.Combine(dir.Path,"appearance.json"),"megjelenes");
+            var registry=File.ReadAllText(Path.Combine(dir.Path,"companies.json"));
+            var enablement=File.ReadAllText(Path.Combine(dir.Path,"module-enablement.json"));
+            var cleared=await Send("companies.clear-demo",new{});
+            Check.True(cleared.Success,cleared.Error??"Clear failed");
+            Check.Equal(2,cleared.Data!.Value.GetProperty("DemoCompanies").GetInt32());
+            Check.True(!Directory.Exists(demoFolder));
+            Check.True(!Directory.Exists(Path.Combine(dir.Path,"companies",b.ToString("N"))));
+            Check.Equal(1,(await Module(a,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(1,(await Catalog(a,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(0,(await Module(demo,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(0,(await Module(b,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(3,(await Send("companies.list",new{})).Data!.Value.GetArrayLength());
+            Check.Equal(registry,File.ReadAllText(Path.Combine(dir.Path,"companies.json")));
+            Check.Equal("megjelenes",File.ReadAllText(Path.Combine(dir.Path,"appearance.json")));
+            Check.Equal(enablement,File.ReadAllText(Path.Combine(dir.Path,"module-enablement.json")));
+            Check.True(File.Exists(Path.Combine(dir.Path,"license.jws")));
+            var refilled=await Module(demo,"save",new{id=(Guid?)null,version=0,data=new{name="Új demó partner",isCustomer=true,isActive=true}});
+            Check.True(refilled.Success,refilled.Error??"Refill failed");
             File.Delete(Path.Combine(dir.Path,"license.jws"));
             var denied=await Module(a,"save",new{id=(Guid?)null,version=0,data=new{name="Nem menthető",isActive=true}});
             Check.True(!denied.Success);Check.Equal("denied",denied.Code);Check.True((await Module(a,"export",new{})).Success);
@@ -104,6 +147,12 @@ internal static class HostIntegrationTests
             await pipe.ConnectAsync(connect.Token);
             await LocalProtocol.WriteAsync(pipe,new LocalRequest(operation,JsonSerializer.SerializeToElement(payload)),deadline.Token);
             return await LocalProtocol.ReadAsync<LocalResponse>(pipe,deadline.Token);
+        }
+        async Task<HostDiagnostic> Status()
+        {
+            await using var statusPipe=new NamedPipeClientStream(".",DiagnosticChannel.ForDirectory(dir.Path),PipeDirection.In,PipeOptions.Asynchronous|PipeOptions.CurrentUserOnly);
+            await statusPipe.ConnectAsync(deadline.Token);
+            return await JsonSerializer.DeserializeAsync<HostDiagnostic>(statusPipe,cancellationToken:deadline.Token)??throw new IOException("Nincs állapot.");
         }
         Task<LocalResponse> Module(Guid company,string command,object payload)=>Send("module.execute",new ModuleCommandRequest(company,"partners",command,JsonSerializer.SerializeToElement(payload)));
         Task<LocalResponse> Catalog(Guid company,string command,object payload)=>Send("module.execute",new ModuleCommandRequest(company,"catalog",command,JsonSerializer.SerializeToElement(payload)));

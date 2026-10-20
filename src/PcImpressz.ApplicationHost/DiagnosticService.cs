@@ -9,7 +9,8 @@ using PcImpressz.Core.Modules;
 
 namespace PcImpressz.ApplicationHost;
 
-internal sealed class HostDiagnosticSource(HostOptions options, InstallationInfo installation, ILicenseEvaluator licenses)
+internal sealed class HostDiagnosticSource(HostOptions options, InstallationInfo installation, ILicenseEvaluator licenses,
+    ModuleEnablementStore modulesEnabled)
 {
     private ModuleDiagnostic[]? _modules;
     private EntityPageDescriptor[] _pages = [];
@@ -23,9 +24,10 @@ internal sealed class HostDiagnosticSource(HostOptions options, InstallationInfo
     {
         var modules = Volatile.Read(ref _modules);
         var license = licenses.Inspect();
+        var reported = modules?.Select(module => module with { Enabled = modulesEnabled.IsEnabled(module.Id) }).ToArray();
         return new(modules is null ? "Starting" : "Ready", installation.Id, options.DataDirectory,
             PlatformContract.ApiVersion, license.Status.ToString(), license.Reason, license.ValidUntil,
-            DateTimeOffset.UtcNow, Environment.ProcessId, modules ?? [], modules is null ? [] : _pages);
+            DateTimeOffset.UtcNow, Environment.ProcessId, reported ?? [], modules is null ? [] : _pages);
     }
 }
 
