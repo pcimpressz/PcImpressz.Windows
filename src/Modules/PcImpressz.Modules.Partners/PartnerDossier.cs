@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace PcImpressz.Modules.Partners;
 
-public sealed record PartnerDossierQuery(Guid CompanyId, Guid Id);
+public sealed record PartnerDossierQuery(Guid CompanyId, Guid Id, string? From = null, string? To = null);
 public sealed record PartnerDossierCard(string Id, string Label, string Value, string Status);
 public sealed record PartnerDossierLine(string Title, string Detail, string Amount);
 public sealed record PartnerDossierSection(string Id, string Title, string Status, string Source, string Detail, PartnerDossierLine[] Lines);
@@ -57,9 +57,48 @@ public static class PartnerDossier
 
     private static PartnerDossierCard Card(string id, string label) => new(id, label, "—", Waiting);
 
-    public static PartnerDossierView Apply(PartnerDossierView view, PartnerDossierSnapshot? snapshot)
+    public static (DateOnly? From, DateOnly? To) Period(string? from, string? to)
     {
-        if (snapshot is null || snapshot.PartnerId != view.PartnerId || snapshot.Invoices is not { Length: > 0 }) return view;
+        var start = Day(from, "Kezdő dátum");
+        var end = Day(to, "Záró dátum");
+        if (start is DateOnly first && end is DateOnly last && first > last)
+            throw new ArgumentException("A kezdő dátum nem lehet későbbi, mint a záró.");
+        return (start, end);
+    }
+
+    public static PartnerDossierSnapshot Within(PartnerDossierSnapshot snapshot, DateOnly? from, DateOnly? to)
+    {
+        if (from is null && to is null) return snapshot;
+        var invoices = snapshot.Invoices.Where(invoice => InPeriod(invoice.Date, from, to)).ToArray();
+        var frequent = invoices.SelectMany(invoice => invoice.Items)
+            .GroupBy(item => item.Name.Trim(), StringComparer.Create(Hungarian, true))
+            .Select(group => new PartnerDossierItem(group.First().Name, group.Sum(item => item.Quantity), group.Sum(item => item.Net)))
+            .OrderByDescending(item => item.Quantity).ThenBy(item => item.Name, StringComparer.Create(Hungarian, true)).Take(15).ToArray();
+        var dates = invoices.Select(invoice => invoice.Date).Where(date => date.Length > 0).Order(StringComparer.Ordinal).ToArray();
+        return snapshot with
+        {
+            PurchaseNet = invoices.Sum(invoice => invoice.Net), PurchaseGross = invoices.Sum(invoice => invoice.Gross),
+            First = dates.FirstOrDefault(), Last = dates.LastOrDefault(), Frequent = frequent, Invoices = invoices
+        };
+    }
+
+    public static PartnerDossierView Apply(PartnerDossierView view, PartnerDossierSnapshot? snapshot, bool period = false)
+    {
+        if (snapshot is null || snapshot.PartnerId != view.PartnerId) return view;
+        if (snapshot.Invoices is not { Length: > 0 })
+            return period ? view with
+            {
+                FiguresAvailable = true,
+                Cards = view.Cards.Select(card => card.Id switch
+                {
+                    "purchase" => card with { Value = Money(0), Status = Ready },
+                    "incoming" => card with { Value = "0", Status = Ready },
+                    _ => card
+                }).ToArray(),
+                Sections = view.Sections.Select(section => section.Id == "incoming"
+                    ? section with { Status = Ready, Detail = "Ebben az időszakban nincs bejövő számla.", Lines = [] } : section).ToArray(),
+                Notice = "Ebben az időszakban nincs bejövő számla. Kimenő forgalom, árajánlat, díjbekérő és megrendelés ennél a partnernél nincs."
+            } : view;
         var cards = view.Cards.Select(card => card.Id switch
         {
             "purchase" => card with { Value = Money(snapshot.PurchaseGross), Status = Ready },
@@ -103,6 +142,18 @@ public static class PartnerDossier
         var detail = string.Join(" · ", new[] { invoice.Date, paid, invoice.Status, names }.Where(part => part.Length > 0));
         return new(invoice.Number.Length > 0 ? invoice.Number : "számla", detail, Money(invoice.Gross));
     }
+
+    private static DateOnly? Day(string? value, string label)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (!DateOnly.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            throw new ArgumentException(label + ": éééé-hh-nn formátum kell.");
+        return date;
+    }
+
+    private static bool InPeriod(string value, DateOnly? from, DateOnly? to) =>
+        DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+        && (from is null || date >= from) && (to is null || date <= to);
 
     private static string Money(decimal value) => value.ToString("N2", Hungarian) + " Ft";
     private static string Quantity(decimal value) => value.ToString(value == decimal.Truncate(value) ? "0" : "0.##", Hungarian);

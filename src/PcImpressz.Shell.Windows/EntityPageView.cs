@@ -78,7 +78,10 @@ public sealed class EntityPageView : UserControl
         dossier.SetBinding(VisibilityProperty, new Binding("HasDossier") { Converter = new BooleanToVisibilityConverter() });
         dossier.SetBinding(IsEnabledProperty, new Binding("CanOpenDossier"));
         save.Children.Add(dossier); editor.Children.Add(save);
-        editorBorder.Child = editor; Grid.SetColumn(editorBorder,1); body.Children.Add(editorBorder); root.Children.Add(body);
+        editor.SetBinding(VisibilityProperty, new Binding("ShowEditor") { Converter = new BooleanToVisibilityConverter() });
+        var dossierPane = DossierPane();
+        var pane = new Grid(); pane.Children.Add(editor); pane.Children.Add(dossierPane);
+        editorBorder.Child = pane; Grid.SetColumn(editorBorder,1); body.Children.Add(editorBorder); root.Children.Add(body);
         Content = root;
         DataContextChanged += (_, _) =>
         {
@@ -111,6 +114,10 @@ public sealed class EntityPageView : UserControl
                 }
                 Grid.SetRow(panel,index/2); Grid.SetColumn(panel,index%2); fields.Children.Add(panel);
             }
+            vm.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(EntityPageViewModel.DossierRevision)) RenderDossier(vm, cardHost, sectionHost);
+            };
             _ = vm.LoadAsync();
         };
         SizeChanged += (_, _) =>
@@ -120,6 +127,80 @@ public sealed class EntityPageView : UserControl
             Grid.SetColumnSpan(listPanel,narrow ? 2 : 1); Grid.SetColumnSpan(editorBorder,narrow ? 2 : 1);
             editorBorder.Margin = narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);
         };
+    }
+    private WrapPanel cardHost = null!;
+    private StackPanel sectionHost = null!;
+    private ScrollViewer DossierPane()
+    {
+        var panel = new StackPanel();
+        var back = new Button { Content = "Adatlap", Margin = new(0, 0, 8, 10), HorizontalAlignment = HorizontalAlignment.Left };
+        back.SetBinding(Button.CommandProperty, new Binding("DossierBackCommand"));
+        panel.Children.Add(back);
+        var title = new TextBlock { FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
+        title.SetBinding(TextBlock.TextProperty, new Binding("DossierTitle")); panel.Children.Add(title);
+        var subtitle = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0, 6, 0, 14) };
+        subtitle.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        subtitle.SetBinding(TextBlock.TextProperty, new Binding("DossierSubtitle")); panel.Children.Add(subtitle);
+        var period = new WrapPanel();
+        period.Children.Add(new TextBlock { Text = "Időszak", VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 8, 10) });
+        period.Children.Add(DateInput("PeriodFrom")); period.Children.Add(DateInput("PeriodTo"));
+        period.Children.Add(ActionButton("Szűrés", "DossierFilterCommand"));
+        period.Children.Add(ActionButton("Mind", "PeriodAllCommand"));
+        period.Children.Add(ActionButton("Idén", "PeriodYearCommand"));
+        period.Children.Add(ActionButton("Tavaly", "PeriodPreviousYearCommand"));
+        period.Children.Add(ActionButton("3 hónap", "PeriodQuarterCommand"));
+        panel.Children.Add(period);
+        var notice = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0, 4, 0, 12) };
+        notice.SetBinding(TextBlock.TextProperty, new Binding("DossierNotice")); panel.Children.Add(notice);
+        cardHost = new WrapPanel(); sectionHost = new StackPanel();
+        panel.Children.Add(cardHost); panel.Children.Add(sectionHost);
+        var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 640 };
+        scroll.SetBinding(VisibilityProperty, new Binding("IsDossierOpen") { Converter = new BooleanToVisibilityConverter() });
+        return scroll;
+    }
+    private static DatePicker DateInput(string path)
+    {
+        var picker = new DatePicker { Width = 140, Margin = new(0, 0, 8, 10) };
+        picker.SetBinding(DatePicker.SelectedDateProperty, new Binding(path) { Mode = BindingMode.TwoWay });
+        return picker;
+    }
+    private static void RenderDossier(EntityPageViewModel vm, WrapPanel cards, StackPanel sections)
+    {
+        cards.Children.Clear(); sections.Children.Clear();
+        foreach (var card in vm.DossierCards)
+        {
+            var box = new Border { Padding = new(12), Margin = new(0, 0, 8, 8), CornerRadius = new(10), MinWidth = 140 };
+            box.SetResourceReference(Border.BackgroundProperty, "ElevatedBrush");
+            var stack = new StackPanel();
+            var label = new TextBlock { Text = card.Label, FontSize = 12 };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            stack.Children.Add(label);
+            stack.Children.Add(new TextBlock { Text = card.Value, FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new(0, 4, 0, 0) });
+            box.Child = stack; cards.Children.Add(box);
+        }
+        foreach (var section in vm.DossierSections)
+        {
+            var block = new StackPanel { Margin = new(0, 16, 0, 0) };
+            block.Children.Add(new TextBlock { Text = section.Title, FontWeight = FontWeights.SemiBold });
+            var source = new TextBlock { Text = section.Source, Margin = new(0, 4, 0, 4), FontSize = 12 };
+            source.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            block.Children.Add(source);
+            block.Children.Add(new TextBlock { Text = section.Detail, TextWrapping = TextWrapping.Wrap });
+            foreach (var line in section.Lines)
+            {
+                var row = new Grid { Margin = new(0, 8, 0, 0) };
+                row.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+                var text = new StackPanel();
+                text.Children.Add(new TextBlock { Text = line.Title, TextWrapping = TextWrapping.Wrap });
+                var extra = new TextBlock { Text = line.Detail, FontSize = 12, TextWrapping = TextWrapping.Wrap };
+                extra.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+                text.Children.Add(extra);
+                var amount = new TextBlock { Text = line.Amount, FontWeight = FontWeights.SemiBold, Margin = new(12, 0, 0, 0) };
+                Grid.SetColumn(amount, 1); row.Children.Add(text); row.Children.Add(amount); block.Children.Add(row);
+            }
+            sections.Children.Add(block);
+        }
     }
     private static TextBox Input()
     {
