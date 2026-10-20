@@ -6,8 +6,11 @@ public sealed record MenuEntry(string Id, string Title, string Icon, string Desc
 
 public static class WorkspaceMenu
 {
-    public static IReadOnlyList<MenuEntry> Compose(IReadOnlyList<EntityPageDescriptor> pages)
+    public static IReadOnlyList<MenuEntry> Compose(IReadOnlyList<EntityPageDescriptor> pages,
+        IReadOnlySet<string>? disabledModuleIds = null)
     {
+        if (disabledModuleIds is { Count: > 0 })
+            pages = pages.Where(page => !disabledModuleIds.Contains(page.ModuleId)).ToArray();
         var modules = pages.GroupBy(page => page.ModuleId, StringComparer.Ordinal).Select(Module).ToArray();
         return
         [

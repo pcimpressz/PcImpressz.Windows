@@ -43,6 +43,52 @@ public sealed record LicensePage;
 public sealed record AppearancePage;
 public sealed record SettingsPage;
 
+public sealed class ModuleCard : Observable
+{
+    private readonly Func<ModuleCard, bool, Task> _toggle;
+    private bool _enabled = true;
+    private bool _applying;
+    public ModuleCard(ModuleDiagnostic module, Func<ModuleCard, bool, Task> toggle)
+    {
+        _toggle = toggle;
+        Apply(module);
+    }
+    public string Id { get; private set; } = "";
+    public string? Version { get; private set; }
+    public string State { get; private set; } = "";
+    public string Reason { get; private set; } = "";
+    public bool IsPending { get; private set; }
+    public string UsageLabel => _enabled ? "Bekapcsolva" : "Kikapcsolva";
+    public string ToggleName => Id + " használata";
+    public bool Enabled
+    {
+        get => _enabled;
+        set
+        {
+            if (_enabled == value) return;
+            _enabled = value;
+            Changed();
+            Changed(nameof(UsageLabel));
+            if (!_applying) _ = _toggle(this, value);
+        }
+    }
+    public void Apply(ModuleDiagnostic module)
+    {
+        if (Id != module.Id) { Id = module.Id; Changed(nameof(Id)); Changed(nameof(ToggleName)); }
+        if (Version != module.Version) { Version = module.Version; Changed(nameof(Version)); }
+        if (State != module.State) { State = module.State; Changed(nameof(State)); }
+        if (Reason != module.Reason) { Reason = module.Reason; Changed(nameof(Reason)); }
+        if (!IsPending) Show(module.Enabled);
+    }
+    public void Show(bool enabled)
+    {
+        _applying = true;
+        Enabled = enabled;
+        _applying = false;
+    }
+    internal void MarkPending(bool pending) => IsPending = pending;
+}
+
 public abstract class Observable : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -67,6 +113,7 @@ public sealed partial class ShellViewModel : Observable
     private HostDiagnostic? _status;
     private string _connectionMessage = "Kapcsolódás a maghoz…";
     private string _notice = "A megjelenésedet automatikusan mentjük ezen a gépen.";
+    private string _actionMessage = "";
     private bool _ready;
     private string? _lastConnectionError;
 
@@ -100,12 +147,13 @@ public sealed partial class ShellViewModel : Observable
 
     public ObservableCollection<NavigationItem> Navigation { get; } = [];
     public ObservableCollection<SkinDefinition> Skins { get; }
-    public ObservableCollection<ModuleDiagnostic> Modules { get; } = [];
+    public ObservableCollection<ModuleCard> Modules { get; } = [];
     public IReadOnlyList<AccentOption> Accents { get; } = [new("Menta", "#38D9BC"), new("Kék", "#78B2FF"),
         new("Ibolya", "#B6A0FF"), new("Arany", "#EBC16C"), new("Korall", "#FF9C90")];
     public IReadOnlyList<FontOption> FontSizes { get; } = [new("Normál · 100%", 1), new("Nagyobb · 110%", 1.1), new("Nagy · 125%", 1.25)];
     public string DataDirectory { get; }
     public string Notice => _notice;
+    public string ActionMessage => _actionMessage;
     public string ConnectionMessage => _connectionMessage;
     public string HostLabel => _status?.State == "Ready" ? "A mag működik" : "Kapcsolódás";
     public string HostDetail => _status?.State == "Ready" ? "Helyi kapcsolat · naprakész állapot" : _connectionMessage;
@@ -228,7 +276,7 @@ public sealed partial class ShellViewModel : Observable
             _status = status;
             _lastConnectionError = null;
             _connectionMessage = "A maghoz kapcsolódva";
-            Modules.Clear(); foreach (var module in status.Modules) Modules.Add(module);
+            ApplyModuleCards(status.Modules);
             await UpdateWorkspaceAsync(status);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -247,6 +295,41 @@ public sealed partial class ShellViewModel : Observable
     }
 
     public string DiagnosticDetail => _lastConnectionError ?? "A kapcsolat csak helyi állapotadatokat továbbít. Üzleti művelet nem érhető el rajta.";
+
+    private void ApplyModuleCards(IReadOnlyList<ModuleDiagnostic> modules)
+    {
+        var ids = modules.Select(module => module.Id).ToHashSet(StringComparer.Ordinal);
+        for (var index = Modules.Count - 1; index >= 0; index--)
+            if (!ids.Contains(Modules[index].Id)) Modules.RemoveAt(index);
+        foreach (var module in modules)
+        {
+            var card = Modules.FirstOrDefault(item => item.Id == module.Id);
+            if (card is null) Modules.Add(new(module, ToggleModuleAsync));
+            else card.Apply(module);
+        }
+    }
+
+    private async Task ToggleModuleAsync(ModuleCard card, bool enabled)
+    {
+        card.MarkPending(true);
+        try
+        {
+            await _connection.SendAsync("modules.set-enabled", new SetModuleEnabledRequest(card.Id, enabled), _shutdown.Token);
+            if (enabled) _disabledModules.Remove(card.Id);
+            else _disabledModules.Add(card.Id);
+            SyncNavigation();
+            _actionMessage = enabled
+                ? "A modul bekapcsolva, a menüpontjai újra elérhetők."
+                : "A modul kikapcsolva. A menüből eltűnik, a parancsai nem futtathatók.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            card.Show(!enabled);
+            _actionMessage = ex.Message;
+        }
+        finally { card.MarkPending(false); }
+        Changed(nameof(ActionMessage));
+    }
 
     private void ApplyAndSave()
     {

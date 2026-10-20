@@ -47,6 +47,44 @@ public sealed class CompanyStore
             return company;
         }
     }
+    public DemoDataClearance ClearDemoData()
+    {
+        lock (_gate)
+        {
+            var demos = List().Where(c => c.IsDemo).ToArray();
+            var cleared = 0;
+            foreach (var company in demos)
+            {
+                var folder = CompanyFolder(company.Id);
+                if (!Directory.Exists(folder)) continue;
+                DeleteTree(folder);
+                cleared++;
+            }
+            return new(demos.Length, cleared);
+        }
+    }
+    private string CompanyFolder(Guid companyId)
+    {
+        var root = Path.GetFullPath(Path.Combine(_directory, "companies")) + Path.DirectorySeparatorChar;
+        var folder = Path.GetFullPath(Path.Combine(_directory, "companies", companyId.ToString("N")));
+        if (!folder.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("A cégmappa a várt helyen kívül van.");
+        return folder;
+    }
+    private static void DeleteTree(string directory)
+    {
+        var pending = new Stack<string>();
+        pending.Push(directory);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("A cégmappa hivatkozást tartalmaz, ezért nem törölhető.");
+            if ((File.GetAttributes(current) & FileAttributes.Directory) == 0) continue;
+            foreach (var entry in Directory.EnumerateFileSystemEntries(current)) pending.Push(entry);
+        }
+        Directory.Delete(directory, recursive: true);
+    }
     public string ModuleDataDirectory(Guid companyId, string moduleId)
     {
         lock (_gate)

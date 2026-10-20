@@ -7,13 +7,14 @@ using Microsoft.Extensions.Logging;
 using PcImpressz.Contracts;
 using PcImpressz.Core.Commands;
 using PcImpressz.Core.Companies;
+using PcImpressz.Core.Modules;
 
 namespace PcImpressz.ApplicationHost;
 
 // Initial desktop mode: the Host's Windows user owns all local companies.
 // There is no client-supplied identity, permission list or network listener.
 internal sealed class LocalCommandService(HostOptions options, CompanyStore companies, CommandDispatcher commands,
-    ILogger<LocalCommandService> logger) : BackgroundService
+    ModuleEnablementStore modulesEnabled, ILogger<LocalCommandService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -62,9 +63,17 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
             case "companies.create":
                 var company = request.Payload.Deserialize<CreateCompanyRequest>() ?? throw new ArgumentException("Hiányzó cégnév.");
                 return new(true, JsonSerializer.SerializeToElement(companies.Create(company.Name, company.IsDemo)));
+            case "companies.clear-demo":
+                return new(true, JsonSerializer.SerializeToElement(companies.ClearDemoData()));
+            case "modules.set-enabled":
+                var change = request.Payload.Deserialize<SetModuleEnabledRequest>() ?? throw new ArgumentException("Hiányzó modul.");
+                modulesEnabled.SetEnabled(change.ModuleId, change.Enabled);
+                return new(true, JsonSerializer.SerializeToElement(new { change.ModuleId, change.Enabled }));
             case "module.execute":
                 var command = request.Payload.Deserialize<ModuleCommandRequest>() ?? throw new ArgumentException("Hiányzó parancs.");
                 if (!companies.List().Any(c => c.Id == command.CompanyId)) throw new ArgumentException("Ismeretlen cég.");
+                if (!modulesEnabled.IsEnabled(command.ModuleId))
+                    throw new InvalidOperationException("Ez a modul ki van kapcsolva.");
                 if (command.Input.ValueKind != JsonValueKind.Object) throw new ArgumentException("Érvénytelen parancsadat.");
                 var payload = JsonNode.Parse(command.Input.GetRawText()) as JsonObject
                     ?? throw new ArgumentException("Érvénytelen parancsadat.");

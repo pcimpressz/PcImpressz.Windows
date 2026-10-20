@@ -66,12 +66,19 @@
    <ItemsControl ItemsSource="{Binding Modules}" Visibility="{Binding HasModules, Converter={StaticResource BoolVisibility}}">
     <ItemsControl.ItemTemplate><DataTemplate>
      <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-      <StackPanel><TextBlock Text="{Binding Id}" Style="{StaticResource SectionTitle}" /><TextBlock Text="{Binding Reason}" Style="{StaticResource Muted}" /></StackPanel>
+      <StackPanel>
+       <TextBlock Text="{Binding Id}" Style="{StaticResource SectionTitle}" />
+       <TextBlock Text="{Binding Reason}" Style="{StaticResource Muted}" />
+       <TextBlock Text="{Binding UsageLabel}" Margin="0,12,0,8" FontWeight="SemiBold" />
+       <CheckBox Content="Használatban" IsChecked="{Binding Enabled}" AutomationProperties.Name="{Binding ToggleName}" HorizontalAlignment="Left" />
+      </StackPanel>
       <StackPanel Grid.Column="1" Margin="20,0,0,0"><TextBlock Text="{Binding State}" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" /><TextBlock Text="{Binding Version}" Style="{StaticResource Muted}" Margin="0,8,0,0" /></StackPanel>
      </Grid></Border>
     </DataTemplate></ItemsControl.ItemTemplate>
    </ItemsControl>
    <TextBlock Text="A technikai betöltés és a használati jogosultság külön állapot. A fizetős műveleteket a mag minden alkalommal ellenőrzi." Style="{StaticResource Muted}" Margin="4,20,4,0" />
+   <TextBlock Text="A kikapcsolt modul eltűnik a munkaterület menüjéből, és a parancsai nem futtathatók. A választás a következő indításkor is megmarad. Az áttekintés, a beállítások, a licenc és a megjelenés a keret része, mindig elérhető." Style="{StaticResource Muted}" Margin="4,10,4,0" />
+   <TextBlock Text="{Binding ActionMessage}" Style="{StaticResource Muted}" Margin="4,14,4,0" />
   </StackPanel>
  </DataTemplate>
 
@@ -174,6 +181,12 @@
     <TextBlock Text="Az alkalmazás saját beállításai, naplói és moduljai ebben a mappában találhatók." Style="{StaticResource Muted}" />
     <TextBox Text="{Binding DataDirectory, Mode=OneWay}" IsReadOnly="True" Background="{DynamicResource ElevatedBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0" Padding="14" Margin="0,18,0,18" TextWrapping="Wrap" />
     <StackPanel Orientation="Horizontal"><Button Content="Adatmappa megnyitása" Command="{Binding OpenDataCommand}" Margin="0,0,12,0" /><Button Content="Naplók megnyitása" Command="{Binding OpenLogsCommand}" /></StackPanel>
+   </StackPanel></Border>
+   <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
+    <TextBlock Text="Kísérleti adatbázis" Style="{StaticResource SectionTitle}" />
+    <TextBlock Text="A demó cég a kísérleti adatbázis. A törlés a cég moduladatait távolítja el: partnereket, terméktörzset és minden mást a cég mappájából. A cég bejegyzése megmarad, utána a meglévő képernyőkön üresen lehet új adatot felvinni. A licenc, a megjelenés és a modulok ki-be állapota a helyén marad. Más cég adata nem törlődik." Style="{StaticResource Muted}" />
+    <Button Content="Demó cég adatainak törlése" Command="{Binding ClearDemoDataCommand}" Margin="0,18,0,0" HorizontalAlignment="Left" />
+    <TextBlock Text="{Binding ActionMessage}" Style="{StaticResource Muted}" Margin="0,14,0,0" />
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
     <TextBlock Text="Kapcsolat és állapot" Style="{StaticResource SectionTitle}" />

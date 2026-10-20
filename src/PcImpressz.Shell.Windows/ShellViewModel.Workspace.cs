@@ -38,10 +38,17 @@ public sealed partial class ShellViewModel
     private void InitializeWorkspace()
     {
         CreateCompanyCommand = new RelayCommand(CreateCompany);
+        ClearDemoDataCommand = new RelayCommand(() => _ = ClearDemoDataAsync());
     }
+    public ICommand ClearDemoDataCommand { get; private set; } = null!;
+    private readonly HashSet<string> _disabledModules = new(StringComparer.Ordinal);
     private async Task UpdateWorkspaceAsync(HostDiagnostic status)
     {
         if (status.State != "Ready") return;
+        var disabled = status.Modules.Where(module => !module.Enabled).Select(module => module.Id).ToHashSet(StringComparer.Ordinal);
+        var disabledChanged = !disabled.SetEquals(_disabledModules);
+        _disabledModules.Clear();
+        foreach (var id in disabled) _disabledModules.Add(id);
         var addedPage = false;
         foreach (var page in status.Pages ?? [])
         {
@@ -52,7 +59,7 @@ public sealed partial class ShellViewModel
             _entityPages.Add(key, vm);
             addedPage = true;
         }
-        if (addedPage) SyncNavigation();
+        if (addedPage || disabledChanged) SyncNavigation();
         if (!_companiesLoaded)
         {
             var response = await _connection.SendAsync("companies.list", new { }, _shutdown.Token);
@@ -70,7 +77,7 @@ public sealed partial class ShellViewModel
     private void SyncNavigation()
     {
         var selectedId = _selectedNavigation.Id;
-        ApplyMenu(Navigation, WorkspaceMenu.Compose(_entityPages.Values.Select(page => page.Definition).ToArray()));
+        ApplyMenu(Navigation, WorkspaceMenu.Compose(_entityPages.Values.Select(page => page.Definition).ToArray(), _disabledModules));
         var match = FindNavigationOrNull(selectedId);
         if (ReferenceEquals(match, _selectedNavigation)) return;
         _selectedNavigation.IsSelected = false;
@@ -143,5 +150,30 @@ public sealed partial class ShellViewModel
             finally { create.IsEnabled = true; }
         };
         panel.Children.Add(create); window.Content = panel; window.ShowDialog();
+    }
+
+    private async Task ClearDemoDataAsync()
+    {
+        if (!WorkspaceIsIdle)
+        {
+            _actionMessage = "Várj, amíg a folyamatban lévő művelet befejeződik.";
+            Changed(nameof(ActionMessage));
+            return;
+        }
+        if (MessageBox.Show("A demó cég partnerei, terméktörzse és minden moduladata törlődik. A cég bejegyzése megmarad, utána üresen tölthető fel. A licenc, a megjelenés és a modulok ki-be állapota megmarad. Más cég adata a helyén marad.",
+            "Kísérleti adatbázis törlése", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+        try
+        {
+            var result = await _connection.SendAsync("companies.clear-demo", new { }, _shutdown.Token);
+            var clearance = result.Deserialize<DemoDataClearance>();
+            if (SelectedCompany is { IsDemo: true })
+                foreach (var page in _entityPages.Values) page.CompanyChanged();
+            _actionMessage = clearance is { DemoCompanies: > 0 }
+                ? "A demó cég moduladatai törölve. A cég megmaradt, a képernyők üresen tölthetők."
+                : "Nincs demó cég, ezért nem töröltünk adatot.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _actionMessage = ex.Message; }
+        Changed(nameof(ActionMessage));
     }
 }

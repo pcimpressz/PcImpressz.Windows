@@ -42,6 +42,20 @@ internal static class MenuTests
             Check.Equal(0, menu[1].Children.Count(item => item.Title == "Terméktörzs"));
             Check.Equal("Kategóriák", menu[1].Children[0].Title);
         });
+        yield return Test("disabled module leaves the menu while the shell frame stays", () =>
+        {
+            var disabled = new HashSet<string>(StringComparer.Ordinal)
+                { "partners", "home", "settings", "appearance", "license", "modules" };
+            var menu = WorkspaceMenu.Compose(
+            [
+                Page("catalog", "products", "Terméktörzs", "\uE7B8"),
+                Page("partners", "partners", "Partnertörzs", "\uE716"),
+                Page("partners", "dossier", "Partnerdosszié", "\uE8A5")
+            ], disabled);
+            Check.Equal("Áttekintés|Terméktörzs|Beállítások", string.Join("|", menu.Select(item => item.Title)));
+            Check.Equal("Megjelenés|Licenc|Modulok", string.Join("|", menu[^1].Children.Select(item => item.Title)));
+            Check.Equal(0, menu.Count(item => item.Title == "Partnertörzs" || item.Children.Any(child => child.Title == "Partnerdosszié")));
+        });
         yield return Test("shell menu stays usable before modules arrive", () =>
         {
             var menu = WorkspaceMenu.Compose([]);

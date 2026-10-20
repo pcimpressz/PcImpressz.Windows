@@ -47,7 +47,9 @@ internal static class Program
                 PlatformContract.ProductId, builder.Configuration["Product:OrganizationId"] ?? "", installationId);
             var companies = new CompanyStore(options.DataDirectory);
             if (companies.List().Length == 0) companies.Create("Demó cég", true);
+            var moduleEnablement = new ModuleEnablementStore(options.DataDirectory);
             builder.Services.AddSingleton(companies);
+            builder.Services.AddSingleton(moduleEnablement);
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
             builder.Services.AddSingleton<ILicenseCheckpointStore>(new FileLicenseCheckpointStore(
                 Path.Combine(options.DataDirectory, "license-checkpoint.json")));
