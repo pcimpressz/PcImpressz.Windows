@@ -19,7 +19,8 @@ internal static class WorkflowUiChecks
         var view=new ReceivingPageView{DataContext=page,Width=1100};
         Snapshot(view,output,"receiving-home-"+skin,1100,1000);
         var labels=Descendants(view).OfType<Button>().Select(b=>b.Content?.ToString()??"").ToArray();
-        if(!labels.Contains("NAV XML betöltése")||labels.Any(s=>s.Contains("PDF")||s=="Lekérés a NAV-tól"))throw new InvalidOperationException("Nem támogatott importot ígér a felület.");
+        if(!labels.Contains("NAV-számlák lekérése")||labels.Any(s=>s.Contains("PDF")||s=="Lekérés a NAV-tól"))throw new InvalidOperationException("Nem támogatott importot ígér a felület.");
+        Set(page,"_mode","nav");typeof(ReceivingPageViewModel).GetMethod("NotifyMode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(page,null);page.NavInvoices.Add(new("NAV-MINTA-001","Minta nagyker","11111111","2026-10-21","HUF","CREATE","20 000",null));Snapshot(view,output,"nav-invoices-"+skin,1100,1100);if(Descendants(view).OfType<DatePicker>().Count()<2)throw new InvalidOperationException("Hiányzik a NAV-időszakválasztó.");
         Set(page,"_mode","editor");Set(page,"_editId",Guid.NewGuid());Set(page,"_version",2L);Set(page,"_status","bevetelezve");
         page.Number="BE-2026-001";page.IssuedOn="2026-10-21";
         page.Suppliers.Add(new(Guid.NewGuid(),"Teszt nagyker","12345678-2-42"));page.SelectedSupplier=page.Suppliers[0];

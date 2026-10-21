@@ -27,7 +27,7 @@ public sealed class ReceivingPageView : UserControl
         panel.Children.Add(Muted("Válaszd ki, honnan jön a számla. Ami NAV-ról vagy importból érkezik, új állapotba kerül: bevételezed, költségként hagyod, vagy függőben marad."));
         var modes = new WrapPanel { Margin = new(0, 0, 0, 12) };
         modes.Children.Add(Primary("Kézi számla", "ManualCommand"));
-        modes.Children.Add(Button("NAV XML betöltése", "NavCommand"));
+        modes.Children.Add(Button("NAV-számlák lekérése", "NavCommand"));
         modes.Children.Add(Button("Excel / CSV / XML import", "ImportCommand"));
         panel.Children.Add(modes);
         panel.Children.Add(Bound(Muted(""), "CountsLabel"));
@@ -77,9 +77,21 @@ public sealed class ReceivingPageView : UserControl
         panel.SetBinding(VisibilityProperty, new Binding(nav ? "IsNav" : "IsImport") { Converter = new BooleanToVisibilityConverter() });
         panel.Children.Add(Bound(Text("", 22, true), "IntakeTitle"));
         panel.Children.Add(Bound(Muted(""), "IntakeHelp"));
+        if(nav)
+        {
+            var dates=new WrapPanel{Margin=new(0,0,0,12)};dates.Children.Add(Text("Kezdő nap",14,false));var from=new DatePicker{Width=160,Margin=new(10,0,18,0)};from.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavFrom"){Mode=BindingMode.TwoWay});from.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(from);dates.Children.Add(Text("Záró nap",14,false));var to=new DatePicker{Width=160,Margin=new(10,0,18,0)};to.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavTo"){Mode=BindingMode.TwoWay});to.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(to);dates.Children.Add(Primary("Bejövő számlák lekérése","FetchNavCommand"));panel.Children.Add(dates);
+            var invoices=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=220,MaxHeight=400,Margin=new(0,0,0,12)};invoices.SetBinding(ItemsControl.ItemsSourceProperty,"NavInvoices");invoices.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedNavInvoice"){Mode=BindingMode.TwoWay});invoices.SetBinding(IsEnabledProperty,"IsNotBusy");foreach(var (title,path) in new[]{("Kelt","IssuedOn"),("Számlaszám","Number"),("Szállító","SupplierName"),("Adószám","SupplierTaxNumber"),("Nettó","Net"),("Pénznem","Currency"),("Művelet","Operation")})invoices.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="SupplierName"?220:path=="Number"?150:path=="Currency"?80:110,Width=path=="SupplierName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path=="Number"?160:path=="Currency"?80:120)});panel.Children.Add(invoices);
+            var pages=new WrapPanel();pages.Children.Add(Button("Előző oldal","PreviousNavCommand"));pages.Children.Add(Button("Következő oldal","NextNavCommand"));pages.Children.Add(Bound(Muted(""),"NavPageLabel"));panel.Children.Add(pages);
+        }
         panel.Children.Add(Text("Szállító", 14, true));
         panel.Children.Add(Suppliers());
         panel.Children.Add(Button("Új szállító a partnertörzsbe", "NewSupplierCommand"));
+        if(nav)
+        {
+            panel.Children.Add(Primary("Kijelölt NAV-számla tételeinek betöltése","DownloadNavCommand"));
+            panel.Children.Add(new Expander{Header="Korábban letöltött NAV XML betöltése",Content=Button("NAV XML megnyitása","PickFileCommand"),Margin=new(0,12,0,12)});
+            panel.Children.Add(Button("Vissza a listához","BackCommand"));panel.Children.Add(Bound(Muted(""),"Message"));return;
+        }
         panel.Children.Add(Labeled("Számlaszám (XML-ből kitölthető)", "Number"));
         panel.Children.Add(Labeled("Kelt (éééé-hh-nn, üresen a fájl vagy a mai nap)", "IssuedOn"));
         panel.Children.Add(Primary(nav ? "NAV-számla XML megnyitása" : "Fájl kiválasztása és beolvasás", "PickFileCommand"));
@@ -197,7 +209,7 @@ public sealed class ReceivingPageView : UserControl
     }
     private static Button Button(string content, string command)
     {
-        var button = new Button { Content = content, Margin = new(0, 0, 10, 10) };
+        var button = new Button { Content = content, HorizontalAlignment=HorizontalAlignment.Left, Margin = new(0, 0, 10, 10) };
         button.SetBinding(System.Windows.Controls.Primitives.ButtonBase.CommandProperty, new Binding(command));
         button.SetBinding(IsEnabledProperty, new Binding("IsNotBusy"));
         return button;
@@ -273,7 +285,7 @@ public sealed class ReceivingPageView : UserControl
         }
         private static Button LineButton(string content, string command)
         {
-            var button = new Button { Content = content, Margin = new(0, 0, 8, 8) };
+            var button = new Button { Content = content, HorizontalAlignment=HorizontalAlignment.Left, Margin = new(0, 0, 8, 8) };
             button.SetBinding(System.Windows.Controls.Primitives.ButtonBase.CommandProperty, new Binding(command));
             return button;
         }

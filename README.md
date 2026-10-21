@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.13
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.14
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -155,3 +155,7 @@ Egy keresősor, automatikus név/cikkszám/vonalkód találatok, kattintásra va
 0.4.13: kompakt, legfeljebb 680 px széles általános adatlapok; a partnerlista alatt keskeny szerkesztő és külön mentettpartner-/dosszié-áttekintés. Keskeny ablakban egymás alá rendeződő panelek. Mentés/Elvetés kiemelve, ritkább műveletek külön lenyithatók. A termékadatlap hosszú mezői és a táblázatok megtartják a szükséges helyet.
 
 0.4.13: helyi, Windows-fiókhoz kötött fejlesztői automatikus belépés külön kapcsolófájllal; a régi fiókok/jelszavak megmaradnak. Terméktörzs: teljes lista, alatta kompakt adatlap és tulajdonság/készlet/forgalom összesítő; a részletes készletmozgások lenyithatók.
+
+## NAV bejövő számlák – 0.4.14
+
+A Bevételezés oldalról dátum szerint lekérhetők a NAV bejövő számlái, majd a kiválasztott számla betölthető a termékegyeztetéshez. A készlet csak a bevételezés véglegesítésekor változik. Részletek: [NAV-számlalekérés](docs/NAV-SZAMLALEKERES.md).

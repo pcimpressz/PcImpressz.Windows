@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
@@ -111,7 +111,7 @@ public static class ReceivingImport
         var unit = Text(line, "unitOfMeasure");
         unit = unit switch { "" or "PIECE" => "DB", "OWN" => Text(line, "unitOfMeasureOwn"), _ => unit };
         return new(name, sku, ReceivingText.Digits(barcode), Number(Text(line, "quantity"), "Mennyiség"), Number(Text(line, "unitPrice"), "Nettó egységár"),
-            Number(vatText, "Áfa") * 100m, unit);
+            Number(vatText, "Áfa") * 100m, unit, Text(line,"productOrServiceIndicator")=="SERVICE");
     }
     private static string Header(XDocument document, string name) =>
         document.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase)

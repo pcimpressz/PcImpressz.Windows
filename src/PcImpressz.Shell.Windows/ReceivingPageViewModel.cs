@@ -191,7 +191,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public string EditorTitle => (_editId is null ? "Új kézi számla" : Number) + " · " + ReceivingStatus(_status) + (IsDirty ? " · nincs mentve" : "");
     public string IntakeTitle => IsNav ? "NAV-számla besorolása" : "Számla importálása";
     public string IntakeHelp => IsNav
-        ? "Az élő NAV Online Számla lekérdezéshez technikai felhasználó kell; azt a következő kör köti be. A letöltött NAV-számla XML ugyanúgy új állapotba kerül, és eldöntöd: bevételezés, költség vagy függő."
+        ? "Dátum szerint kérd le a bejövő NAV-számlákat, válassz szállítót és számlát. A tételek betöltése után te döntesz a bevételezésről, költségről vagy függő állapotról. A cég NAV-kapcsolatát a Beállításokban adhatod meg."
         : "Excel (xlsx) vagy CSV: termék neve, mennyiség, nettó egységár. A saját cikkszám, gyártói cikkszám és vonalkód segít a párosításban. A PDF olvasása a következő kör.";
     public SupplierOption? SelectedSupplier { get => _supplier; set { _supplier = value; Changed(); MarkDirty(); } }
     public ReceiptRow? SelectedRow { get => _selected; set { _selected = value; Changed(); } }
@@ -214,6 +214,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public void PermissionsChanged(){}
     public void CompanyChanged()
     {
+        ResetNavList();
         _appliedListQuery=null;
         _mode = "home"; NotifyMode(); Rows.Clear(); Lines.Clear(); Suppliers.Clear();
         _editId = null; _version = 0; _status = "uj"; _selected = null; IsDirty = false; _ = LoadAsync();
@@ -416,7 +417,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     private async Task CreateSupplierAsync()
     {
         if (IsBusy || !IsEditable && !IsImport && !IsNav) return;
-        var (name, tax) = Ask("Új szállító", "Beszállítóként kerül a partnertörzsbe, és azonnal kiválasztható.", "Szállító neve", "", "Adószám", "");
+        var (name, tax) = Ask("Új szállító", "Beszállítóként kerül a partnertörzsbe, és azonnal kiválasztható.", "Szállító neve", IsNav?SelectedNavInvoice?.SupplierName??"":"", "Adószám", IsNav?SelectedNavInvoice?.SupplierTaxNumber??"":"");
         if (name is null || tax is null) return;
         IsBusy = true;
         try
@@ -510,6 +511,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     {
         if (!CanLeave()) return;
         _populating = true; _number = ""; _issued = ""; _due = ""; _supplier = null; _populating = false; IsDirty = false;
+        if(mode=="nav")ResetNavList();
         _mode = mode; NotifyMode(); _ = LoadSuppliersAsync();
         Message = IntakeHelp;
     }

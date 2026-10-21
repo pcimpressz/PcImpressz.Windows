@@ -34,6 +34,13 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
     public Task<ReceiptRecord> Import(ReceiptImport request, ImportedDocument document, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (directory, state) => WriteImport(directory, state, request, document, actor), ct);
 
+    public Task<ReceiptRecord> ImportNav(NavInvoiceImport request,ImportedDocument document,string actor,CancellationToken ct=default)=>Locked(request.CompanyId,(scope,state)=>
+    {
+        if(document.Number!=request.Number||ReceivingText.TaxKey(document.SupplierTaxId)!=ReceivingText.TaxKey(request.SupplierTaxNumber))throw new ArgumentException("A számla nem egyezik az importkéréssel.");
+        var existing=state.Receipts.SingleOrDefault(r=>r.Data.Source=="nav"&&r.Data.Number==document.Number&&ReceivingText.TaxKey(r.Data.SupplierTaxId)==ReceivingText.TaxKey(document.SupplierTaxId));
+        if(existing is not null)return existing;
+        return WriteImport(scope,state,new ReceiptImport(request.CompanyId,request.SupplierId,null,null,null,"nav","nav.xml",""),document,actor);
+    },ct);
     public Task<ReceiptRecord> Reverse(ReceiptReverse request, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (scope, state) =>
         {

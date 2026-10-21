@@ -5,7 +5,7 @@
       "pcimpressz.business": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.contracts": {
@@ -14,21 +14,21 @@
       "pcimpressz.modules.catalog": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.modules.partners": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.modules.sales": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.13, )",
-          "PcImpressz.Contracts": "[0.4.13, )",
-          "PcImpressz.Modules.Partners": "[0.4.13, )"
+          "PcImpressz.Business": "[0.4.14, )",
+          "PcImpressz.Contracts": "[0.4.14, )",
+          "PcImpressz.Modules.Partners": "[0.4.14, )"
         }
       }
     }

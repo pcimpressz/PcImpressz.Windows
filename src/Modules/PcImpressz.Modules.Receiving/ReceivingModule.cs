@@ -21,6 +21,21 @@ public sealed class ReceivingModule : IModule
             return ReceivingJson.Element(await NavTaxpayerClient.QueryAsync(secrets,lookup,ct));
         });
         var repository = new ReceivingRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
+        Register(context,"nav-list","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
+        {
+            var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
+            return ReceivingJson.Element(await NavInvoiceClient.ListAsync(secret,query,ct));
+        });
+        Register(context,"nav-import","receiving.write",CommandAccess.Licensed,async(input,actor,ct)=>
+        {
+            var query=ReceivingJson.Read<NavInvoiceImport>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
+            return ReceivingJson.Element(await NavInvoiceClient.DownloadAsync(secret,query,ct));
+        });
+        Register(context,"nav-store","receiving.write",CommandAccess.Licensed,async(input,actor,ct)=>
+        {
+            var request=ReceivingJson.Read<NavInvoiceImport>(input.GetProperty("request"));if(request.CompanyId!=input.GetProperty("companyId").GetGuid())throw new ArgumentException("Eltérő importcég.");
+            return Detail(await repository.ImportNav(request,ReceivingJson.Read<ImportedDocument>(input.GetProperty("document")),actor,ct));
+        });
         Register(context, "list", "receiving.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = ReadQuery(input);

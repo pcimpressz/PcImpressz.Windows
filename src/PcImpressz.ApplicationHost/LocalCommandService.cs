@@ -128,6 +128,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 return new(true, JsonSerializer.SerializeToElement(new { change.ModuleId, change.Enabled }));
             case "module.execute":
                 var command = request.Payload.Deserialize<ModuleCommandRequest>() ?? throw new ArgumentException("Hiányzó parancs.");
+                if(command.ModuleId=="receiving"&&command.Command=="nav-store")throw new CommandDeniedException("A NAV-import mentése csak ellenőrzött letöltés után hívható.");
                 if(command.ModuleId=="receiving"&&command.Command=="seed-demo")throw new CommandDeniedException("A mintaadat-feltöltés csak az admin demócég-műveletén keresztül indítható.");
                 if (!companies.List().Any(c => c.Id == command.CompanyId)) throw new ArgumentException("Ismeretlen cég.");
                 if (!modulesEnabled.IsEnabled(command.ModuleId))
@@ -153,6 +154,16 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 }
                 var result = await commands.ExecuteAsync(new(command.ModuleId, command.Command,
                     JsonSerializer.SerializeToElement(payload)), caller, ct);
+                if(command.ModuleId=="receiving"&&command.Command is "nav-import" or "nav-list")
+                {
+                    var current=Session(command.CompanyId);
+                    if(command.Command=="nav-import")
+                    {
+                        foreach(var required in commands.RequiredEnabledModules("receiving","nav-store").Prepend("receiving"))if(!modulesEnabled.IsEnabled(required))throw new CommandDeniedException("A szükséges modul ki van kapcsolva: "+required);
+                        var refreshed=new CallerIdentity(actor+"/"+current.UserName,commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(current.Role,p)).ToHashSet(StringComparer.Ordinal),current.Role);
+                        result=await commands.ExecuteAsync(new("receiving","nav-store",JsonSerializer.SerializeToElement(new{companyId=command.CompanyId,request=payload,document=result})),refreshed,ct);
+                    }
+                }
                 return new(true, result);
             default: return new(false, Error: "Ismeretlen művelet.", Code: "unsupported");
         }

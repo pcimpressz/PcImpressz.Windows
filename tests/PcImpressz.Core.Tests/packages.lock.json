@@ -50,7 +50,7 @@
       "pcimpressz.business": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.contracts": {
@@ -60,50 +60,50 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.13, )",
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.modules.catalog": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.modules.inventory": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.13, )",
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Business": "[0.4.14, )",
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.modules.partners": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       },
       "pcimpressz.modules.receiving": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.13, )",
-          "PcImpressz.Contracts": "[0.4.13, )",
-          "PcImpressz.Modules.Catalog": "[0.4.13, )",
-          "PcImpressz.Modules.Partners": "[0.4.13, )",
-          "PcImpressz.Modules.Sales": "[0.4.13, )"
+          "PcImpressz.Business": "[0.4.14, )",
+          "PcImpressz.Contracts": "[0.4.14, )",
+          "PcImpressz.Modules.Catalog": "[0.4.14, )",
+          "PcImpressz.Modules.Partners": "[0.4.14, )",
+          "PcImpressz.Modules.Sales": "[0.4.14, )"
         }
       },
       "pcimpressz.modules.sales": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.13, )",
-          "PcImpressz.Contracts": "[0.4.13, )",
-          "PcImpressz.Modules.Partners": "[0.4.13, )"
+          "PcImpressz.Business": "[0.4.14, )",
+          "PcImpressz.Contracts": "[0.4.14, )",
+          "PcImpressz.Modules.Partners": "[0.4.14, )"
         }
       },
       "pcimpressz.shell.customization": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.13, )"
+          "PcImpressz.Contracts": "[0.4.14, )"
         }
       }
     }
