@@ -50,7 +50,7 @@
       "pcimpressz.business": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.0, )"
+          "PcImpressz.Contracts": "[0.4.6, )"
         }
       },
       "pcimpressz.contracts": {
@@ -60,33 +60,36 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.13, )",
-          "PcImpressz.Contracts": "[0.4.0, )"
+          "PcImpressz.Contracts": "[0.4.6, )"
         }
       },
       "pcimpressz.modules.catalog": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.0, )"
+          "PcImpressz.Contracts": "[0.4.6, )"
         }
       },
       "pcimpressz.modules.partners": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.0, )"
+          "PcImpressz.Contracts": "[0.4.6, )"
         }
       },
       "pcimpressz.modules.receiving": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.0, )",
-          "PcImpressz.Contracts": "[0.4.0, )"
+          "PcImpressz.Business": "[0.4.6, )",
+          "PcImpressz.Contracts": "[0.4.6, )",
+          "PcImpressz.Modules.Catalog": "[0.4.6, )",
+          "PcImpressz.Modules.Partners": "[0.4.6, )",
+          "PcImpressz.Modules.Sales": "[0.4.6, )"
         }
       },
       "pcimpressz.modules.sales": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.0, )",
-          "PcImpressz.Contracts": "[0.4.0, )"
+          "PcImpressz.Business": "[0.4.6, )",
+          "PcImpressz.Contracts": "[0.4.6, )"
         }
       }
     }

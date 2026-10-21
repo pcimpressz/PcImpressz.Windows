@@ -35,7 +35,7 @@ try
     if(args[0]=="seed-demo"&&args.Length==4)
     {
         var company=Guid.Parse(args[2]);DemoDataSeeder.RequireDemo(companies,company);
-        var already=database.Execute(company,tx=>tx.Get("demo",DemoDataSeeder.Marker) is not null);
+        var already=database.Execute(company,tx=>tx.Get("demo",DemoDataSeeder.Marker) is not null || tx.Get("demo",DemoDataset.LegacyMarker) is not null);
         if(!already)
         {
             var destination=Path.GetFullPath(args[3]);Directory.CreateDirectory(destination);
@@ -43,7 +43,7 @@ try
             backups.Create(company,file);Console.WriteLine("Feltöltés előtti ellenőrzött mentés: "+file);
         }
         var actor=System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? throw new InvalidOperationException("A felhasználó nem azonosítható.");
-        var report=DemoDataSeeder.Seed(companies,database,company,TimeProvider.System,actor+"/demo-seed-v1");
+        var report=DemoDataSeeder.Seed(companies,database,company,TimeProvider.System,actor+"/demo-seed-v2");
         Console.WriteLine(report.AlreadySeeded?"A mintacsomag már be van töltve; nincs duplikálás vagy felülírás.":$"Mintaadatok feltöltve: {report.Partners} partner, {report.Products} termék, {report.Receipts} bevételezés, {report.Sales} eladás.");
     }
     else if(args[0]=="backup-all"&&args.Length==3)

@@ -8,14 +8,14 @@
       "pcimpressz.shell.customization": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.0, )"
+          "PcImpressz.Contracts": "[0.4.6, )"
         }
       },
       "PcImpressz.Windows": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.0, )",
-          "PcImpressz.Shell.Customization": "[0.4.0, )"
+          "PcImpressz.Contracts": "[0.4.6, )",
+          "PcImpressz.Shell.Customization": "[0.4.6, )"
         }
       }
     }

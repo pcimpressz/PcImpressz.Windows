@@ -28,10 +28,11 @@ public sealed partial class ShellViewModel
             if(previousCompany is not null && previousSession is not null) _ = RevokePreviousSessionAsync(previousCompany.Id,previousSession);
             _connection.SetSession(null,null);
             _selectedCompany = value;
+            ResetDemoMessage();
             _preferences = _preferences with { SelectedCompanyId = value.Id };
             try { _store.Save(_preferences); } catch (System.IO.IOException) { }
             foreach (var page in _entityPages.Values) page.CompanyChanged();
-            Changed(); Changed(nameof(CompanyMode)); Changed(nameof(NavCompanyLabel));
+            Changed(); Changed(nameof(CompanyMode)); Changed(nameof(IsDemoCompany)); Changed(nameof(CanSeedDemo)); Changed(nameof(NavCompanyLabel));
             AuthChanged();
             _ = PrepareAuthenticationAsync();
         }
@@ -43,6 +44,7 @@ public sealed partial class ShellViewModel
     private void InitializeWorkspace()
     {
         InitializeBackups();
+        InitializeDemo();
         CreateCompanyCommand = new RelayCommand(CreateCompany);
         ClearDemoDataCommand = new RelayCommand(() => _ = ClearDemoDataAsync());
     }
@@ -65,7 +67,7 @@ public sealed partial class ShellViewModel
                 : page.ViewKind == "receiving"
                 ? new ReceivingPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts)
                 : new EntityPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts);
-            vm.PropertyChanged += (_, e) => { if (e.PropertyName == "IsBusy") Changed(nameof(WorkspaceIsIdle)); };
+            vm.PropertyChanged += (_, e) => { if (e.PropertyName == "IsBusy") { Changed(nameof(WorkspaceIsIdle));Changed(nameof(CanSeedDemo)); } };
             _entityPages.Add(key, vm);
             if (_companiesLoaded && SelectedCompany is not null) vm.CompanyChanged();
             addedPage = true;

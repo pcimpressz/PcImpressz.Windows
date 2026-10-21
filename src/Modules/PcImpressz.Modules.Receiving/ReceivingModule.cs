@@ -7,6 +7,13 @@ public sealed class ReceivingModule : IModule
 {
     public ValueTask StartAsync(IModuleContext context, CancellationToken cancellationToken)
     {
+        Register(context,"seed-demo","receiving.write",CommandAccess.Licensed,(input,actor,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();
+            var request=ReceivingJson.Read<CompanyDemoSeedRequest>(input);
+            var report=DemoDataSeeder.Seed(context.GetCompanyDataDirectory,context.Database??throw new InvalidOperationException("A demófeltöltés céges SQLite-adatbázist igényel."),request.CompanyId,context.TimeProvider,actor);
+            return Task.FromResult(ReceivingJson.Element(report));
+        });
         var repository = new ReceivingRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
         Register(context, "list", "receiving.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {

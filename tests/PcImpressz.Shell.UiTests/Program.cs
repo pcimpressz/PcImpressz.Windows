@@ -62,6 +62,7 @@ internal static class Program
                 AdminUiChecks.Render(output,skin.Id);
                 WorkflowUiChecks.Render(output,skin.Id);
                 RoleUiChecks.Render(output,skin.Id);
+                DemoUiChecks.Render(output,skin.Id);
                 foreach(var kind in new[]{"inventory","sales"})
                 {
                     var definition=new EntityPageDescriptor(kind,kind,kind,"","",[new("name","Név")],
@@ -86,7 +87,7 @@ internal static class Program
             }
             PresentationTraceSources.DataBindingSource.Flush();
             if(bindingErrors.ToString().Length>0)throw new InvalidOperationException(bindingErrors.ToString());
-            Console.WriteLine("30/30 WPF renders passed; no binding errors.");return 0;
+            Console.WriteLine("33/33 WPF renders passed; no binding errors.");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }

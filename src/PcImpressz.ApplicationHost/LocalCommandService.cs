@@ -10,13 +10,14 @@ using PcImpressz.Core.Commands;
 using PcImpressz.Core.Companies;
 using PcImpressz.Core.Modules;
 using PcImpressz.Core.Security;
+using PcImpressz.Core.Licensing;
 
 namespace PcImpressz.ApplicationHost;
 
 // Company sessions and roles are checked before dispatch; the OS caller SID is trusted.
 // There is no client-supplied identity, permission list or network listener.
-internal sealed class LocalCommandService(HostOptions options, CompanyStore companies, CommandDispatcher commands,
-    ModuleEnablementStore modulesEnabled, CompanyBackupService backups, UiAdministrationService administration, ModuleRuntime runtime, ILogger<LocalCommandService> logger) : BackgroundService
+internal sealed partial class LocalCommandService(HostOptions options, CompanyStore companies, CommandDispatcher commands,
+    ModuleEnablementStore modulesEnabled, CompanyBackupService backups, UiAdministrationService administration, ICompanyDatabase database, ILicenseEvaluator licenses, ModuleRuntime runtime, ILogger<LocalCommandService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -104,6 +105,7 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
                 if(companies.List().Any(c=>administration.Status(c.Id).Configured)) Admin();
                 var company = request.Payload.Deserialize<CreateCompanyRequest>() ?? throw new ArgumentException("Hiányzó cégnév.");
                 return new(true, JsonSerializer.SerializeToElement(companies.Create(company.Name, company.IsDemo)));
+            case "companies.seed-demo": return await SeedDemoAsync(request,actor,ct);
             case "companies.backup":
                 var backup = request.Payload.Deserialize<CompanyBackupRequest>() ?? throw new ArgumentException("Hiányzó mentési kérés.");
                 Admin(backup.CompanyId);
@@ -122,6 +124,7 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
                 return new(true, JsonSerializer.SerializeToElement(new { change.ModuleId, change.Enabled }));
             case "module.execute":
                 var command = request.Payload.Deserialize<ModuleCommandRequest>() ?? throw new ArgumentException("Hiányzó parancs.");
+                if(command.ModuleId=="receiving"&&command.Command=="seed-demo")throw new CommandDeniedException("A mintaadat-feltöltés csak az admin demócég-műveletén keresztül indítható.");
                 if (!companies.List().Any(c => c.Id == command.CompanyId)) throw new ArgumentException("Ismeretlen cég.");
                 if (!modulesEnabled.IsEnabled(command.ModuleId))
                     throw new InvalidOperationException("Ez a modul ki van kapcsolva.");

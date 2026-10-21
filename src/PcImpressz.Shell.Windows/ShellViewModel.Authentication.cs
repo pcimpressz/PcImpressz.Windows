@@ -35,7 +35,7 @@ public sealed partial class ShellViewModel
     {
         foreach(var page in _entityPages.Values)page.PermissionsChanged();
         SyncNavigation();
-        foreach(var name in new[]{nameof(CanCreateCompany),nameof(IsSignedIn),nameof(IsCompanyAdmin),nameof(SignedInLabel),nameof(NeedsFirstAdmin),nameof(LoginHeading),nameof(LoginCompany),nameof(CurrentPage)})Changed(name);
+        foreach(var name in new[]{nameof(CanSeedDemo),nameof(IsDemoCompany),nameof(CanCreateCompany),nameof(IsSignedIn),nameof(IsCompanyAdmin),nameof(SignedInLabel),nameof(NeedsFirstAdmin),nameof(LoginHeading),nameof(LoginCompany),nameof(CurrentPage)})Changed(name);
     }
     private async Task PrepareAuthenticationAsync()
     {

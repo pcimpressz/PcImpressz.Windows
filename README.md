@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.5
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.6
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -138,3 +138,6 @@ Készletbiztos bevételezés-visszafordítás, szerkeszthető eladási kosár, r
 Minden üzleti olvasás, írás és export céges bejelentkezést igényel. Adminisztrátor, raktáros, eladó és megtekintő szerepkör; admin felhasználókezelés, fióktiltás, szerepkörváltás, saját jelszócsere és visszavont munkamenetek. Az ellenőrzést a háttérszolgáltatás is elvégzi, a menük és szerkesztők alkalmazkodnak a szerephez. A korábbi adminfiókok megmaradnak; az első admin a bejelentkező képernyőn hozható létre. Újraindításkor a korábban külön indított régi háttérszolgáltatást is le kell állítani.
 
 Használat és pontos szerepkörök: [Céges belépés és jogosultságok](docs/BELEPES-ES-JOGOSULTSAGOK.md). Ellenőrzés: 158/158 teszt, 30/30 WPF-render; a helyi demócég ellenőrzött másolatán raktáros–eladó folyamatpróba, az eredeti adatbázis változatlan lenyomatával. A forrásban nulla termék és egy partner volt, a próba-termék kizárólag a másolatba került. Éles céges felhasználói átvétel még szükséges.
+## 0.4.6 – Demócég feltöltése mintaadatokkal
+
+A Beállításokban megjelent a **Feltöltés mintaadatokkal** gomb. Csak a kiválasztott demócég adminja indíthatja, előzetes ellenőrzött mentéssel és ismétléskor duplikáció nélkül. A csomag 20 terméket, 5 vevőt, 5 szállítót, kategóriákat, mértékegységeket, két raktár készletét, 8 bevételezést és 10 eladást tartalmaz. A helyi demócég tényleges feltöltése is megtörtént, a meglévő adatok megmaradtak. Útmutató: [Demó mintaadatok](docs/DEMO-MINTAADATOK.md). Ellenőrzés: 162/162 teszt, 33/33 WPF-render.

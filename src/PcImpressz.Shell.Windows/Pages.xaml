@@ -230,9 +230,10 @@
    </StackPanel></Border>
    <local:NavConnectionCard Margin="0,20,0,0" IsEnabled="{Binding IsCompanyAdmin}" />
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
-    <TextBlock Text="Kísérleti adatbázis" Style="{StaticResource SectionTitle}" />
+    <TextBlock Text="Demócég és mintaadatok" Style="{StaticResource SectionTitle}" />
+    <local:DemoDataCard />
     <TextBlock Text="A demó cég a kísérleti adatbázis. A törlés a cég moduladatait távolítja el: partnereket, terméktörzset, a mentett NAV-kapcsolatot és minden mást a cég mappájából. A cég bejegyzése megmarad, utána a meglévő képernyőkön üresen lehet új adatot felvinni. A licenc, a megjelenés és a modulok ki-be állapota a helyén marad. Más cég adata nem törlődik." Style="{StaticResource Muted}" />
-    <Button Content="Demó cég adatainak törlése" Command="{Binding ClearDemoDataCommand}" IsEnabled="{Binding IsCompanyAdmin}" Margin="0,18,0,0" HorizontalAlignment="Left" />
+    <Button Content="Demó cég adatainak törlése" Command="{Binding ClearDemoDataCommand}" IsEnabled="{Binding CanSeedDemo}" Margin="0,18,0,0" HorizontalAlignment="Left" />
     <TextBlock Text="{Binding ActionMessage}" Style="{StaticResource Muted}" Margin="0,14,0,0" />
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>

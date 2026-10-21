@@ -208,6 +208,37 @@ internal static class HostIntegrationTests
             Check.True(File.Exists(Path.Combine(dir.Path,"license.jws")));
             var refilled=await Module(demo,"save",new{id=(Guid?)null,version=0,data=new{name="Új demó partner",isCustomer=true,isActive=true}});
             Check.True(refilled.Success,refilled.Error??"Refill failed");
+            Check.True(!(await Send("companies.seed-demo",new CompanyDemoSeedRequest(a))).Success);
+            Check.True(!(await Send("companies.seed-demo",new CompanyDemoSeedRequest(b),anonymous:true)).Success);
+            Check.True(!(await Send("module.execute",new ModuleCommandRequest(b,"receiving","seed-demo",JsonSerializer.SerializeToElement(new{companyId=b,isDemo=true})))).Success);
+            var bAdmin=sessionTokens[b];
+            Check.True((await Send("ui.users.create",new UiCreateUser(b,bAdmin,"seedworker","Test-only-password-2026","warehouse"))).Success);
+            var seedWorker=(await Send("ui.auth.login",new UiLogin(b,"seedworker","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+            Check.True(!(await Send("companies.seed-demo",new CompanyDemoSeedRequest(b),seedWorker.Token)).Success);
+            Check.True((await Send("modules.set-enabled",new SetModuleEnabledRequest("sales",false))).Success);
+            Check.True(!(await Send("companies.seed-demo",new CompanyDemoSeedRequest(b))).Success);
+            Check.True((await Send("modules.set-enabled",new SetModuleEnabledRequest("sales",true))).Success);
+            var seeded=await Send("companies.seed-demo",new CompanyDemoSeedRequest(b));Check.True(seeded.Success,seeded.Error??"Demo seed failed");
+            var seedReport=seeded.Data!.Value.GetProperty("report");Check.Equal(20,seedReport.GetProperty("products").GetInt32());Check.Equal(10,seedReport.GetProperty("partners").GetInt32());
+            Check.True(!seedReport.GetProperty("alreadySeeded").GetBoolean());var seedBackup=seeded.Data.Value.GetProperty("backupFile").GetString()!;Check.True(File.Exists(seedBackup));
+            Check.Equal(20,(await Catalog(b,"products-list",new{pageSize=50})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(11,(await Module(b,"list",new{pageSize=50})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(8,(await Business(b,"receiving","list",new{filter="mind"})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(10,(await Business(b,"sales","list",new{})).Data!.Value.GetProperty("rows").GetArrayLength());
+            var seedAgain=await Send("companies.seed-demo",new CompanyDemoSeedRequest(b));Check.True(seedAgain.Success);Check.True(seedAgain.Data!.Value.GetProperty("report").GetProperty("alreadySeeded").GetBoolean());
+            Check.Equal(JsonValueKind.Null,seedAgain.Data.Value.GetProperty("backupFile").ValueKind);
+            Check.Equal(20,(await Catalog(b,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            var seedRestore=await Send("companies.restore",new CompanyRestoreRequest(seedBackup,"Feltöltés előtti ellenőrzés",true));Check.True(seedRestore.Success);
+            var seedRestoreId=seedRestore.Data!.Value.GetProperty("Id").GetGuid();await Send("ui.auth.bootstrap",new UiLogin(seedRestoreId,"admin","Test-only-password-2026"));
+            Check.Equal(0,(await Catalog(seedRestoreId,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(1,(await Module(seedRestoreId,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
+
+            var failedSeedCompany=(await Send("companies.create",new CreateCompanyRequest("Mentéshiba demó",true))).Data!.Value.GetProperty("Id").GetGuid();
+            await Send("ui.auth.bootstrap",new UiLogin(failedSeedCompany,"admin","Test-only-password-2026"));
+            var blockedBackupFolder=Path.Combine(dir.Path,"backups","demo-seed",failedSeedCompany.ToString("N"));Directory.CreateDirectory(Path.GetDirectoryName(blockedBackupFolder)!);File.WriteAllText(blockedBackupFolder,"Injected backup failure");
+            Check.True(!(await Send("companies.seed-demo",new CompanyDemoSeedRequest(failedSeedCompany))).Success);
+            Check.Equal(0,(await Catalog(failedSeedCompany,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(0,(await Module(failedSeedCompany,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
             var backupFile=Path.Combine(dir.Path,"ipc-company.pcibak");
             var backupResponse=await Send("companies.backup",new CompanyBackupRequest(a,backupFile));Check.True(backupResponse.Success,backupResponse.Error??"Backup failed");
             var restoreResponse=await Send("companies.restore",new CompanyRestoreRequest(backupFile,"IPC visszaállított cég",false));Check.True(restoreResponse.Success,restoreResponse.Error??"Restore failed");
@@ -264,6 +295,7 @@ internal static class HostIntegrationTests
             }
 
             File.Delete(Path.Combine(dir.Path,"license.jws"));
+            Check.True(!(await Send("companies.seed-demo",new CompanyDemoSeedRequest(b))).Success);
             var denied=await Module(a,"save",new{id=(Guid?)null,version=0,data=new{name="Nem menthető",isActive=true}});
             Check.True(!denied.Success);Check.Equal("denied",denied.Code);Check.True((await Module(a,"export",new{})).Success);
             var deniedStock=await Business(a,"inventory","save",new{operationId=Guid.NewGuid(),productId,warehouse="Bolt",quantity=1m,reason="Tiltott próba"});
@@ -279,7 +311,7 @@ internal static class HostIntegrationTests
             var assembly="PcImpressz.Modules."+char.ToUpperInvariant(id[0])+id[1..];
             var package=Path.Combine(dir.Path,"modules",id);Directory.CreateDirectory(package);
             var files=new Dictionary<string,string>();
-            foreach(var name in new[]{assembly+".dll","PcImpressz.Business.dll"})
+            foreach(var name in (id=="receiving"?new[]{assembly+".dll","PcImpressz.Business.dll","PcImpressz.Modules.Partners.dll","PcImpressz.Modules.Catalog.dll","PcImpressz.Modules.Sales.dll"}:new[]{assembly+".dll","PcImpressz.Business.dll"}))
             {
                 var bytes=File.ReadAllBytes(Path.Combine(root,"src","Modules",assembly,"bin","Release","net10.0",name));
                 File.WriteAllBytes(Path.Combine(package,name),bytes);files[name]=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
