@@ -23,6 +23,31 @@ public static class PartnerDossier
     public const string Ready = "ready";
     private static readonly CultureInfo Hungarian = CultureInfo.GetCultureInfo("hu-HU");
 
+    public static PartnerDossierView WithRelations(PartnerDossierView view, PartnerState state, Guid id, DateTimeOffset today)
+    {
+        var partner = state.Partners.FirstOrDefault(item => item.Id == id) ?? throw new ArgumentException("Nincs ilyen partner.");
+        var names = (state.Links ?? []).Where(link => link.PartnerId == id)
+            .Select(link => (state.Contacts ?? []).FirstOrDefault(c => c.Id == link.ContactId))
+            .Where(c => c is { Data.IsActive: true })
+            .Select(c => new PartnerDossierLine(c!.Data.Name, string.Join(" · ", new[] { c.Data.Title, c.Data.Email, c.Data.Phone }.Where(part => part.Length > 0)), "", []))
+            .ToArray();
+        var events = (state.Activities ?? []).Where(a => a.Data.IsActive && a.Data.PartnerId == id)
+            .OrderByDescending(a => a.Data.At, StringComparer.Ordinal)
+            .Select(a => new PartnerDossierLine(a.Data.Title, a.Data.At + " · " + a.Data.Kind + (a.Data.Detail.Length == 0 ? "" : " · " + a.Data.Detail), "", []))
+            .ToArray();
+        var last = events.Select(line => line.Detail.Length >= 10 ? line.Detail[..10] : "").Where(day => day.Length == 10).Order(StringComparer.Ordinal).LastOrDefault();
+        var stale = last is null || !DateOnly.TryParseExact(last, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) || day < DateOnly.FromDateTime(today.UtcDateTime).AddDays(-60);
+        var sections = view.Sections.Append(new("contacts", "Kapcsolattartók", names.Length == 0 ? Waiting : Ready, "Partnertörzs",
+            names.Length == 0 ? "Ehhez a céghez még nincs kapcsolattartó." : names.Length + " kapcsolattartó.", names))
+            .Append(new("timeline", "Idővonal", events.Length == 0 ? Waiting : Ready, "Partnertörzs",
+                events.Length == 0 ? "Még nincs kézi előzmény. A levél- és naptárszinkron nincs bekötve." : (stale ? "Több mint 60 napja nem volt kézi előzmény. " : "") + "A kézi előzmények a céghez kötött tevékenységek.", events))
+            .ToArray();
+        var cards = view.Cards.Append(new("credit", "Hitelkeret", partner.Data.CreditLimit is { } limit ? Money(limit) : "—", partner.Data.CreditLimit is null ? Waiting : Ready))
+            .Append(new("activity", "Utolsó aktivitás", last ?? "nincs", last is null ? Waiting : Ready)).ToArray();
+        var notice = stale ? view.Notice + " Figyelmeztetés: 60 napja nem volt kézi kapcsolat." : view.Notice;
+        return view with { Cards = cards, Sections = sections, Notice = notice };
+    }
+
     public static PartnerDossierView Open(PartnerState state, Guid id)
     {
         var partner = state.Partners.FirstOrDefault(item => item.Id == id)

@@ -41,7 +41,7 @@ public sealed record CompanyInfo(Guid Id, string Name, bool IsDemo, DateTimeOffs
 public sealed record CreateCompanyRequest(string Name, bool IsDemo);
 public sealed record SetModuleEnabledRequest(string ModuleId, bool Enabled);
 public sealed record DemoDataClearance(int DemoCompanies, int ClearedDirectories);
-public sealed record CommandCallContext(string ActorId);
+public sealed record CommandCallContext(string ActorId, string Role = "");
 
 public interface IContextualCommandHandler : ICommandHandler
 {

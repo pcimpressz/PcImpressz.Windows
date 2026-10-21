@@ -323,13 +323,15 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
                     ? JsonValue.Create(field.Checked) : JsonValue.Create(field.Text);
             }
             var result = await ExecuteAsync(Definition.Commands.Save, new { id = _editId, version = _version, data });
+            var warning = result.TryGetProperty("warning", out var warningValue) && warningValue.ValueKind == JsonValueKind.String
+                ? warningValue.GetString() : null;
             _selected = new(result); Populate(_selected);
             saved = true;
-            Message = Labels.SavedMessage;
+            Message = string.IsNullOrWhiteSpace(warning) ? Labels.SavedMessage : warning;
         }
         catch (Exception ex) { Message = ex.Message; }
         finally { IsBusy = false; }
-        if (saved) { await LoadAsync(); Message = Labels.SavedMessage; }
+        if (saved) { var notice = Message; await LoadAsync(); Message = notice; }
     }
     private async Task ArchiveAsync()
     {

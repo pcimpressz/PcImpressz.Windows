@@ -142,7 +142,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 // Dossiers expose cross-module history; NAV settings contain local secrets.
                 if ((command.ModuleId=="receiving" && command.Command=="nav-save") || (command.ModuleId=="partners" && command.Command=="dossier"))
                     Admin(command.CompanyId);
-                var caller = new CallerIdentity(actor+"/"+session.UserName, commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(session.Role,p)).ToHashSet(StringComparer.Ordinal));
+                var caller = new CallerIdentity(actor+"/"+session.UserName, commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(session.Role,p)).ToHashSet(StringComparer.Ordinal), session.Role);
                 if(command.ModuleId=="sales"&&command.Command=="customer-save")CustomerWriteLicense();
                 if(command.ModuleId=="sales"&&command.Command=="save")
                 {

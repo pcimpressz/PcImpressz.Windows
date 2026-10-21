@@ -97,7 +97,7 @@ public sealed class CommandDispatcher(ILicenseEvaluator licenses, ILogger<Comman
         // Long-running work must re-enter authorization at its next safe batch boundary.
         logger.LogInformation("Command admitted: {Module}/{Command}", request.ModuleId, request.CommandName);
         return registered.Handler is IContextualCommandHandler contextual
-            ? await contextual.ExecuteAsync(request.Input, new(caller.UserId), cancellationToken)
+            ? await contextual.ExecuteAsync(request.Input, new(caller.UserId, caller.Role), cancellationToken)
             : await registered.Handler.ExecuteAsync(request.Input, cancellationToken);
     }
 }

@@ -123,6 +123,38 @@ internal static class PartnerTests
             Check.Equal("Ajka", sorted[0].Data.City);
             Check.Equal("Zalaegerszeg", sorted[^1].Data.City);
         });
+        yield return Case("company hierarchy, contact link and forget keep the identifier", async f =>
+        {
+            var parent = await f.Repository.Save(new(f.First.Id, null, 0, Data("Anya Kft.") with { TaxId = "11111111-2-42" }), "operator");
+            var child = await f.Repository.Save(new(f.First.Id, null, 0, Data("Leány Kft.") with { ParentName = "Anya Kft.", Email = "ugyfel@pelda.hu", AbcClass = "a", Lifecycle = "Ügyfél" }), "operator");
+            Check.Equal(parent.Id, child.Data.ParentId);
+            Check.Equal("A", child.Data.AbcClass);
+            await Check.ThrowsAsync<ArgumentException>(async () => await f.Repository.Save(new(f.First.Id, parent.Id, parent.Version, parent.Data with { ParentName = "Leány Kft." }), "operator"));
+            var contact = await f.Repository.SaveContact(new(f.First.Id, null, 0, new ContactData { Name = "Kiss Anna", Title = "Beszerzési igazgató", Email = "anna@pelda.hu", Companies = "Anya Kft.\nLeány Kft.", DecisionLevel = "Döntéshozó" }), "operator");
+            var state = await f.Repository.Snapshot(f.First.Id);
+            Check.Equal(2, (state.Links ?? []).Count(link => link.ContactId == contact.Id));
+            var activity = await f.Repository.SaveActivity(new(f.First.Id, null, 0, new ActivityData { Kind = "Hívás", Title = "Árajánlat egyeztetés", PartnerName = "Leány Kft.", At = "2026-08-01" }), "operator");
+            var dossier = PartnerDossier.WithRelations(PartnerDossier.Open(state, child.Id), await f.Repository.Snapshot(f.First.Id), child.Id, new DateTimeOffset(2026, 10, 21, 0, 0, 0, TimeSpan.Zero));
+            Check.Equal("Kiss Anna", dossier.Sections.Single(section => section.Id == "contacts").Lines[0].Title);
+            Check.Equal(activity.Data.Title, dossier.Sections.Single(section => section.Id == "timeline").Lines[0].Title);
+            Check.True(dossier.Notice.Contains("60 napja", StringComparison.Ordinal));
+            Check.Equal("Hasonló nevű aktív cég már létezik. A mentés így is megtörtént.", PartnerCrm.Warning(state, null, Data("Leány Kft.")));
+            var forgotten = await f.Repository.Save(new(f.First.Id, child.Id, child.Version, child.Data with { Forget = true }), "operator");
+            Check.Equal("Anonimizált partner", forgotten.Data.Name);
+            Check.Equal("", forgotten.Data.Email);
+            Check.True(!forgotten.Data.IsActive);
+            Check.Equal(child.Id, forgotten.Id);
+        });
+        yield return Case("a salesperson only reaches owned companies", async f =>
+        {
+            await f.Repository.Save(new(f.First.Id, null, 0, Data("Saját vevő") with { Owner = "anna" }), "sid/anna", role: "sales");
+            await f.Repository.Save(new(f.First.Id, null, 0, Data("Idegen vevő") with { Owner = "bela" }), "sid/bela", role: "sales");
+            var state = await f.Repository.Snapshot(f.First.Id);
+            var visible = PartnerListing.Match(state.Partners, new(f.First.Id)).Where(p => PartnerCrm.VisiblePartner(state, p, "sales", "sid/anna")).ToArray();
+            Check.Equal("Saját vevő", visible.Single().Data.Name);
+            var foreign = state.Partners.Single(p => p.Data.Name == "Idegen vevő");
+            await Check.ThrowsAsync<ArgumentException>(async () => await f.Repository.Save(new(f.First.Id, foreign.Id, foreign.Version, foreign.Data with { Notes = "tiltott" }), "sid/anna", role: "sales"));
+        });
     }
 
     private static PartnerData Data(string name)=>new(){Name=name,IsCustomer=true};

@@ -7,11 +7,23 @@
 1. Indítás: a projekt gyökerében a Start.cmd.
 2. Az oldalsáv AKTÍV CÉG listájában választhatsz céget.
 3. Az Üres cég létrehozása gomb saját vagy demócéget készít, partner- és mintaadatok nélkül.
-4. A Partnertörzs menüben kereshetsz, új partnert vihetsz fel, módosíthatsz és archiválhatsz. Mentett partnernél a Dosszié gomb a lista helyén nyitja a dossziét. A Vissza a partnerekhez gomb hozza vissza a listát.
+4. A Partnertörzs menü a cégeket mutatja, alatta a Kapcsolattartók és az Idővonal. Mentett cégnél a Dosszié gomb a lista helyén nyitja a dossziét. A Vissza a partnerekhez gomb hozza vissza a listát.
 5. A CSV-export az aktuális keresésnek és szerepszűrőnek megfelelő partnereket menti.
 6. Az archivált partnereket az Archiváltak szűrővel éred el; az Aktív mező visszakapcsolásával helyreállíthatók.
 
 A partner lehet egyszerre vevő, szállító és gyártó. Egy aktív, azonos adószámú partner újbóli felvételét a program megakadályozza. Két ablak közül a régebbi adatlap nem írhatja felül észrevétlenül a frissebb módosítást.
+
+## Cég, kapcsolattartó, idővonal
+
+A cégadatlap a szervezet hivatalos adata: adószám, EU adószám, cégjegyzékszám, bankszámlák, székhely, számlázási és szállítási cím, telephelyek, iparág, ügyfél/beszállító/gyártó/érdeklődő/partner/konkurens, létszám, árbevétel-kategória, A/B/C besorolás, web, LinkedIn, központi elérhetőség, életciklus, felelős, adatforrás, hitelkeret, anyacég, címkék és `név=érték` egyedi mezők. Az anyacég nevét pontosan kell megadni; a lánc nem érhet körbe.
+
+A kapcsolattartó külön lap. A cégek nevét soronként kell írni, így egy személy több céghez tartozhat. Az idővonal kézi előzmény: jegyzet, e-mail, hívás, megbeszélés, rendszeresemény, dokumentum. Ha a dátum üres, a mai nap kerül be. A dosszié ezeket a cég alatt mutatja, és jelzi, ha 60 napja nem volt kézi előzmény.
+
+Az azonos aktív adószám és EU adószám mentése hibát ad. Az azonos e-mail, a hasonló név és az azonos cégjegyzékszám figyelmeztetés a mentés után, az adat így is megmarad. Az Elfeledtetés mentéskor jelölő a cég vagy a kapcsolattartó személyes adatait törli, az azonosítót megtartja, hogy a régi számla hivatkozása megmaradjon. Ha a kapcsolattartó más céghez is tartozik, csak a kapcsolat szakad meg.
+
+Az eladó szerepkör a felelős nélküli és a saját felelősű cégeket látja. Az adminisztrátor, a raktáros és a megtekintő minden céget lát. Új cégnél az eladó automatikusan felelős lesz, ha a mező üres.
+
+Még nincs bekötve: OPTEN vagy cégjegyzék kitöltés, levél- és naptárszinkron, hívásfelvétel. Ezekhez külső szolgáltatás kell. A forgalom, a nyitott számla és a beszerzés továbbra is a dossziéban jelenik meg, a meglévő eladás- és bevételezésadatokból.
 
 ## Dosszié
 

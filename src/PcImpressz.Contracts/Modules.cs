@@ -40,7 +40,7 @@ public interface ICommandHandler
 }
 
 // This identity must be created by a trusted authentication boundary, never from request JSON.
-public sealed record CallerIdentity(string UserId, IReadOnlySet<string> Permissions);
+public sealed record CallerIdentity(string UserId, IReadOnlySet<string> Permissions, string Role = "");
 
 public sealed record CommandRequest(string ModuleId, string CommandName, JsonElement Input);
 
