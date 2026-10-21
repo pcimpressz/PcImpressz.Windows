@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -98,7 +98,7 @@ internal sealed class LineEditor : Observable
     private void Touch() { if (!_filling) _page.MarkDirty(); }
 }
 
-internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColumnList
+internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePage, IColumnList
 {
     private readonly HostConnection _connection;
     private readonly Func<Guid?> _company;
@@ -106,6 +106,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
     private readonly ColumnList _columns;
     private readonly TypedSearch _typed;
     private readonly ListLoader _loader;
+    private object? _appliedListQuery;
     private int _matches;
     private string _mode = "home";
     private bool _busy, _dirty, _populating;
@@ -126,6 +127,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
         _loader = new ListLoader(LoadCore, shutdown);
         _columns.Changed += () => Changed(nameof(LayoutRevision));
         _columns.SortChanged += () => _ = LoadAsync();
+        InitializeReversal();
         ManualCommand = new RelayCommand(BeginManual);
         NavCommand = new RelayCommand(() => BeginIntake("nav"));
         ImportCommand = new RelayCommand(() => BeginIntake("import"));
@@ -211,6 +213,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
 
     public void CompanyChanged()
     {
+        _appliedListQuery=null;
         _mode = "home"; NotifyMode(); Rows.Clear(); Lines.Clear(); Suppliers.Clear();
         _editId = null; _version = 0; _status = "uj"; _selected = null; IsDirty = false; _ = LoadAsync();
     }
@@ -272,12 +275,14 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
         IsBusy = true;
         try
         {
-            var result = await ModuleAsync("receiving", "list", new
+            var query = new
             {
                 search = Search, filter = Filter, page = 0, pageSize = 100,
                 sort = SortColumn, descending = SortDescending
-            });
+            };
+            var result = await ModuleAsync("receiving", "list", query);
             if (!_loader.IsCurrent(generation)) return;
+            _appliedListQuery=query;
             Rows.Clear();
             foreach (var row in result.GetProperty("rows").EnumerateArray()) Rows.Add(new(row));
             var counts = result.GetProperty("counts");
@@ -351,7 +356,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
             if (IsEditor) Fill(saved);
             classifiedMessage = status switch
             {
-                "bevetelezve" => "Bevételezve. A párosított termékek ehhez a számlához kötve megmaradnak.",
+                "bevetelezve" => "Bevételezve. A készletes termékek mennyisége a számlán megadott raktárban megnőtt.",
                 "koltseg" => "Költségként rögzítve, készletre nem kerül.",
                 "fuggo" => "Függőben hagyva. Később még bevételezhető vagy költségként lezárható.",
                 _ => "A számla visszakerült az új tételek közé."
@@ -372,7 +377,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
         if (IsBusy) return;
         if (IsImport && SelectedSupplier is null) { Message = "Az importhoz válassz szállítót, vagy vegyél fel újat."; return; }
         var dialog = new OpenFileDialog { Title = IsNav ? "NAV-számla XML" : "Számla importálása", CheckFileExists = true,
-            Filter = IsNav ? "NAV XML (*.xml)|*.xml|PDF (*.pdf)|*.pdf" : "Excel, CSV vagy XML (*.xlsx;*.csv;*.xml)|*.xlsx;*.csv;*.xml|PDF (*.pdf)|*.pdf" };
+            Filter = IsNav ? "NAV XML (*.xml)|*.xml" : "Excel, CSV vagy XML (*.xlsx;*.csv;*.xml)|*.xlsx;*.csv;*.xml" };
         if (dialog.ShowDialog() != true) return;
         IsBusy = true;
         try
@@ -400,8 +405,8 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
         IsBusy = true;
         try
         {
-            var result = await ModuleAsync("receiving", "export", new { search = Search, filter = Filter, page = 0, pageSize = 50, sort = SortColumn, descending = SortDescending });
-            await File.WriteAllTextAsync(dialog.FileName, result.GetProperty("csv").GetString(), _shutdown);
+            var result = await ModuleAsync("receiving", "export", _appliedListQuery ?? throw new InvalidOperationException("Először töltsd be az exportálandó listát."));
+            await AtomicExport.WriteAsync(dialog.FileName, result.GetProperty("csv").GetString() ?? "", _shutdown);
             Message = "A szűrt számlalista exportálva.";
         }
         catch (Exception ex) { Message = ex.Message; }

@@ -25,10 +25,11 @@ internal sealed class OperationsPageView:UserControl
         if(page.IsInventory){var scope=new TextBlock{FontWeight=FontWeights.SemiBold,Margin=new(0,0,0,10)};scope.SetBinding(TextBlock.TextProperty,new Binding("StockScope"));root.Children.Add(scope);}
         if(page.IsInventory)root.Children.Add(new TextBlock{Text="A régi, csak besorolt számlákból nem képzünk visszamenőleg készletet. A tényleges induló mennyiséget egyszer, nyitókészletként rögzítsd.",TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)});
         var editor=new StackPanel();editor.SetBinding(IsEnabledProperty,new Binding("IsNotBusy"));
-        editor.Children.Add(Field("Termékkeresés (név vagy cikkszám)","ProductSearch"));
+        editor.Children.Add(Field("Termékkeresés (név, cikkszám, gyártói cikkszám, vonalkód)","ProductSearch"));
         editor.Children.Add(Button("Választók frissítése","RefreshCommand"));
         editor.Children.Add(Combo("Termék","Products","SelectedProduct","Label"));
         editor.Children.Add(Field("Raktár","Warehouse"));
+        if(page.IsSales){var stock=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,10)};stock.SetBinding(TextBlock.TextProperty,new Binding("SelectedStockInfo"));editor.Children.Add(stock);}
         editor.Children.Add(Field(page.IsInventory?"Mennyiség (+ bevét / − kiadás)":"Mennyiség","QuantityText"));
         if(page.IsInventory)editor.Children.Add(Field("Indoklás (nyitókészlet vagy korrekció)","Reason"));
         else
@@ -37,7 +38,7 @@ internal sealed class OperationsPageView:UserControl
             editor.Children.Add(Field("Vevőkeresés (név vagy adószám)","CustomerSearch"));
             editor.Children.Add(Button("Vevők keresése","RefreshCommand"));
             editor.Children.Add(Combo("Vevő","Customers","SelectedCustomer","Name"));
-            var lineButtons=new WrapPanel();lineButtons.Children.Add(Button("Tétel hozzáadása","AddLineCommand"));lineButtons.Children.Add(Button("Kijelölt tétel törlése","RemoveLineCommand"));editor.Children.Add(lineButtons);
+            var lineButtons=new WrapPanel();lineButtons.Children.Add(Button("Tétel hozzáadása","AddLineCommand"));lineButtons.Children.Add(Button("Kijelölt tétel szerkesztése","EditLineCommand"));lineButtons.Children.Add(Button("Kijelölt tétel cseréje","UpdateLineCommand"));lineButtons.Children.Add(Button("Kijelölt tétel törlése","RemoveLineCommand"));editor.Children.Add(lineButtons);
             var basket=Grid("Basket","SelectedBasketLine");
             foreach(var (title,path) in new[]{("Termék","Name"),("Egység","UnitCode"),("Mennyiség","Quantity"),("Nettó egységár","NetUnitPrice"),("Áfa %","VatRate"),("Bruttó","Gross")})basket.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path){StringFormat=path is "NetUnitPrice" or "Gross" ? "N2" : null},Width=new DataGridLength(path=="Name"?300:path=="NetUnitPrice"?150:110)});
             editor.Children.Add(basket);

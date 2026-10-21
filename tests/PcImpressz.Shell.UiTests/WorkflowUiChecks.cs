@@ -1,0 +1,53 @@
+using System.IO;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using PcImpressz.Contracts;
+using PcImpressz.Shell.Customization;
+using PcImpressz.Shell.Windows;
+
+namespace PcImpressz.Shell.UiTests;
+internal static class WorkflowUiChecks
+{
+    public static void Render(string output,string skin)
+    {
+        var definition=new EntityPageDescriptor("receiving","receiving","Bevételezés","","",[new("number","Számlaszám")],
+            [new("number","Számlaszám"),new("supplierName","Szállító"),new("net","Nettó"),new("statusLabel","Állapot")],new("list","save","archive","export")){ViewKind="receiving"};
+        var page=new ReceivingPageViewModel(definition,new HostConnection(output,null),()=>null,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"receiving-layout")));
+        var view=new ReceivingPageView{DataContext=page,Width=1100};
+        Snapshot(view,output,"receiving-home-"+skin,1100,1000);
+        var labels=Descendants(view).OfType<Button>().Select(b=>b.Content?.ToString()??"").ToArray();
+        if(!labels.Contains("NAV XML betöltése")||labels.Any(s=>s.Contains("PDF")||s=="Lekérés a NAV-tól"))throw new InvalidOperationException("Nem támogatott importot ígér a felület.");
+        Set(page,"_mode","editor");Set(page,"_editId",Guid.NewGuid());Set(page,"_version",2L);Set(page,"_status","bevetelezve");
+        page.Number="BE-2026-001";page.IssuedOn="2026-10-21";
+        page.Suppliers.Add(new(Guid.NewGuid(),"Teszt nagyker","12345678-2-42"));page.SelectedSupplier=page.Suppliers[0];
+        var line=new LineEditor(page);line.FillQuiet(()=>{line.Name="Vezeték nélküli egér";line.Sku="MOUSE-1";line.UnitCode="DB";line.QuantityText="10";line.PriceText="12345,67";line.VatText="27";});page.Lines.Add(line);
+        typeof(ReceivingPageViewModel).GetMethod("NotifyMode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(page,null);
+        Snapshot(view,output,"receiving-editor-"+skin,1100,1800);
+        if(page.IsEditable)throw new InvalidOperationException("Lezárt bevételezés szerkeszthető.");
+        var saleDef=definition with{Id="sales",ModuleId="sales",ViewKind="sales"};
+        var sale=new OperationsPageViewModel(saleDef,new HostConnection(output,null),()=>null,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"basket-check")));
+        var product=new OperationProduct(Guid.NewGuid(),"Egér","MOUSE-1","DB",5);sale.Products.Add(product);sale.SelectedProduct=product;
+        Set(sale,"_stockWarehouse","Bolt");sale.QuantityText="2";sale.PriceText="100";sale.VatText="5";sale.AddLineCommand.Execute(null);
+        if(sale.Basket.Count!=1||sale.BasketTotal!="210,00 Ft")throw new InvalidOperationException("Hibás kosárösszeg.");
+        sale.SelectedBasketLine=sale.Basket[0];sale.EditLineCommand.Execute(null);sale.QuantityText="3";sale.PriceText="200";sale.UpdateLineCommand.Execute(null);
+        if(sale.Basket.Count!=1||sale.Basket[0].Quantity!=3||sale.Basket[0].NetUnitPrice!=200)throw new InvalidOperationException("Nem frissült a kosártétel.");
+        sale.QuantityText="3";sale.AddLineCommand.Execute(null);if(sale.Basket.Count!=1)throw new InvalidOperationException("Az összesített kosár túllépte a jelzett készletet.");
+        Console.WriteLine("ui-ok receipt intake, locked document and editable stock-checked basket "+skin);
+    }
+    private static void Set(object target,string field,object value)=>target.GetType().GetField(field,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.SetValue(target,value);
+    private static void Snapshot(FrameworkElement view,string output,string name,int width,int height)
+    {
+        var surface=new Border{Background=(Brush)Application.Current.Resources["BackgroundBrush"],Child=view};
+        surface.Measure(new Size(width,height));surface.Arrange(new Rect(0,0,width,height));surface.UpdateLayout();
+        var bitmap=new RenderTargetBitmap(width,height,96,96,PixelFormats.Pbgra32);bitmap.Render(surface);
+        var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using(var file=File.Create(Path.Combine(output,name+".png")))encoder.Save(file);
+        surface.Child=null;
+    }
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++){var child=VisualTreeHelper.GetChild(parent,i);yield return child;foreach(var descendant in Descendants(child))yield return descendant;}
+    }
+}

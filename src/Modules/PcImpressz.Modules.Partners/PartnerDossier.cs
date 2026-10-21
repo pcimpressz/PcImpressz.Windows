@@ -1,4 +1,4 @@
-﻿using PcImpressz.Contracts;
+using PcImpressz.Contracts;
 using System.Globalization;
 using System.Text.Json;
 
@@ -228,7 +228,7 @@ public static class PartnerDossier
     private static string ReceiptStatus(string status) => status switch
     {
         "uj" => "Új, besorolásra vár",
-        "bevetelezve" => "Bevételezve",
+        "bevetelezve" => "Bevételezve", "visszaforditva" => "Visszafordítva",
         "koltseg" => "Költség",
         "fuggo" => "Függő",
         _ => status

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using PcImpressz.Contracts;
 
 namespace PcImpressz.Modules.Receiving;
@@ -16,6 +16,7 @@ public sealed class ReceivingModule : IModule
             {
                 uj = receipts.Count(receipt => receipt.Data.Status == "uj"),
                 bevetelezve = receipts.Count(receipt => receipt.Data.Status == "bevetelezve"),
+                visszaforditva = receipts.Count(receipt => receipt.Data.Status == "visszaforditva"),
                 koltseg = receipts.Count(receipt => receipt.Data.Status == "koltseg"),
                 fuggo = receipts.Count(receipt => receipt.Data.Status == "fuggo"),
                 mind = receipts.Length
@@ -34,6 +35,8 @@ public sealed class ReceivingModule : IModule
             Detail(await repository.Save(ReceivingJson.Read<ReceiptSave>(input), actor, ct)));
         Register(context, "classify", "receiving.write", CommandAccess.Licensed, async (input, actor, ct) =>
             Detail(await repository.Classify(ReceivingJson.Read<ReceiptClassify>(input), actor, ct)));
+        Register(context, "reverse", "receiving.write", CommandAccess.Licensed, async (input, actor, ct) =>
+            Detail(await repository.Reverse(ReceivingJson.Read<ReceiptReverse>(input), actor, ct)));
         Register(context, "import", "receiving.write", CommandAccess.Licensed, async (input, actor, ct) =>
         {
             var request = ReceivingJson.Read<ReceiptImport>(input);
@@ -57,7 +60,7 @@ public sealed class ReceivingModule : IModule
         });
         Register(context, "export", "receiving.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
-            var query = ReceivingJson.Read<ReceiptQuery>(input);
+            var query = ReadQuery(input);
             var rows = ReceiptListing.Match((await repository.Snapshot(query.CompanyId, ct)).Receipts, query);
             return ReceivingJson.Element(new { csv = ReceivingRepository.ExportCsv(rows) });
         });
@@ -81,7 +84,7 @@ public sealed class ReceivingModule : IModule
                 ExportedMessage = "A szűrt számlalista exportálva.",
                 SearchHint = "Keresés számlaszám vagy szállító alapján"
             },
-            [new("uj", "Új, besorolásra vár"), new("bevetelezve", "Bevételezve"), new("koltseg", "Költség"), new("fuggo", "Függő"), new("mind", "Minden számla")]) { ViewKind = "receiving" });
+            [new("uj", "Új, besorolásra vár"), new("bevetelezve", "Bevételezve"), new("visszaforditva", "Visszafordítva"), new("koltseg", "Költség"), new("fuggo", "Függő"), new("mind", "Minden számla")]) { ViewKind = "receiving" });
         return ValueTask.CompletedTask;
     }
     public ValueTask StopAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
@@ -91,9 +94,9 @@ public sealed class ReceivingModule : IModule
     private static ReceiptQuery ReadQuery(JsonElement input)
     {
         var query = ReceivingJson.Read<ReceiptQuery>(input);
-        if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200 || !ReceiptListing.IsSort(query.Sort))
+        if (query.Page < 0 || query.PageSize is < 1 or > 200 || (query.Search is null || query.Search.Length > 200) || query.Sort is null || !ReceiptListing.IsSort(query.Sort))
             throw new ArgumentException("Érvénytelen listázási kérés.");
-        if (query.Filter is not ("uj" or "bevetelezve" or "koltseg" or "fuggo" or "mind"))
+        if (query.Filter is not ("uj" or "bevetelezve" or "visszaforditva" or "koltseg" or "fuggo" or "mind"))
             throw new ArgumentException("Ismeretlen számlaszűrő.");
         return query;
     }
@@ -114,6 +117,7 @@ public sealed class ReceivingModule : IModule
     {
         var node = JsonSerializer.SerializeToNode(Summary(receipt))!.AsObject();
         node["notes"] = receipt.Data.Notes;
+        node["reversedAt"] = receipt.Data.ReversedAt?.ToString("O"); node["reversedBy"] = receipt.Data.ReversedBy; node["reversalReason"] = receipt.Data.ReversalReason;
         node["receivedAt"] = receipt.Data.ReceivedAt?.ToString("O");
         node["lines"] = JsonSerializer.SerializeToNode(receipt.Data.Lines.Select(line => new
         {
@@ -138,7 +142,7 @@ public static class ReceiptListing
     public static ReceiptRecord[] Match(IEnumerable<ReceiptRecord> source, ReceiptQuery query)
     {
         if (!IsSort(query.Sort)) throw new ArgumentException("Érvénytelen listázási kérés.");
-        var rows = source.Where(receipt => query.Filter == "mind" || receipt.Data.Status == query.Filter)
+        var rows = source.OrderBy(receipt => receipt.Id).Where(receipt => query.Filter == "mind" || receipt.Data.Status == query.Filter)
             .Where(receipt => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", receipt.Data.Number, receipt.Data.SupplierName, receipt.Data.SupplierTaxId)
                 .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
         if (query.Sort.Length > 0 && Keys.TryGetValue(query.Sort, out var key))

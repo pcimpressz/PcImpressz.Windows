@@ -11,6 +11,27 @@ internal static class AdministrationTests
         [new("name","Termék neve",Required:true),new("sku","Saját cikkszám"),new("notes","Megjegyzés","multiline")],[],new("list","save","archive","export"));
     public static IEnumerable<(string,Func<Task>)> Cases()
     {
+        yield return Test("offline recovery rejects foreign Windows owners and invalidates old sessions",f=>
+        {
+            var admin=f.Admin();f.Service.CreateUser(new(f.Company,admin.Token,"reader",Password,"user"),Sid);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.RecoverLocalAdmin(new(f.Company,"reader","Replacement-password-2026"),"foreign-owner"));
+            f.Service.RequireRecoveryOwner(f.Company,Sid);
+            f.Service.RecoverLocalAdmin(new(f.Company,"reader","Replacement-password-2026"),Sid);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Save(admin.Token));
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.Login(new(f.Company,"reader",Password),Sid));
+            var recovered=f.Service.Login(new(f.Company,"reader","Replacement-password-2026"),Sid);
+            Check.Equal("admin",recovered.Role);f.Save(recovered.Token);
+            Check.True(f.Credentials.Execute(f.Company,tx=>string.Join("",tx.List("accounts","audit/"))).Contains("offline-admin-recovery"));
+        });
+        yield return Test("legacy admin recovery requires authenticated owner binding",f=>
+        {
+            f.Admin();f.Credentials.Execute(f.Company,tx=>{tx.Delete("accounts","owner");return 0;});
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.RequireRecoveryOwner(f.Company,Sid));
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.RecoverLocalAdmin(new(f.Company,"admin","Replacement-password-2026"),Sid));
+            Check.Throws<ArgumentException>(()=>f.Service.Login(new(f.Company,"admin",Password),""));
+            f.Service.Login(new(f.Company,"admin",Password),Sid);f.Service.RequireRecoveryOwner(f.Company,Sid);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.RequireRecoveryOwner(f.Company,"foreign-owner"));
+        });
         yield return Test("first company admin is explicit and passwords are never stored as plaintext", f=>
         {
             Check.True(!f.Service.Status(f.Company).Configured);

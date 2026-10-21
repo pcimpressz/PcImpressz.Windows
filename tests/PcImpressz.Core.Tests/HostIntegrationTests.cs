@@ -136,6 +136,10 @@ internal static class HostIntegrationTests
             Check.True((await Business(a,"receiving","classify",new{id=receipt.Data!.Value.GetProperty("id").GetGuid(),version=1,status="bevetelezve"})).Success);
             Check.Equal(13m,(await Business(a,"inventory","list",new{})).Data!.Value.GetProperty("rows")[0].GetProperty("quantity").GetDecimal());
             Check.Equal(13m,(await Catalog(a,"products-list",new{})).Data!.Value.GetProperty("rows")[0].GetProperty("quantity").GetDecimal());
+            var receiptId=receipt.Data!.Value.GetProperty("id").GetGuid();
+            var receiptReversed=await Business(a,"receiving","reverse",new{id=receiptId,version=2,reason="IPC visszafordítás"});Check.True(receiptReversed.Success,receiptReversed.Error??"Reverse failed");
+            Check.True((await Business(a,"receiving","reverse",new{id=receiptId,version=2,reason="IPC visszafordítás"})).Success);
+            Check.Equal(10m,(await Business(a,"inventory","list",new{})).Data!.Value.GetProperty("rows")[0].GetProperty("quantity").GetDecimal());
             Check.True((await Send("modules.set-enabled",new SetModuleEnabledRequest("inventory",false))).Success);
             var blockedSale=await Business(a,"sales","save",new{operationId=Guid.NewGuid(),customerId=partnerId,warehouse="Bolt",lines=saleRequest.lines});
             Check.True(!blockedSale.Success);Check.True(blockedSale.Error!.Contains("ki van kapcsolva",StringComparison.Ordinal));
@@ -185,7 +189,7 @@ internal static class HostIntegrationTests
             var backupResponse=await Send("companies.backup",new CompanyBackupRequest(a,backupFile));Check.True(backupResponse.Success,backupResponse.Error??"Backup failed");
             var restoreResponse=await Send("companies.restore",new CompanyRestoreRequest(backupFile,"IPC visszaállított cég",false));Check.True(restoreResponse.Success,restoreResponse.Error??"Restore failed");
             var restoredCompany=restoreResponse.Data!.Value.GetProperty("Id").GetGuid();
-            Check.Equal(13m,(await Business(restoredCompany,"inventory","list",new{})).Data!.Value.GetProperty("rows")[0].GetProperty("quantity").GetDecimal());
+            Check.Equal(10m,(await Business(restoredCompany,"inventory","list",new{})).Data!.Value.GetProperty("rows")[0].GetProperty("quantity").GetDecimal());
             File.Delete(Path.Combine(dir.Path,"license.jws"));
             var denied=await Module(a,"save",new{id=(Guid?)null,version=0,data=new{name="Nem menthető",isActive=true}});
             Check.True(!denied.Success);Check.Equal("denied",denied.Code);Check.True((await Module(a,"export",new{})).Success);

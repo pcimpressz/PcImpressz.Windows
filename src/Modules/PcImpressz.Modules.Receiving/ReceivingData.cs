@@ -1,4 +1,4 @@
-﻿using PcImpressz.Contracts;
+using PcImpressz.Contracts;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -39,6 +39,9 @@ public sealed record ReceiptData
     public decimal Net { get; init; }
     public decimal Vat { get; init; }
     public decimal Gross { get; init; }
+    public DateTimeOffset? ReversedAt { get; init; }
+    public string? ReversedBy { get; init; }
+    public string? ReversalReason { get; init; }
     public DateTimeOffset? ReceivedAt { get; init; }
     public ReceiptLine[] Lines { get; init; } = [];
 }
@@ -55,6 +58,7 @@ public sealed record ReceiptSave(Guid CompanyId, Guid? Id, long Version, Receipt
 public sealed record ReceiptQuery(Guid CompanyId, string Search = "", string Filter = "uj", int Page = 0, int PageSize = 50,
     string Sort = "", bool Descending = false);
 public sealed record ReceiptGet(Guid CompanyId, Guid Id);
+public sealed record ReceiptReverse(Guid CompanyId, Guid Id, long Version, string Reason);
 public sealed record ReceiptClassify(Guid CompanyId, Guid Id, long Version, string? Status);
 public sealed record ReceiptImport(Guid CompanyId, Guid? SupplierId, string? Number, string? IssuedOn, string? DueOn,
     string? Source, string? FileName, string? ContentBase64);
@@ -77,6 +81,7 @@ public static class ReceivingText
     {
         "uj" => "Új, besorolásra vár",
         "bevetelezve" => "Bevételezve",
+        "visszaforditva" => "Visszafordítva",
         "koltseg" => "Költség",
         "fuggo" => "Függő",
         _ => status

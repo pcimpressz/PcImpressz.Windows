@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace PcImpressz.Contracts;
 
@@ -48,7 +48,7 @@ public sealed record PartnerReference(Guid Id, string Name, string TaxId, bool I
 public sealed record IncomingLineReference(string Name, decimal Quantity, decimal NetUnitPrice);
 public sealed record IncomingReceiptReference(Guid SupplierId,string Number,string Date,decimal Net,decimal Gross,string Status,IncomingLineReference[] Lines);
 public sealed record OutgoingSaleReference(Guid? CustomerId,string Number,string Date,decimal Net,decimal Gross,string Status,IncomingLineReference[] Lines);
-public sealed record ProductReference(Guid Id, string Name, string Sku, string Barcode, string UnitCode, bool IsActive, bool IsSalable = false, bool IsPurchaseable = false);
+public sealed record ProductReference(Guid Id, string Name, string Sku, string Barcode, string UnitCode, bool IsActive, bool IsSalable = false, bool IsPurchaseable = false, string ManufacturerPartNumber = "");
 
 // Version 1 compatibility projection. Consumers depend on these typed contracts.
 // Only this adapter knows the original snapshot shape; normalized tables may replace it later.
@@ -57,7 +57,7 @@ public static class CompanyReferenceQueries
     public static PartnerReference[] Partners(ICompanyTransaction tx) => Rows(tx, "partners", "partners", (id, d) =>
         new PartnerReference(id, Text(d,"name"), Text(d,"taxId"), Flag(d,"isSupplier"), Flag(d,"isCustomer"), Flag(d,"isActive")));
     public static ProductReference[] Products(ICompanyTransaction tx) => Rows(tx, "catalog", "products", (id,d) =>
-        new ProductReference(id, Text(d,"name"), Text(d,"sku"), Text(d,"barcode"), Text(d,"unitCode"), Flag(d,"isActive"), Flag(d,"isSalable"), Flag(d,"isPurchaseable")));
+        new ProductReference(id, Text(d,"name"), Text(d,"sku"), Text(d,"barcode"), Text(d,"unitCode"), Flag(d,"isActive"), Flag(d,"isSalable"), Flag(d,"isPurchaseable"), Text(d,"manufacturerPartNumber")));
     public static IReadOnlyDictionary<Guid,decimal> StockQuantities(ICompanyTransaction tx) => StockRows(tx).GroupBy(row=>row.GetProperty("productId").GetGuid()).ToDictionary(g=>g.Key,g=>g.Sum(row=>row.GetProperty("quantity").GetDecimal()));
     public static decimal StockQuantity(ICompanyTransaction tx, Guid productId) => StockQuantities(tx).GetValueOrDefault(productId);
     public static bool HasStockHistory(ICompanyTransaction tx, Guid productId) => StockRows(tx).Any(row=>row.GetProperty("productId").GetGuid()==productId);

@@ -28,8 +28,18 @@ Ez a bejelentkezés jelenleg a felületszerkesztést és fióklétrehozást véd
 
 ## Hozzáférés megőrzése és nyitott feladatok
 
-Őrizd meg az adminjelszót. Létrehozható második adminfiók. Offline adminjelszó-helyreállító út nincs beépítve; univerzális mesterjelszó sincs. Felhasználó tiltása, jelszócsere és teljes céges szerepkörkezelés későbbi külön csomag.
+Őrizd meg az adminjelszót. Létrehozható második adminfiók. A 0.4.4-ben engedélyezett offline helyreállítás az alábbi módon használható; univerzális mesterjelszó nincs. Felhasználó tiltása, jelszócsere és teljes céges szerepkörkezelés későbbi külön csomag.
 
 ## Ellenőrzés
 
-148/148 Core/üzleti/valódi Host-teszt; wheel-ok; 15/15 WPF-render mindhárom témában, adatkapcsolási hiba nélkül. Célzott próbák: normál szerep közvetlen IPC-s írási kísérlete és hamis adminmező; cég/SID/lejárat/kijelentkezés/újraindítás; jelszótárolás és próbálkozáskorlát; verzióütközés, alap-/előző nézet, kötelező mező; újabb séma és mentés/visszaállítás; előnézet/átrendezés és a szerkesztett üzleti adatok megőrzése. Teljes kézi drag-and-drop és különböző DPI-s átvétel még szükséges.
+A 0.4.3 ellenőrzése: 148/148 Core/üzleti/valódi Host-teszt; wheel-ok; 15/15 WPF-render mindhárom témában, adatkapcsolási hiba nélkül. Célzott próbák: normál szerep közvetlen IPC-s írási kísérlete és hamis adminmező; cég/SID/lejárat/kijelentkezés/újraindítás; jelszótárolás és próbálkozáskorlát; verzióütközés, alap-/előző nézet, kötelező mező; újabb séma és mentés/visszaállítás; előnézet/átrendezés és a szerkesztett üzleti adatok megőrzése. Teljes kézi drag-and-drop és különböző DPI-s átvétel még szükséges.
+
+## Offline admin-helyreállítás (0.4.4)
+
+Leállított felület és Host mellett, kizárólag az első adminhoz rögzített Windows-fiókból használható. Régi (0.4.3) telepítésnél frissítés után előbb egyszer sikeresen be kell jelentkezni az adminnal: ez rögzíti a helyreállítási tulajdonost. Tulajdonosbejegyzés nélkül az offline helyreállítás elutasításra kerül.
+
+A karbantartó parancsa: recover-ui-admin <adatmappa> <cég GUID> <felhasználónév>. A szokásos adatmappa a telepítés .local mappája. A karbantartó program a tools/PcImpressz.Maintenance projektből épül; fejlesztői környezetben a .NET 10 futtatóval indítható. Interaktív terminál kell, a jelszó kétszeri, rejtett bevitellel adható meg, parancssori jelszó nincs.
+
+A művelet kizárólagos Host-zárat kér és a hitelesítési adatbázist előbb security/<cég>/admin-recovery-before-*.db fájlba menti. A kijelölt fiók új jelszót és adminszerepet kap, a korábbi céges munkamenetek érvénytelenednek, auditesemény készül. Ez helyi karbantartási funkció, nincs hálózati/IPC helyreállítási végpont. Valós fiókon a fejlesztés során nem történt jelszó-visszaállítás.
+
+Az ellenőrzés 155/155 tesztre és 21/21 WPF-renderre bővült; idegen Windows-fiók elutasítása, régi tulajdonosrögzítés, jelszócsere és munkamenet-érvénytelenítés is tesztelt.

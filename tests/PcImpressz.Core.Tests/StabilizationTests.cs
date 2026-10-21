@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -158,11 +158,74 @@ internal static class StabilizationTests
                 [new(f.Product.Id,f.Product.Data.Name,"DB","Bolt",1),new(f.Product.Id,f.Product.Data.Name,"DB","Másik",-1)],"Próba","operator",f.Clock.Now)));
             Check.Equal(2m,f.Balance());Check.Equal(before,f.Database.Execute(f.Company.Id,tx=>StockLedger.Movements(tx).Length));return Task.CompletedTask;
         });
+        yield return Case("receipt sale and both reversals form one safe end-to-end stock workflow",async f=>
+        {
+            var receipt=await f.Receipt("Egér",f.Product.Data.Sku,10);
+            receipt=await f.Receipts.Classify(new(f.Company.Id,receipt.Id,receipt.Version,"bevetelezve"),"receiver");
+            Check.Equal(10m,f.Balance());
+            var sale=f.Database.Execute(f.Company.Id,tx=>SalesModule.Post(tx,f.Sale(2),"seller",f.Clock.Now));
+            Check.Equal(8m,f.Balance());
+            await Check.ThrowsAsync<ArgumentException>(async()=>await f.Receipts.Reverse(new(f.Company.Id,receipt.Id,receipt.Version,"Téves bevételezés"),"receiver"));
+            Check.Equal("bevetelezve",(await f.Receipts.Snapshot(f.Company.Id)).Receipts.Single().Data.Status);Check.Equal(8m,f.Balance());
+            f.Database.Execute(f.Company.Id,tx=>SalesModule.Reverse(tx,new(f.Company.Id,sale.Id,1),"seller",f.Clock.Now));
+            Check.Equal(10m,f.Balance());
+            var reversed=await f.Receipts.Reverse(new(f.Company.Id,receipt.Id,receipt.Version,"Téves bevételezés"),"receiver");
+            Check.Equal(0m,f.Balance());Check.Equal("visszaforditva",reversed.Data.Status);Check.True(!reversed.Data.StockPosted);Check.Equal("receiver",reversed.Data.ReversedBy);
+            var repeated=await f.Receipts.Reverse(new(f.Company.Id,receipt.Id,receipt.Version,"Téves bevételezés"),"receiver");
+            Check.Equal(reversed.Version,repeated.Version);Check.Equal(0m,f.Balance());
+            Check.Equal(1,(await f.Receipts.Snapshot(f.Company.Id)).Receipts.Length);
+        });
+        yield return Case("receipt reversal checks version and refuses legacy non-posted classification",async f=>
+        {
+            var receipt=await f.Receipt("Egér",f.Product.Data.Sku,3);
+            receipt=await f.Receipts.Classify(new(f.Company.Id,receipt.Id,receipt.Version,"bevetelezve"),"receiver");
+            await Check.ThrowsAsync<ReceivingConflictException>(async()=>await f.Receipts.Reverse(new(f.Company.Id,receipt.Id,1,"Téves tétel"),"receiver"));
+            Check.Equal(3m,f.Balance());
+            f.Database.Execute(f.Company.Id,tx=>{var state=tx.Read<ReceiptState>("receiving","state")!;tx.Write("receiving","state",state with{Receipts=state.Receipts.Select(r=>r with{Data=r.Data with{StockPosted=false}}).ToArray()});return 0;});
+            await Check.ThrowsAsync<ArgumentException>(async()=>await f.Receipts.Reverse(new(f.Company.Id,receipt.Id,receipt.Version,"Régi besorolás"),"receiver"));
+            Check.Equal(3m,f.Balance());
+        });
+        yield return Case("service-only receipt can close and reverse without inventing stock",async f=>
+        {
+            var receipt=await f.Receipt("Munkadíj","",1,true);
+            receipt=await f.Receipts.Classify(new(f.Company.Id,receipt.Id,receipt.Version,"bevetelezve"),"receiver");
+            receipt=await f.Receipts.Reverse(new(f.Company.Id,receipt.Id,receipt.Version,"Téves szolgáltatás"),"receiver");
+            Check.Equal(0m,f.Balance());Check.Equal("visszaforditva",receipt.Data.Status);
+        });
+        yield return Case("sales references expose warehouse stock and match manufacturer and barcode",async f=>
+        {
+            var product=await f.Catalog.SaveProduct(new(f.Company.Id,f.Product.Id,f.Product.Version,f.Product.Data with{ManufacturerPartNumber="MPN-123",Barcode="5991234567890"}),"operator");
+            f.Opening(10);f.Database.Execute(f.Company.Id,tx=>StockLedger.Post(tx,"warehouse2","inventory",Guid.NewGuid(),[new(product.Id,product.Data.Name,"DB","Másik",4)],"Nyitó","operator",f.Clock.Now));
+            var probe=new SalesProbe(f.Database);await new SalesModule().StartAsync(probe,default);
+            var result=await ((IContextualCommandHandler)probe.Commands["references"]).ExecuteAsync(JsonSerializer.SerializeToElement(new{companyId=f.Company.Id,warehouse="Másik",search="MPN-123"}),new("operator"),default);
+            Check.Equal(4m,result.GetProperty("products")[0].GetProperty("availableQuantity").GetDecimal());
+            result=await ((IContextualCommandHandler)probe.Commands["references"]).ExecuteAsync(JsonSerializer.SerializeToElement(new{companyId=f.Company.Id,warehouse="Bolt",search="5991234567890"}),new("operator"),default);
+            Check.Equal(10m,result.GetProperty("products")[0].GetProperty("availableQuantity").GetDecimal());
+        });
+        yield return Case("sales filtered listing and export share the same records",async f=>
+        {
+            f.Opening(5);f.Database.Execute(f.Company.Id,tx=>SalesModule.Post(tx,f.Sale(1),"seller",f.Clock.Now));
+            f.Database.Execute(f.Company.Id,tx=>SalesModule.Post(tx,f.Sale(1) with{CustomerId=null},"seller",f.Clock.Now));
+            var probe=new SalesProbe(f.Database);await new SalesModule().StartAsync(probe,default);
+            var input=JsonSerializer.SerializeToElement(new{companyId=f.Company.Id,recordSearch="Alkalmi"});
+            var list=await ((IContextualCommandHandler)probe.Commands["list"]).ExecuteAsync(input,new("operator"),default);
+            var export=await ((IContextualCommandHandler)probe.Commands["export"]).ExecuteAsync(input,new("operator"),default);
+            Check.Equal(1,list.GetProperty("total").GetInt32());var csv=export.GetProperty("csv").GetString()!;
+            Check.True(csv.Contains("Alkalmi vevő")&&!csv.Contains("Partner"));
+        });
         yield return Case("future database schema is rejected before writing",f=>
         {
             var file=f.Database.DatabasePath(f.Company.Id);using(var c=new SqliteConnection("Data Source="+file+";Pooling=False")){c.Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA user_version=999";cmd.ExecuteNonQuery();}
             Check.Throws<IOException>(()=>f.Database.Execute(f.Company.Id,tx=>true));return Task.CompletedTask;
         });
+    }
+    private sealed class SalesProbe(ICompanyDatabase database):IModuleContext
+    {
+        public string ModuleId=>"sales";public TimeProvider TimeProvider=>TimeProvider.System;public ICompanyDatabase Database=>database;
+        public Dictionary<string,ICommandHandler> Commands{get;}=[];
+        public void RegisterCommand(ICommandHandler handler)=>Commands.Add(handler.Descriptor.Name,handler);
+        public void RegisterPage(EntityPageDescriptor page){}
+        public string GetCompanyDataDirectory(Guid company)=>throw new NotSupportedException();
     }
     private static int FailTransaction()=>throw new InvalidOperationException();
     private static (string,Func<Task>) Case(string name,Func<Fixture,Task> test)=>(name,async()=>{using var f=new Fixture();await f.Initialize();await test(f);});

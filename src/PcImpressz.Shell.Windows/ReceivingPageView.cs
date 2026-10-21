@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -27,8 +27,8 @@ public sealed class ReceivingPageView : UserControl
         panel.Children.Add(Muted("Válaszd ki, honnan jön a számla. Ami NAV-ról vagy importból érkezik, új állapotba kerül: bevételezed, költségként hagyod, vagy függőben marad."));
         var modes = new WrapPanel { Margin = new(0, 0, 0, 12) };
         modes.Children.Add(Primary("Kézi számla", "ManualCommand"));
-        modes.Children.Add(Button("Lekérés a NAV-tól", "NavCommand"));
-        modes.Children.Add(Button("Import PDF / Excel", "ImportCommand"));
+        modes.Children.Add(Button("NAV XML betöltése", "NavCommand"));
+        modes.Children.Add(Button("Excel / CSV / XML import", "ImportCommand"));
         panel.Children.Add(modes);
         panel.Children.Add(Bound(Muted(""), "CountsLabel"));
         var tools = new WrapPanel();
@@ -44,6 +44,7 @@ public sealed class ReceivingPageView : UserControl
         tools.Children.Add(Button("Bevételezés", "ReceiveCommand"));
         tools.Children.Add(Button("Költség", "ExpenseCommand"));
         tools.Children.Add(Button("Függő", "PendingCommand"));
+        tools.Children.Add(Button("Visszafordítás", "ReverseReceiptCommand"));
         tools.Children.Add(Button("CSV", "ExportCommand"));
         tools.Children.Add(ListGrid.ColumnButton(() => DataContext as IColumnList));
         panel.Children.Add(tools);
@@ -113,6 +114,7 @@ public sealed class ReceivingPageView : UserControl
         var actions = new WrapPanel { Margin = new(0, 8, 0, 0) };
         actions.Children.Add(save);
         actions.Children.Add(Classify("Bevételezés", "ReceiveCommand"));
+        actions.Children.Add(Button("Bevételezés visszafordítása", "ReverseReceiptCommand"));
         actions.Children.Add(Classify("Költség", "ExpenseCommand"));
         actions.Children.Add(Classify("Függőben", "PendingCommand"));
         actions.Children.Add(Button("Vissza", "BackCommand"));

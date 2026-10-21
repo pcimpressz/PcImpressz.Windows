@@ -10,16 +10,17 @@ using PcImpressz.Shell.Customization;
 
 namespace PcImpressz.Shell.Windows;
 
-internal sealed record OperationProduct(Guid Id,string Name,string Sku,string UnitCode)
+internal sealed record OperationProduct(Guid Id,string Name,string Sku,string UnitCode,decimal? AvailableQuantity=null)
 { public string Label => Name+(Sku.Length>0 ? " · "+Sku : ""); }
 internal sealed record OperationCustomer(Guid? Id,string Name);
 internal sealed record SaleBasketLine(Guid ProductId,string Name,string UnitCode,decimal Quantity,decimal NetUnitPrice,decimal VatRate)
 { public decimal Gross => decimal.Round(Quantity*NetUnitPrice,2,MidpointRounding.AwayFromZero)+decimal.Round(decimal.Round(Quantity*NetUnitPrice,2,MidpointRounding.AwayFromZero)*VatRate/100m,2,MidpointRounding.AwayFromZero); }
 
-internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnList
+internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,IColumnList
 {
     private readonly ColumnList _columns;
     private JsonElement? _listing;
+    private string _appliedRecordSearch="";
     private readonly HostConnection _connection;
     private readonly Func<Guid?> _company;
     private readonly CancellationToken _shutdown;
@@ -34,6 +35,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     public OperationsPageViewModel(EntityPageDescriptor definition,HostConnection connection,Func<Guid?> company,CancellationToken shutdown,ListLayoutStore layouts)
     {
         (Definition,_connection,_company,_shutdown)=(definition,connection,company,shutdown);
+        InitializeBasketEditor();
         _columns=new ColumnList(layouts,definition);
         _columns.Changed+=()=>Changed(nameof(LayoutRevision));
         _columns.SortChanged+=PopulateRows;
@@ -66,12 +68,12 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     public string RecordSearch {get=>_recordSearch;set{_recordSearch=value;Changed();}}
     public string Details {get=>_details;private set{_details=value;Changed();}}
     public string ListNotice {get=>_listNotice;private set{_listNotice=value;Changed();}}
-    public string Warehouse {get=>_warehouse;set{_warehouse=value;Changed();Dirty();}}
+    public string Warehouse {get=>_warehouse;set{_warehouse=value;Changed();Changed(nameof(SelectedStockInfo));Dirty();}}
     public string QuantityText {get=>_quantity;set{_quantity=value;Changed();Dirty();}}
     public string PriceText {get=>_price;set{_price=value;Changed();Dirty();}}
     public string VatText {get=>_vat;set{_vat=value;Changed();Dirty();}}
     public string Reason {get=>_reason;set{_reason=value;Changed();Dirty();}}
-    public OperationProduct? SelectedProduct {get=>_product;set{_product=value;Changed();Dirty();}}
+    public OperationProduct? SelectedProduct {get=>_product;set{_product=value;Changed();Changed(nameof(SelectedStockInfo));Dirty();}}
     public OperationCustomer? SelectedCustomer {get=>_customer;set{_customer=value;Changed();Dirty();}}
     public ObservableCollection<OperationProduct> Products {get;}=[];
     public ObservableCollection<OperationCustomer> Customers {get;}=[];
@@ -93,7 +95,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     private void Dirty(){if(!_filling)IsDirty=true;Changed(nameof(BasketTotal));}
     public void CompanyChanged()
     {
-        _focusedProductId=null;StockScope="Minden termék saját készlete";Changed(nameof(StockScope));Details="";ListNotice="";_filling=true;_listing=null;Rows.Clear();Movements.Clear();Basket.Clear();Products.Clear();Customers.Clear();
+        _focusedProductId=null;StockScope="Minden termék saját készlete";Changed(nameof(StockScope));_appliedRecordSearch="";_stockWarehouse=null;Changed(nameof(SelectedStockInfo));Details="";ListNotice="";_filling=true;_listing=null;Rows.Clear();Movements.Clear();Basket.Clear();Products.Clear();Customers.Clear();
         SelectedRow=null;SelectedMovement=null;SelectedBasketLine=null;SelectedProduct=null;SelectedCustomer=null;
         _operation=Guid.NewGuid();_filling=false;IsDirty=false;Changed(nameof(BasketTotal));_=LoadAsync();
     }
@@ -120,12 +122,12 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
         IsBusy=true;
         try
         {
-            var refs=await Send("references",new{search=ProductSearch,customerSearch=CustomerSearch,productId=_focusedProductId});
+            var refs=await Send("references",new{search=ProductSearch,customerSearch=CustomerSearch,productId=_focusedProductId,warehouse=Warehouse});
             var selectedProduct=SelectedProduct;var selectedCustomer=SelectedCustomer;var productId=selectedProduct?.Id;var customerId=selectedCustomer?.Id;
             _filling=true;
             Products.Clear();foreach(var product in refs.GetProperty("products").EnumerateArray())
-                Products.Add(new(product.GetProperty("id").GetGuid(),Text(product,"name"),Text(product,"sku"),Text(product,"unitCode")));
-            if(selectedProduct is not null && Products.All(p=>p.Id!=productId))Products.Add(selectedProduct);
+                Products.Add(new(product.GetProperty("id").GetGuid(),Text(product,"name"),Text(product,"sku"),Text(product,"unitCode"),product.TryGetProperty("availableQuantity",out var available)?available.GetDecimal():null));
+            if(selectedProduct is not null && Products.All(p=>p.Id!=productId))Products.Add(selectedProduct with{AvailableQuantity=null});
             SelectedProduct=Products.FirstOrDefault(p=>p.Id==productId);
             if(IsSales)
             {
@@ -134,6 +136,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
                 if(selectedCustomer is not null && Customers.All(c=>c.Id!=customerId))Customers.Add(selectedCustomer);
                 SelectedCustomer=Customers.FirstOrDefault(c=>c.Id==customerId)??Customers.First();
             }
+            _stockWarehouse=Warehouse;Changed(nameof(SelectedStockInfo));
             _filling=false;
             await RefreshRows();
         }
@@ -142,7 +145,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     }
     private async Task RefreshRows()
     {
-        var listed=await Send("list",new{search=RecordSearch,recordSearch=RecordSearch,productId=_focusedProductId});_listing=listed.Clone();PopulateRows();
+        var query=RecordSearch;var listed=await Send("list",new{search=query,recordSearch=query,productId=_focusedProductId});_appliedRecordSearch=query;_listing=listed.Clone();PopulateRows();
         Movements.Clear();SelectedMovement=null;
         if(listed.TryGetProperty("movements",out var movements))foreach(var row in movements.EnumerateArray())Movements.Add(DisplayRow(row));
     }
@@ -185,7 +188,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     private void AddLine()
     {
         if(IsBusy)return;
-        try{if(Basket.Count>=400)throw new ArgumentException("Legfeljebb 400 tétel lehet.");Basket.Add(DraftLine());Dirty();Message="A tétel bekerült az eladásba. A készlet csak véglegesítéskor változik.";}
+        try{if(Basket.Count>=400)throw new ArgumentException("Legfeljebb 400 tétel lehet.");var draft=DraftLine();CheckBasketStock(draft);Basket.Add(draft);Dirty();Message="A tétel bekerült az eladásba. A készlet csak véglegesítéskor változik.";}
         catch(Exception ex){Message=ex.Message;}
     }
     private async Task SaveAsync()
@@ -212,10 +215,10 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
             committed=true;
             if(IsInventory){_quantity="";_reason="";Changed(nameof(QuantityText));Changed(nameof(Reason));}
             _operation=Guid.NewGuid();Basket.Clear();IsDirty=false;Changed(nameof(BasketTotal));
-            await RefreshRows();
+            await RefreshRows();await RefreshSalesStockAsync();
             Message=IsInventory ? "A készletváltozás rögzítve." : "Eladás rögzítve: "+Text(result,"number")+". Ez helyi eladási bizonylat, nem adóügyi számla.";
         }
-        catch(Exception ex){Message=committed ? "A rögzítés sikerült, de a lista frissítése nem: "+ex.Message+" Használd a Frissítés gombot." : ex.Message+" A szerkesztett adatok megmaradtak; ugyanaz a beküldés újrapróbálható.";}
+        catch(Exception ex){Message=committed ? "A rögzítés sikerült, de a nézet frissítése nem: "+ex.Message+" Használd a Frissítés gombot." : ex.Message+" A szerkesztett adatok megmaradtak; ugyanaz a beküldés újrapróbálható.";}
         finally{IsBusy=false;}
     }
     private async Task ReverseAsync()
@@ -236,7 +239,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
                 payload=new{id=sale.GetProperty("id").GetGuid(),version=sale.GetProperty("version").GetInt64()};
             }
             if(MessageBox.Show("Ellenmozgással visszafordítod? Az eredeti bizonylat és az előzménye megmarad.","Visszafordítás",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
-            IsBusy=true;await Send("reverse",payload);await RefreshRows();Message="A visszafordítás rögzítve.";
+            IsBusy=true;await Send("reverse",payload);await RefreshRows();await RefreshSalesStockAsync();Message="A visszafordítás rögzítve.";
         }
         catch(Exception ex){Message=ex.Message;}
         finally{IsBusy=false;}
@@ -265,7 +268,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
         if(IsBusy)return;
         var file=new SaveFileDialog{Filter="CSV (*.csv)|*.csv",FileName=IsInventory?"keszlet.csv":"eladasok.csv"};if(file.ShowDialog()!=true)return;
         IsBusy=true;
-        try{var response=await Send("export",new{productId=_focusedProductId,search=RecordSearch});await AtomicExport.WriteAsync(file.FileName,Text(response,"csv"),_shutdown);Message="A lista exportálva.";}
+        try{var response=await Send("export",new{productId=_focusedProductId,search=_appliedRecordSearch,recordSearch=_appliedRecordSearch});await AtomicExport.WriteAsync(file.FileName,Text(response,"csv"),_shutdown);Message="A lista exportálva.";}
         catch(Exception ex){Message=ex.Message;}
         finally{IsBusy=false;}
     }

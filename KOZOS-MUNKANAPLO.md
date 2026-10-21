@@ -252,3 +252,6 @@ P1: üzleti használat előtt javítandó. P2: stabilizálás során javítandó
 - Adatlapmezők húzása/Fel-Le sorrendje, felirat, fél-/teljes sor és opcionális láthatóság, előnézet. Verziózott SQL-mentés és audit, utolsó 10 előzmény, alap-/előző nézet visszaállítása.
 - A szerepek egyelőre a felületszerkesztésre vonatkoznak. Offline admin-helyreállítás nincs a forrásban; külön jóváhagyásra vár.
 - Ellenőrzés: 148/148, wheel-ok, 15/15 WPF; valódi IPC-s szerepkör/cégvédelem, mentés és hitelesítési adatok elkülönítése, UI-előnézet és adatmegőrzés.
+
+## 2026-10-21 – 0.4.4
+Bevételezés-visszafordítás és eladási kosár/készlet/export javítások; külön konkrét felhasználói engedéllyel offline admin-helyreállítás. 155/155 teszt, 21/21 WPF-render. Lásd docs/BEVETELEZES-ELADAS.md. Teljes dolgozói műveleti jogosultság és élő NAV/PDF továbbra is nyitott feladat.

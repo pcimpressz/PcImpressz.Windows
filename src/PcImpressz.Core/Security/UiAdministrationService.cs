@@ -9,6 +9,7 @@ namespace PcImpressz.Core.Security;
 // The Windows owner remains a trusted local operator; this is not an OS sandbox.
 public sealed class UiAdministrationService(ICompanyDatabase companies, ICompanyDatabase credentials, TimeProvider clock)
 {
+    private sealed record Owner(string Sid);
     private sealed record User(string UserName, string Role, string Salt, string Hash);
     private sealed record BoundSession(Guid Company, string Sid, UiSession Session);
     private readonly Dictionary<string, BoundSession> _sessions = new(StringComparer.Ordinal);
@@ -39,12 +40,14 @@ public sealed class UiAdministrationService(ICompanyDatabase companies, ICompany
         credentials.Execute(input.CompanyId, tx =>
         {
             if (tx.List("accounts", "user/").Count != 0) throw new UnauthorizedAccessException("Az első admin már létre lett hozva. Jelentkezz be.");
+            tx.Write("accounts", "owner", new Owner(sid));
             tx.Write("accounts", "user/" + name, user); return 0;
         });
         return Issue(input.CompanyId, sid, user);
     }
     public UiSession Login(UiLogin input, string sid)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sid);
         var name = Name(input.UserName);
         if (input.Password is null || input.Password.Length > 200) throw new ArgumentException("Érvénytelen bejelentkezés.");
         lock (_gate)
@@ -61,6 +64,7 @@ public sealed class UiAdministrationService(ICompanyDatabase companies, ICompany
                 _failures[input.CompanyId] = (count, count >= 5 ? now.AddMinutes(1) : DateTimeOffset.MinValue);
                 throw new UnauthorizedAccessException("Hibás felhasználónév vagy jelszó.");
             }
+            if (user.Role == "admin") credentials.Execute(input.CompanyId, tx => { if (tx.Get("accounts", "owner") is null) { tx.Write("accounts", "owner", new Owner(sid)); tx.Write("accounts","audit/"+Guid.NewGuid().ToString("N"),new{actor=user.UserName,action="bind-recovery-owner",at=clock.GetUtcNow()}); } return 0; });
             _failures.Remove(input.CompanyId); return Issue(input.CompanyId, sid, user);
         }
     }
@@ -98,6 +102,21 @@ public sealed class UiAdministrationService(ICompanyDatabase companies, ICompany
             tx.Write("accounts", "audit/" + Guid.NewGuid().ToString("N"), new { actor, name, input.Role, at = clock.GetUtcNow() }); return 0;
         });
     }
+    public void RequireRecoveryOwner(Guid company, string sid) => credentials.Execute(company, tx => { var owner=tx.Read<Owner>("accounts","owner"); if(owner is null || owner.Sid!=sid) throw new UnauthorizedAccessException("A helyreállításhoz az első adminhoz rögzített Windows-fiók szükséges. Régi fióknál előbb sikeres adminbejelentkezéssel kell rögzíteni a tulajdonost."); return 0; });
+    // Offline maintenance only: deliberately has no Host/IPC route.
+    public void RecoverLocalAdmin(UiLogin input, string sid)
+    {
+        var name = Name(input.UserName); var replacement = NewUser(name, input.Password, "admin");
+        credentials.Execute(input.CompanyId, tx =>
+        {
+            var owner = tx.Read<Owner>("accounts", "owner");
+            if (owner is null || owner.Sid != sid) throw new UnauthorizedAccessException("A helyreállítást csak az első admin Windows-felhasználója végezheti el.");
+            tx.Write("accounts", "user/" + name, replacement);
+            tx.Write("accounts", "audit/" + Guid.NewGuid().ToString("N"), new { actor = sid, user = name, action = "offline-admin-recovery", at = clock.GetUtcNow() }); return 0;
+        });
+        lock (_gate) { foreach (var token in _sessions.Where(p => p.Value.Company == input.CompanyId).Select(p => p.Key).ToArray()) _sessions.Remove(token); _failures.Remove(input.CompanyId); }
+    }
+
     public void Logout(Guid company, string token, string sid)
     {
         lock (_gate) if (_sessions.TryGetValue(token, out var session) && session.Company == company && session.Sid == sid) _sessions.Remove(token);

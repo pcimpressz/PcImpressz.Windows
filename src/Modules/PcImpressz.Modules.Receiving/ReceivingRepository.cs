@@ -1,4 +1,4 @@
-﻿using PcImpressz.Business;
+using PcImpressz.Business;
 using PcImpressz.Contracts;
 using System.Collections.Concurrent;
 using System.Text;
@@ -33,6 +33,25 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         Locked(request.CompanyId, (directory, state) => WriteClassification(directory, state, request, actor), ct);
     public Task<ReceiptRecord> Import(ReceiptImport request, ImportedDocument document, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (directory, state) => WriteImport(directory, state, request, document, actor), ct);
+
+    public Task<ReceiptRecord> Reverse(ReceiptReverse request, string actor, CancellationToken ct = default) =>
+        Locked(request.CompanyId, (scope, state) =>
+        {
+            var reason = Text(request.Reason, 200, "Visszafordítás oka");
+            if (reason.Length < 3) throw new ArgumentException("A visszafordítás okát legalább 3 karakterrel add meg.");
+            var existing = state.Receipts.SingleOrDefault(r => r.Id == request.Id) ?? throw new ReceivingConflictException("A számla nem található.");
+            if (existing.Data.Status == "visszaforditva") return existing;
+            if (existing.Version != request.Version) throw new ReceivingConflictException("A számla közben változott; frissítsd a listát.");
+            if (existing.Data.Status != "bevetelezve" || !existing.Data.StockPosted || scope.Transaction is null)
+                throw new ArgumentException("Csak a ténylegesen készletre könyvelt bevételezés fordítható vissza.");
+            var original = scope.Transaction.Read<StockOperation>("inventory", "operation/receipt:" + existing.Id.ToString("N"))
+                ?? throw new IOException("A bevételezés készletművelete hiányzik; ellenőrzés szükséges.");
+            StockLedger.Post(scope.Transaction, "receipt-reverse:" + existing.Id.ToString("N"), "receiving", existing.Id,
+                original.Movements.Select(m => new StockChange(m.ProductId, m.ProductName, m.UnitCode, m.Warehouse, -m.Quantity)).ToArray(),
+                "Bevételezés visszafordítása " + existing.Data.Number + ": " + reason, actor, time.GetUtcNow());
+            return Store(scope, state, existing, existing.Data with { Status = "visszaforditva", StockPosted = false,
+                ReversedAt = time.GetUtcNow(), ReversedBy = actor, ReversalReason = reason }, actor, "reverse");
+        }, ct);
 
     private ReceiptRecord WriteManual(ModuleStorageScope scope, ReceiptState state, ReceiptSave request, string actor)
     {
