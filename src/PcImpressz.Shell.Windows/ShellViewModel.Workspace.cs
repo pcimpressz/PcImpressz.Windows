@@ -37,7 +37,7 @@ public sealed partial class ShellViewModel
             _ = PrepareAuthenticationAsync();
         }
     }
-    public bool WorkspaceIsIdle => !_authBusy && !_maintenanceBusy && !_entityPages.Values.Any(p => p.IsBusy);
+    public bool WorkspaceIsIdle => !_authBusy && !_maintenanceBusy && !_entityPages.Values.Any(p => p.IsBusy || p.HasUnresolvedOperation);
     public string CompanyMode => SelectedCompany is { IsDemo: true } ? "DEMÓ CÉG · ELKÜLÖNÍTETT ADATOK" : "SAJÁT CÉGES ADATOK";
     public ICommand CreateCompanyCommand { get; private set; } = null!;
 
@@ -67,7 +67,7 @@ public sealed partial class ShellViewModel
                 : page.ViewKind == "receiving"
                 ? new ReceivingPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts)
                 : new EntityPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts);
-            vm.PropertyChanged += (_, e) => { if (e.PropertyName == "IsBusy") { Changed(nameof(WorkspaceIsIdle));Changed(nameof(CanSeedDemo)); } };
+            vm.PropertyChanged += (_, e) => { if (e.PropertyName is "IsBusy" or "HasUnresolvedOperation") { Changed(nameof(WorkspaceIsIdle));Changed(nameof(CanSeedDemo)); } };
             _entityPages.Add(key, vm);
             if (_companiesLoaded && SelectedCompany is not null) vm.CompanyChanged();
             addedPage = true;
@@ -86,6 +86,7 @@ public sealed partial class ShellViewModel
 
     public bool CanClose()
     {
+        if(_entityPages.Values.Any(p=>p.HasUnresolvedOperation)){MessageBox.Show("Az eladás eredménye még bizonytalan. Az eladási képernyő véglegesítés gombjával ellenőrizd vagy próbáld újra ugyanazt a műveletet.","Eladás lezárása");return false;}
         if (!WorkspaceIsIdle)
         {
             MessageBox.Show("Várd meg a folyamatban lévő művelet végét, majd próbáld újra a bezárást.",

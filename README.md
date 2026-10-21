@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.6
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.7
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -141,3 +141,6 @@ Használat és pontos szerepkörök: [Céges belépés és jogosultságok](docs/
 ## 0.4.6 – Demócég feltöltése mintaadatokkal
 
 A Beállításokban megjelent a **Feltöltés mintaadatokkal** gomb. Csak a kiválasztott demócég adminja indíthatja, előzetes ellenőrzött mentéssel és ismétléskor duplikáció nélkül. A csomag 20 terméket, 5 vevőt, 5 szállítót, kategóriákat, mértékegységeket, két raktár készletét, 8 bevételezést és 10 eladást tartalmaz. A helyi demócég tényleges feltöltése is megtörtént, a meglévő adatok megmaradtak. Útmutató: [Demó mintaadatok](docs/DEMO-MINTAADATOK.md). Ellenőrzés: 162/162 teszt, 33/33 WPF-render.
+## 0.4.7 – Gyors pénztári eladás
+
+Egy keresősor, automatikus név/cikkszám/vonalkód találatok, kattintásra vagy pontos vonalkódra kosárba helyezés. A kosárban közvetlen mennyiség-, bruttóár- és áfamódosítás, soronkénti törlés; véglegesítéskor készpénz/kártya, számlaigénynél élő partnerkereső, kézi vevőfelvétel vagy valódi NAV-adószámlekérdezés. Terméktörzsbeli alapárak, mentett fizetési mód és vevőadat-pillanatkép, bizonytalan küldés visszaellenőrzése. A számlaigény nyilvántartása még nem adóügyi számlakiállítás. Használat: [Pénztári eladás](docs/PENZTARI-ELADAS.md). 168/168 teszt és 39/39 WPF-render. A NAV-protokoll szimulált válasszal ellenőrzött; éles technikai felhasználóval próba még szükséges.

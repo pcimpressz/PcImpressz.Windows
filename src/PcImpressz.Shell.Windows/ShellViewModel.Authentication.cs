@@ -69,14 +69,20 @@ public sealed partial class ShellViewModel
     public async Task LoginAsync(string password,string confirm)
     {
         if(AuthBusy||SelectedCompany is not {} company)return;
-        if(_status?.State!="Ready"||_status.CompanyAuthenticationVersion<1){AuthMessage="Várd meg a friss háttérszolgáltatás elindulását. Korábbi külön indított mag esetén azt is zárd be és indítsd újra.";return;}
+        if(_status?.State!="Ready"||(_status.CompanyAuthenticationVersion<1||_status.CheckoutVersion<1)){AuthMessage="Várd meg a friss háttérszolgáltatás elindulását. Korábbi külön indított mag esetén azt is zárd be és indítsd újra.";return;}
         AuthBusy=true;
         try
         {
             if(NeedsFirstAdmin&&password!=confirm)throw new ArgumentException("A két jelszó nem egyezik.");
             var session=(await _connection.SendAsync(NeedsFirstAdmin?"ui.auth.bootstrap":"ui.auth.login",new UiLogin(company.Id,LoginName,password),_shutdown.Token)).Deserialize<UiSession>()!;
+            var preserveUnresolved=_entityPages.Values.Any(p=>p.HasUnresolvedOperation);
+            if(preserveUnresolved&&session.UserName!=_lockedUser&&session.Role!="admin")
+            {
+                await _connection.SendAsync("ui.auth.logout",new{CompanyId=company.Id,session.Token},_shutdown.Token);
+                AuthMessage="A bizonytalan eladást az előző felhasználó vagy a cég adminja tudja lezárni.";return;
+            }
             _connection.SetSession(company.Id,session);_authConfigured=true;AuthMessage="Bejelentkezve.";AuthChanged();
-            if(_lockedCompany!=company.Id||_lockedUser!=session.UserName)foreach(var page in _entityPages.Values)page.CompanyChanged();
+            if(!preserveUnresolved&&(_lockedCompany!=company.Id||_lockedUser!=session.UserName))foreach(var page in _entityPages.Values)page.CompanyChanged();
             _lockedCompany=null;_lockedUser=null;
             await LoadNavAsync();
         }

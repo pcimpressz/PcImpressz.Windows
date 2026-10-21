@@ -97,6 +97,7 @@ public sealed class CatalogModule : IModule
         context.RegisterPage(Page("products", context.ModuleId, "Terméktörzs", "Cikkszám, kategória, mértékegység és alapparaméterek.", "\uE7B8",
             [new("name", "Termék neve", Required: true), new("sku", "Saját cikkszám", Required: true), new("manufacturerPartNumber", "Gyártói cikkszám"), new("categoryCode", "Kategória kódja"),
              new("unitCode", "Mértékegység kódja", Required: true), new("revision", "Revízió"), new("barcode", "Vonalkód"),
+             new("saleNetUnitPrice","Nettó eladási egységár (Ft)","decimal"), new("saleVatRate","Eladási áfa %","decimal",Required:true,DefaultText:"27"),
              new("description", "Leírás", "multiline"), new("parameters", "Paraméterek (név=érték)", "multiline"),
              new("isPurchaseable", "Beszerzésre jelölhető", "boolean"), new("isSalable", "Eladásra jelölhető", "boolean"),
              new("isActive", "Aktív", "boolean", DefaultChecked: true), new("notes", "Megjegyzés", "multiline")],

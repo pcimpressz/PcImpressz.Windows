@@ -19,6 +19,8 @@ public sealed record UnitData
 }
 public sealed record ProductData
 {
+    public decimal? SaleNetUnitPrice { get; init; }
+    public decimal SaleVatRate { get; init; } = 27;
     public string Name { get; init; } = "";
     public string Sku { get; init; } = "";
     public string ManufacturerPartNumber { get; init; } = "";
@@ -75,6 +77,7 @@ public static class CatalogValidation
     };
     public static ProductData NormalizeProduct(ProductData data)
     {
+        if(data.SaleNetUnitPrice is <0 or >1_000_000_000 || data.SaleNetUnitPrice is {} price && decimal.Round(price,4)!=price || !new decimal[]{0,5,18,27}.Contains(data.SaleVatRate))throw new ArgumentException("Érvénytelen eladási ár vagy áfakulcs.");
         var normalized = data with
         {
             Name = Name(data.Name, "A termék neve"),

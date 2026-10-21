@@ -14,6 +14,12 @@ public sealed class ReceivingModule : IModule
             var report=DemoDataSeeder.Seed(context.GetCompanyDataDirectory,context.Database??throw new InvalidOperationException("A demófeltöltés céges SQLite-adatbázist igényel."),request.CompanyId,context.TimeProvider,actor);
             return Task.FromResult(ReceivingJson.Element(report));
         });
+        Register(context,"taxpayer","receiving.read",CommandAccess.Licensed,async(input,actor,ct)=>
+        {
+            var lookup=ReceivingJson.Read<TaxpayerLookup>(input);
+            var secrets=NavConnectionStore.Read(context.GetCompanyDataDirectory(lookup.CompanyId),lookup.CompanyId)??throw new ArgumentException("Az admin előbb állítsa be a cég NAV-kapcsolatát a Beállításokban.");
+            return ReceivingJson.Element(await NavTaxpayerClient.QueryAsync(secrets,lookup,ct));
+        });
         var repository = new ReceivingRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
         Register(context, "list", "receiving.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {

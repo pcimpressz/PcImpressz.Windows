@@ -35,7 +35,7 @@ internal sealed partial class OperationsPageViewModel
         var selected=SelectedProduct;_filling=true;
         try
         {
-            Products.Clear();foreach(var product in reference.GetProperty("products").EnumerateArray())Products.Add(new(product.GetProperty("id").GetGuid(),Text(product,"name"),Text(product,"sku"),Text(product,"unitCode"),product.GetProperty("availableQuantity").GetDecimal()));
+            Products.Clear();foreach(var product in reference.GetProperty("products").EnumerateArray())Products.Add(ReadProduct(product));
             if(selected is not null&&Products.All(p=>p.Id!=selected.Id))Products.Add(selected with{AvailableQuantity=null});
             SelectedProduct=Products.FirstOrDefault(p=>p.Id==selected?.Id);_stockWarehouse=Warehouse;Changed(nameof(SelectedStockInfo));
         }

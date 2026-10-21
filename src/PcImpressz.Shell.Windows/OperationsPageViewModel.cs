@@ -10,12 +10,9 @@ using PcImpressz.Shell.Customization;
 
 namespace PcImpressz.Shell.Windows;
 
-internal sealed record OperationProduct(Guid Id,string Name,string Sku,string UnitCode,decimal? AvailableQuantity=null)
-{ public string Label => Name+(Sku.Length>0 ? " · "+Sku : ""); }
-internal sealed record OperationCustomer(Guid? Id,string Name);
-internal sealed record SaleBasketLine(Guid ProductId,string Name,string UnitCode,decimal Quantity,decimal NetUnitPrice,decimal VatRate)
-{ public decimal Gross => decimal.Round(Quantity*NetUnitPrice,2,MidpointRounding.AwayFromZero)+decimal.Round(decimal.Round(Quantity*NetUnitPrice,2,MidpointRounding.AwayFromZero)*VatRate/100m,2,MidpointRounding.AwayFromZero); }
-
+internal sealed record OperationProduct(Guid Id,string Name,string Sku,string UnitCode,decimal? AvailableQuantity=null,string Barcode="",string ManufacturerPartNumber="",decimal? NetUnitPrice=null,decimal VatRate=27,string PriceSource="")
+{ public string Label => Name+(Sku.Length>0 ? " · "+Sku : ""); public string StockLabel=>AvailableQuantity?.ToString("0.####",CultureInfo.GetCultureInfo("hu-HU"))+" "+UnitCode; public string PriceLabel=>NetUnitPrice is {} p?decimal.Round(p*(1+VatRate/100m),2,MidpointRounding.AwayFromZero).ToString("N2",CultureInfo.GetCultureInfo("hu-HU"))+" Ft":"Ár megadása a kosárban"; }
+internal sealed record OperationCustomer(Guid? Id,string Name,string TaxId="",string Country="HU",string PostalCode="",string City="",string Address="",bool IsCustomer=true) {public string Label=>Name+(TaxId.Length>0?" · "+TaxId:"")+" · "+PostalCode+" "+City+" "+Address;}
 internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,IColumnList
 {
     private readonly ColumnList _columns;
@@ -36,6 +33,7 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     {
         (Definition,_connection,_company,_shutdown)=(definition,connection,company,shutdown);
         InitializeBasketEditor();
+        InitializeQuickCheckout();
         _columns=new ColumnList(layouts,definition);
         _columns.Changed+=()=>Changed(nameof(LayoutRevision));
         _columns.SortChanged+=PopulateRows;
@@ -63,12 +61,12 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     public bool IsNotBusy=>!IsBusy;
     public bool IsDirty {get=>_dirty;private set{_dirty=value;Changed();}}
     public string Message {get=>_message;private set{_message=value;Changed();}}
-    public string ProductSearch {get=>_productSearch;set{_productSearch=value;Changed();}}
+    public string ProductSearch {get=>_productSearch;set{_productSearch=value;Changed();ScheduleQuickSearch();}}
     public string CustomerSearch {get=>_customerSearch;set{_customerSearch=value;Changed();}}
     public string RecordSearch {get=>_recordSearch;set{_recordSearch=value;Changed();}}
     public string Details {get=>_details;private set{_details=value;Changed();}}
     public string ListNotice {get=>_listNotice;private set{_listNotice=value;Changed();}}
-    public string Warehouse {get=>_warehouse;set{_warehouse=value;Changed();Changed(nameof(SelectedStockInfo));Dirty();}}
+    public string Warehouse {get=>_warehouse;set{if(IsSales&&Basket.Count>0&&value!=_warehouse){Message="A kosárban vannak tételek. Előbb zárd le vagy ürítsd ki az eladást a raktárváltáshoz.";Changed();return;}_warehouse=value;Changed();Changed(nameof(SelectedStockInfo));Dirty();if(IsSales&&!_filling)ScheduleQuickSearch();}}
     public string QuantityText {get=>_quantity;set{_quantity=value;Changed();Dirty();}}
     public string PriceText {get=>_price;set{_price=value;Changed();Dirty();}}
     public string VatText {get=>_vat;set{_vat=value;Changed();Dirty();}}
@@ -95,9 +93,10 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     private void Dirty(){if(!_filling)IsDirty=true;Changed(nameof(BasketTotal));}
     public bool CanWrite=>!IsBusy&&_connection.Allows(Definition.ModuleId+".write");
     public bool CanExport=>!IsBusy&&_connection.Allows(Definition.ModuleId+".export");
-    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));}
+    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanEditSale));Changed(nameof(CanBeginCheckout));Changed(nameof(CheckoutLabel));Changed(nameof(HasUnresolvedOperation));}
     public void CompanyChanged()
     {
+        ResetQuickCheckout();
         _focusedProductId=null;StockScope="Minden termék saját készlete";Changed(nameof(StockScope));_appliedRecordSearch="";_stockWarehouse=null;Changed(nameof(SelectedStockInfo));Details="";ListNotice="";_filling=true;_listing=null;Rows.Clear();Movements.Clear();Basket.Clear();Products.Clear();Customers.Clear();
         SelectedRow=null;SelectedMovement=null;SelectedBasketLine=null;SelectedProduct=null;SelectedCustomer=null;
         _operation=Guid.NewGuid();_filling=false;IsDirty=false;Changed(nameof(BasketTotal));_=LoadAsync();
@@ -129,13 +128,13 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
             var selectedProduct=SelectedProduct;var selectedCustomer=SelectedCustomer;var productId=selectedProduct?.Id;var customerId=selectedCustomer?.Id;
             _filling=true;
             Products.Clear();foreach(var product in refs.GetProperty("products").EnumerateArray())
-                Products.Add(new(product.GetProperty("id").GetGuid(),Text(product,"name"),Text(product,"sku"),Text(product,"unitCode"),product.TryGetProperty("availableQuantity",out var available)?available.GetDecimal():null));
+                Products.Add(ReadProduct(product));
             if(selectedProduct is not null && Products.All(p=>p.Id!=productId))Products.Add(selectedProduct with{AvailableQuantity=null});
             SelectedProduct=Products.FirstOrDefault(p=>p.Id==productId);
             if(IsSales)
             {
                 Customers.Clear();Customers.Add(new(null,"Alkalmi vevő"));
-                foreach(var customer in refs.GetProperty("customers").EnumerateArray())Customers.Add(new(customer.GetProperty("id").GetGuid(),Text(customer,"name")));
+                foreach(var customer in refs.GetProperty("customers").EnumerateArray())Customers.Add(ReadCustomer(customer));
                 if(selectedCustomer is not null && Customers.All(c=>c.Id!=customerId))Customers.Add(selectedCustomer);
                 SelectedCustomer=Customers.FirstOrDefault(c=>c.Id==customerId)??Customers.First();
             }
@@ -196,6 +195,7 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     }
     private async Task SaveAsync()
     {
+        if(IsSales){await OpenCheckoutAsync();return;}
         if(IsBusy)return;
         var committed=false;
         try
@@ -263,8 +263,9 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     private void Reset()
     {
         if(IsBusy)return;
+        if(_pendingSale is not null){Message="Előbb ellenőrizd a bizonytalan eladás eredményét a véglegesítés gombbal.";return;}
         if(IsDirty&&MessageBox.Show("Elveted a szerkesztett adatokat? Bizonytalan beküldés után előbb frissítsd a bizonylatlistát.","Új művelet",MessageBoxButton.YesNo)!=MessageBoxResult.Yes)return;
-        Basket.Clear();_operation=Guid.NewGuid();IsDirty=false;Changed(nameof(BasketTotal));Message="Új művelet indítható.";
+        ResetQuickCheckout();Basket.Clear();_operation=Guid.NewGuid();IsDirty=false;Changed(nameof(BasketTotal));Message="Új művelet indítható.";
     }
     private async Task ExportAsync()
     {

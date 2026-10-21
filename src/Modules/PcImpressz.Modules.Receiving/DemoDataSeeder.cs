@@ -51,7 +51,7 @@ public static class DemoDataSeeder
             for(var i=0;i<20;i++)products[i]=catalog.SaveProduct(new(company,null,0,new()
             {
                 Name="[DEMO] "+productNames[i],Sku=$"DEMO-{i+1:000}",ManufacturerPartNumber=$"DEMO-MPN-{i+1:000}",Barcode=$"DEMO-BC-{i+1:000}",UnitCode=i==13?"M":"DB",CategoryCode=categories[i%4].Item1,
-                IsActive=true,IsPurchaseable=true,IsSalable=true,Description="Teszttermék a PC-Impressz demóhoz.",Parameters=$"minta=igen\nnévleges tesztár={prices[i]}",
+                SaleNetUnitPrice=prices[i],SaleVatRate=i==16?5:27,IsActive=true,IsPurchaseable=true,IsSalable=true,Description="Teszttermék a PC-Impressz demóhoz.",Parameters=$"minta=igen\nnévleges tesztár={prices[i]}",
                 Notes="DEMO MINTAADAT – nem valós termékajánlat. A tesztár a mintabizonylatokban és a paraméterekben található."
             }),actor).GetAwaiter().GetResult();
             var now=time.GetUtcNow();

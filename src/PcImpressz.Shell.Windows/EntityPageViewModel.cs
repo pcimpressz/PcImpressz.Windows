@@ -17,6 +17,7 @@ public interface IWorkspacePage : INotifyPropertyChanged
     EntityPageDescriptor Definition { get; }
     bool IsDirty { get; }
     bool IsBusy { get; }
+    bool HasUnresolvedOperation => false;
     void CompanyChanged();
     void PermissionsChanged();
 }
@@ -312,6 +313,12 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
             {
                 if (field.Definition.Required && string.IsNullOrWhiteSpace(field.Text))
                     throw new ArgumentException(field.Definition.Label + ": kötelező mező.");
+                if(field.Definition.Kind=="decimal")
+                {
+                    if(string.IsNullOrWhiteSpace(field.Text)){data[field.Definition.Id]=null;continue;}
+                    if(!decimal.TryParse(field.Text.Replace(" ","").Replace(",","."),System.Globalization.NumberStyles.AllowDecimalPoint|System.Globalization.NumberStyles.AllowLeadingSign,System.Globalization.CultureInfo.InvariantCulture,out var amount))throw new ArgumentException(field.Definition.Label+": számot adj meg.");
+                    data[field.Definition.Id]=JsonValue.Create(amount);continue;
+                }
                 data[field.Definition.Id] = field.Definition.Kind == "boolean"
                     ? JsonValue.Create(field.Checked) : JsonValue.Create(field.Text);
             }

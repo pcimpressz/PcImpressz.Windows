@@ -17,7 +17,7 @@ A munkamenet 30 percig érvényes; újraindításkor vagy visszavonáskor ismét
 - **Eladó:** partner- és termékadatok, készlet megtekintése; eladás és visszafordítás, eladási export. Törzsadatot, bevételezést vagy készletkorrekciót nem írhat.
 - **Megtekintő:** partner- és terméklista, készlet megtekintése. A korábbi `user` fiókok ezt a szerepet kapják, nem teljes üzleti hozzáférést.
 
-A partnerdosszié több üzleti modul történetét tartalmazza, ezért ebben a változatban adminhoz kötött. Új partner létrehozása is adminfeladat. A demóadat-törlés kizárólag a bejelentkezéshez tartozó kiválasztott demócégre terjed ki.
+A partnerdosszié több üzleti modul történetét tartalmazza, ezért ebben a változatban adminhoz kötött. Általános partnerkezelés adminfeladat. A 0.4.7-től az eladó a pénztárban korlátozott vevőfelvételt és NAV-adószámlekérdezést használhat; ez nem ad általános partnerírási jogot. A demóadat-törlés kizárólag a bejelentkezéshez tartozó kiválasztott demócégre terjed ki.
 
 ## Ellenőrzés és korlátok
 

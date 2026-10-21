@@ -18,6 +18,7 @@ internal sealed class OperationsPageView:UserControl
         if(_observed is not null && _layoutHandler is not null)_observed.PropertyChanged-=_layoutHandler;
         if(DataContext is not OperationsPageViewModel page)return;
         _observed=page;
+        if(page.IsSales){Content=new SalesCheckoutView{DataContext=page};return;}
         var root=new StackPanel();
         var actions=new WrapPanel();actions.Children.Add(Button("Frissítés","RefreshCommand"));actions.Children.Add(Button("CSV export","ExportCommand"));actions.Children.Add(ListGrid.ColumnButton(()=>DataContext as IColumnList));root.Children.Add(actions);
         var message=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,8,0,16)};message.SetResourceReference(TextBlock.ForegroundProperty,"AccentBrush");message.SetBinding(TextBlock.TextProperty,new Binding("Message"));root.Children.Add(message);

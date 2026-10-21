@@ -40,6 +40,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                     var request = await LocalProtocol.ReadAsync<LocalRequest>(pipe, deadline.Token);
                     response = await Execute(request, actor, deadline.Token);
                 }
+                catch (RecordNotFoundException ex) { response = new(false, Error: ex.Message, Code: "not-found"); }
                 catch (UnauthorizedAccessException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
                 catch (CommandDeniedException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -100,6 +101,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
         void Admin(Guid? company=null) => administration.RequireAdmin(company ?? request.AuthCompanyId ?? throw new UnauthorizedAccessException("Adminbejelentkezés szükséges."),request.SessionToken,actor);
         switch (request.Operation)
         {
+            case "sales.customer-nav": return await LookupCheckoutCustomer(request,actor,ct);
             case "companies.list": return new(true, JsonSerializer.SerializeToElement(companies.List()));
             case "companies.create":
                 if(companies.List().Any(c=>administration.Status(c.Id).Configured)) Admin();
@@ -141,6 +143,12 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 if ((command.ModuleId=="receiving" && command.Command=="nav-save") || (command.ModuleId=="partners" && command.Command=="dossier"))
                     Admin(command.CompanyId);
                 var caller = new CallerIdentity(actor+"/"+session.UserName, commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(session.Role,p)).ToHashSet(StringComparer.Ordinal));
+                if(command.ModuleId=="sales"&&command.Command=="customer-save")CustomerWriteLicense();
+                if(command.ModuleId=="sales"&&command.Command=="save")
+                {
+                    var checkout=await commands.ExecuteAsync(new("sales","checkout-info",JsonSerializer.SerializeToElement(payload)),caller,ct);
+                    if(!checkout.TryGetProperty("version",out var version)||version.GetInt32()<1)throw new CommandDeniedException("Az eladásmodult frissíteni kell a pénztári fizetés és számlaigény mentéséhez.");
+                }
                 var result = await commands.ExecuteAsync(new(command.ModuleId, command.Command,
                     JsonSerializer.SerializeToElement(payload)), caller, ct);
                 return new(true, result);

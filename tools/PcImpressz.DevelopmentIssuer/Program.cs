@@ -85,20 +85,20 @@ void InstallModule(ECDsa key, string id, string assemblyName, string entryType, 
     var moduleBytes = File.ReadAllBytes(dll);
     var manifest = new ModuleManifest
     {
-        SchemaVersion = 1, Id = id, Version = "0.4.6", ApiVersion = PlatformContract.ApiVersion,
+        SchemaVersion = 1, Id = id, Version = "0.4.7", ApiVersion = PlatformContract.ApiVersion,
         EntryAssembly = assemblyName + ".dll", EntryType = entryType,
         Files = new() { [assemblyName + ".dll"] = Convert.ToHexString(SHA256.HashData(moduleBytes)) },
         Dependencies = dependencies ?? []
     };
     var domain = Path.Combine(Path.GetDirectoryName(dll)!, "PcImpressz.Business.dll");
     if (File.Exists(domain)) manifest.Files["PcImpressz.Business.dll"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(domain)));
-    if(id=="receiving")foreach(var name in new[]{"PcImpressz.Modules.Partners.dll","PcImpressz.Modules.Catalog.dll","PcImpressz.Modules.Sales.dll"})
+    foreach(var name in id=="receiving"?new[]{"PcImpressz.Modules.Partners.dll","PcImpressz.Modules.Catalog.dll","PcImpressz.Modules.Sales.dll"}:id=="sales"?new[]{"PcImpressz.Modules.Partners.dll"}:Array.Empty<string>())
         manifest.Files[name]=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(dll)!,name))));
     var package = Path.Combine(data, "modules", id);
     Directory.CreateDirectory(package);
     Atomic(Path.Combine(package, manifest.EntryAssembly), moduleBytes);
     if (File.Exists(domain)) Atomic(Path.Combine(package, "PcImpressz.Business.dll"), File.ReadAllBytes(domain));
-    if(id=="receiving")foreach(var name in new[]{"PcImpressz.Modules.Partners.dll","PcImpressz.Modules.Catalog.dll","PcImpressz.Modules.Sales.dll"})
+    foreach(var name in id=="receiving"?new[]{"PcImpressz.Modules.Partners.dll","PcImpressz.Modules.Catalog.dll","PcImpressz.Modules.Sales.dll"}:id=="sales"?new[]{"PcImpressz.Modules.Partners.dll"}:Array.Empty<string>())
         Atomic(Path.Combine(package,name),File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(dll)!,name)));
     AtomicText(Path.Combine(package, "manifest.jws"), Sign(key, "dev-module-key", ModuleManifest.DocumentType, manifest));
 }

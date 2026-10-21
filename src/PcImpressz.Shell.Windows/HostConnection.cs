@@ -6,7 +6,8 @@ using PcImpressz.Contracts;
 
 namespace PcImpressz.Shell.Windows;
 
-internal sealed class HostConnection(string directory, string? hostOverride)
+internal sealed class HostCommandException(string message,string? code):InvalidOperationException(message) {public string? Code {get;}=code;}
+internal sealed class HostConnection(string directory, string? hostOverride, Func<string,object,CancellationToken,Task<JsonElement>>? sender = null)
 {
     private Process? _ownedHost;
     internal UiSession? Session {get;private set;}
@@ -35,6 +36,7 @@ internal sealed class HostConnection(string directory, string? hostOverride)
 
     public async Task<JsonElement> SendAsync(string operation, object payload, CancellationToken ct)
     {
+        if(sender is not null)return await sender(operation,payload,ct);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(100));
         await using var pipe = new NamedPipeClientStream(".", DiagnosticChannel.ForDirectory(directory) + "-commands",
@@ -42,7 +44,7 @@ internal sealed class HostConnection(string directory, string? hostOverride)
         await pipe.ConnectAsync(3000, deadline.Token);
         await LocalProtocol.WriteAsync(pipe, new LocalRequest(operation, JsonSerializer.SerializeToElement(payload), SessionCompany, Session?.Token), deadline.Token);
         var result = await LocalProtocol.ReadAsync<LocalResponse>(pipe, deadline.Token);
-        if (!result.Success) throw new InvalidOperationException(result.Error ?? "A művelet nem sikerült.");
+        if (!result.Success) throw new HostCommandException(result.Error ?? "A művelet nem sikerült.",result.Code);
         return result.Data ?? JsonSerializer.SerializeToElement(new { });
     }
 

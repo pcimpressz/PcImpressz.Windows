@@ -31,7 +31,7 @@ internal static class HostIntegrationTests
             new(){ModuleId="catalog",Capabilities=["catalog.write","catalog.import"],ExpiresAt=crypto.License.Exp},
             new(){ModuleId="inventory",Capabilities=["inventory.write"],ExpiresAt=crypto.License.Exp},
             new(){ModuleId="sales",Capabilities=["sales.write"],ExpiresAt=crypto.License.Exp},
-            new(){ModuleId="receiving",Capabilities=["receiving.write"],ExpiresAt=crypto.License.Exp}]};crypto.Refresh();
+            new(){ModuleId="receiving",Capabilities=["receiving.write","receiving.read"],ExpiresAt=crypto.License.Exp}]};crypto.Refresh();
         File.WriteAllText(Path.Combine(dir.Path,"installation-id.txt"),install);
         File.WriteAllText(Path.Combine(dir.Path,"settings.json"),JsonSerializer.Serialize(new{Product=new{Issuer="test-issuer",OrganizationId="company"}}));
         var keys=JsonSerializer.Serialize(new Dictionary<string,string>{["test-key"]=crypto.Key.ExportSubjectPublicKeyInfoPem()});
@@ -294,7 +294,27 @@ internal static class HostIntegrationTests
                 Console.WriteLine($"PASS existing company backup rehearsal: {masters.Products.Length} products, {masters.Partners.Length} partners; warehouse receipt, seller sale, stock protection and both reversals; source unchanged.");
             }
 
+            var checkoutCompany=(await Send("companies.create",new CreateCompanyRequest("Pénztári szerepkörpróba",true))).Data!.Value.GetProperty("Id").GetGuid();
+            await Send("ui.auth.bootstrap",new UiLogin(checkoutCompany,"admin","Test-only-password-2026"));
+            Check.True((await Send("companies.seed-demo",new CompanyDemoSeedRequest(checkoutCompany))).Success);
+            await Send("ui.users.create",new UiCreateUser(checkoutCompany,sessionTokens[checkoutCompany],"cashier","Test-only-password-2026","sales"));
+            var cashier=(await Send("ui.auth.login",new UiLogin(checkoutCompany,"cashier","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+            var customerInput=new CheckoutCustomerSave(checkoutCompany,"Pénztári tesztvevő","11111111-2-42","HU","1111","Budapest","Próba utca 1.");
+            var createdCustomer=await Send("module.execute",new ModuleCommandRequest(checkoutCompany,"sales","customer-save",JsonSerializer.SerializeToElement(customerInput)),cashier.Token);Check.True(createdCustomer.Success,createdCustomer.Error??"Customer create failed");
+            var checkoutCustomerId=createdCustomer.Data!.Value.GetProperty("id").GetGuid();
+            var customerAgain=await Send("module.execute",new ModuleCommandRequest(checkoutCompany,"sales","customer-save",JsonSerializer.SerializeToElement(customerInput with{TaxId="11111111"})),cashier.Token);Check.True(customerAgain.Success);Check.Equal(checkoutCustomerId,customerAgain.Data!.Value.GetProperty("id").GetGuid());
+            Check.True(!(await Send("module.execute",new ModuleCommandRequest(checkoutCompany,"partners","save",JsonSerializer.SerializeToElement(new{id=(Guid?)null,version=0,data=new{name="Tiltott általános írás"}})),cashier.Token)).Success);
+            var checkoutProducts=(await Catalog(checkoutCompany,"products-list",new{search="DEMO-001"})).Data!.Value.GetProperty("rows");var checkoutProductId=checkoutProducts[0].GetProperty("id").GetGuid();
+            var missingCheckout=await Send("module.execute",new ModuleCommandRequest(checkoutCompany,"sales","get",JsonSerializer.SerializeToElement(new{id=Guid.NewGuid()})),cashier.Token);Check.True(!missingCheckout.Success);Check.Equal("not-found",missingCheckout.Code);
+            var checkoutOperation=Guid.NewGuid();var checkoutPayload=new{operationId=checkoutOperation,customerId=checkoutCustomerId,warehouse="Bolt",lines=new[]{new{productId=checkoutProductId,quantity=1m,netUnitPrice=100m,vatRate=27m}},paymentMethod="card",invoiceRequested=true};
+            var checkoutSale=await Send("module.execute",new ModuleCommandRequest(checkoutCompany,"sales","save",JsonSerializer.SerializeToElement(checkoutPayload)),cashier.Token);Check.True(checkoutSale.Success,checkoutSale.Error??"Checkout failed");
+            Check.Equal("card",checkoutSale.Data!.Value.GetProperty("paymentMethod").GetString());Check.True(checkoutSale.Data.Value.GetProperty("invoiceRequested").GetBoolean());Check.Equal(customerInput.Name,checkoutSale.Data.Value.GetProperty("invoiceCustomer").GetProperty("name").GetString());
+            Check.True((await Send("module.execute",new ModuleCommandRequest(checkoutCompany,"sales","save",JsonSerializer.SerializeToElement(checkoutPayload)),cashier.Token)).Success);
+            var navWithoutConfiguration=await Send("sales.customer-nav",new TaxpayerLookup(checkoutCompany,"22222222"),cashier.Token);Check.True(!navWithoutConfiguration.Success);Check.True(navWithoutConfiguration.Error!.Contains("NAV-kapcsolat",StringComparison.Ordinal),navWithoutConfiguration.Code+": "+navWithoutConfiguration.Error);
+            Check.Equal(11,(await Module(checkoutCompany,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
+
             File.Delete(Path.Combine(dir.Path,"license.jws"));
+            Check.True((await Send("module.execute",new ModuleCommandRequest(checkoutCompany,"sales","get",JsonSerializer.SerializeToElement(new{id=checkoutOperation})),cashier.Token)).Success);
             Check.True(!(await Send("companies.seed-demo",new CompanyDemoSeedRequest(b))).Success);
             var denied=await Module(a,"save",new{id=(Guid?)null,version=0,data=new{name="Nem menthető",isActive=true}});
             Check.True(!denied.Success);Check.Equal("denied",denied.Code);Check.True((await Module(a,"export",new{})).Success);
@@ -311,7 +331,7 @@ internal static class HostIntegrationTests
             var assembly="PcImpressz.Modules."+char.ToUpperInvariant(id[0])+id[1..];
             var package=Path.Combine(dir.Path,"modules",id);Directory.CreateDirectory(package);
             var files=new Dictionary<string,string>();
-            foreach(var name in (id=="receiving"?new[]{assembly+".dll","PcImpressz.Business.dll","PcImpressz.Modules.Partners.dll","PcImpressz.Modules.Catalog.dll","PcImpressz.Modules.Sales.dll"}:new[]{assembly+".dll","PcImpressz.Business.dll"}))
+            foreach(var name in (id=="receiving"?new[]{assembly+".dll","PcImpressz.Business.dll","PcImpressz.Modules.Partners.dll","PcImpressz.Modules.Catalog.dll","PcImpressz.Modules.Sales.dll"}:id=="sales"?new[]{assembly+".dll","PcImpressz.Business.dll","PcImpressz.Modules.Partners.dll"}:new[]{assembly+".dll","PcImpressz.Business.dll"}))
             {
                 var bytes=File.ReadAllBytes(Path.Combine(root,"src","Modules",assembly,"bin","Release","net10.0",name));
                 File.WriteAllBytes(Path.Combine(package,name),bytes);files[name]=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using PcImpressz.Contracts;
 using PcImpressz.Core.Commands;
 using PcImpressz.Core.Security;
@@ -141,7 +141,7 @@ public sealed class ModuleRuntime(
                 || (page.DossierCommand is not null && !Identifiers.IsValid(page.DossierCommand))
                 || page.Fields.Length is < 1 or > 40 || page.Columns.Length is < 1 or > 15
                 || page.Fields.Select(f => f.Id).Distinct().Count() != page.Fields.Length
-                || page.Fields.Any(f => (string.IsNullOrEmpty(f.Id) || f.Id.Length > 80 || f.Id.Any(c => !char.IsAsciiLetterOrDigit(c))) || f.Kind is not ("text" or "multiline" or "boolean")))
+                || page.Fields.Any(f => (string.IsNullOrEmpty(f.Id) || f.Id.Length > 80 || f.Id.Any(c => !char.IsAsciiLetterOrDigit(c))) || f.Kind is not ("text" or "multiline" or "boolean" or "decimal")))
                 throw new InvalidOperationException("Érvénytelen modulnézet.");
         }
     }

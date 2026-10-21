@@ -296,7 +296,7 @@ public sealed partial class ShellViewModel : Observable
                 _connection.StartIfNeeded();
                 status = await _connection.ReadAsync(_shutdown.Token);
             }
-            if(status.State=="Ready"&&status.CompanyAuthenticationVersion<1)throw new InvalidOperationException("Régi háttérszolgáltatás fut. Zárd be a programot és a korábban külön indított magot, majd indítsd újra a Start.cmd fájllal.");
+            if(status.State=="Ready"&&(status.CompanyAuthenticationVersion<1||status.CheckoutVersion<1))throw new InvalidOperationException("Régi háttérszolgáltatás fut. Zárd be a programot és a korábban külön indított magot, majd indítsd újra a Start.cmd fájllal.");
             _status = status;
             _lastConnectionError = null;
             _connectionMessage = "A maghoz kapcsolódva";

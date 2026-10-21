@@ -7,36 +7,28 @@ using PcImpressz.Contracts;
 
 namespace PcImpressz.Modules.Sales;
 public sealed record SaleLineDraft(Guid ProductId,decimal Quantity,decimal NetUnitPrice,decimal VatRate);
-public sealed record SaleRequest(Guid CompanyId,Guid OperationId,Guid? CustomerId,string Warehouse,SaleLineDraft[] Lines);
+public sealed record SaleRequest(Guid CompanyId,Guid OperationId,Guid? CustomerId,string Warehouse,SaleLineDraft[] Lines,string PaymentMethod="cash",bool InvoiceRequested=false);
 public sealed record SaleReverse(Guid CompanyId,Guid Id,long Version);
 public sealed record SaleLine(Guid ProductId,string Name,string UnitCode,decimal Quantity,decimal NetUnitPrice,decimal VatRate,decimal Net,decimal Vat);
 public sealed record SaleRecord(Guid Id,long Version,string Number,Guid? CustomerId,string CustomerName,string Warehouse,string Currency,
-    SaleLine[] Lines,decimal Net,decimal Vat,decimal Gross,string Status,DateTimeOffset At,string Actor,string Fingerprint,DateTimeOffset? ReversedAt=null,string? ReversedBy=null);
+    SaleLine[] Lines,decimal Net,decimal Vat,decimal Gross,string Status,DateTimeOffset At,string Actor,string Fingerprint,DateTimeOffset? ReversedAt=null,string? ReversedBy=null,string? PaymentMethod=null,bool InvoiceRequested=false,BillingCustomer? InvoiceCustomer=null);
 public sealed record SaleCounter(int Value);
-public sealed class SalesModule:IModule
+public sealed partial class SalesModule:IModule
 {
     public ValueTask StartAsync(IModuleContext context,CancellationToken cancellationToken)
     {
-        DomainCommands.Register(context,"references","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>
-        {
-            var warehouse=input.TryGetProperty("warehouse",out var wh)?StockLedger.Warehouse(wh.GetString()):"Bolt";
-            var quantities=StockLedger.Balances(tx).Where(b=>b.Warehouse==warehouse).ToDictionary(b=>b.ProductId,b=>b.Quantity);
-            return DomainCommands.Json(new {
-                products=CompanyReferenceQueries.Products(tx).Where(p=>p.IsActive&&p.IsSalable&&DomainCommands.Matches(p.Name+" "+p.Sku+" "+p.Barcode+" "+p.ManufacturerPartNumber,DomainCommands.Search(input))).Take(200)
-                    .Select(p=>new{p.Id,p.Name,p.Sku,p.Barcode,p.ManufacturerPartNumber,p.UnitCode,availableQuantity=quantities.GetValueOrDefault(p.Id)}),
-                customers=CompanyReferenceQueries.Partners(tx).Where(p=>p.IsCustomer&&p.IsActive&&DomainCommands.Matches(p.Name+" "+p.TaxId,DomainCommands.Search(input,"customerSearch"))).Take(200) });
-        });
+        RegisterCheckout(context);
         DomainCommands.Register(context,"list","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>
             DomainCommands.Json(new {total=MatchingRecords(tx,input).Length,rows=MatchingRecords(tx,input).Take(200)
-                .Select(s=>new{s.Id,s.Version,s.Number,s.CustomerName,s.Warehouse,s.Currency,s.Net,s.Vat,s.Gross,s.Status,statusLabel=s.Status=="vegleges"?"Végleges":"Visszafordítva",s.At})}));
+                .Select(s=>new{s.Id,s.Version,s.Number,s.CustomerName,s.Warehouse,s.Currency,s.Net,s.Vat,s.Gross,s.Status,s.PaymentMethod,s.InvoiceRequested,statusLabel=s.Status=="vegleges"?"Végleges":"Visszafordítva",s.At})}));
         DomainCommands.Register(context,"get","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>
-            DomainCommands.Json(tx.Read<SaleRecord>("sales","sale/"+input.GetProperty("id").GetGuid().ToString("N")) ?? throw new ArgumentException("Az eladás nem található.")));
+            DomainCommands.Json(tx.Read<SaleRecord>("sales","sale/"+input.GetProperty("id").GetGuid().ToString("N")) ?? throw new RecordNotFoundException("Az eladás nem található.")));
         DomainCommands.Register(context,"save","sales.write",CommandAccess.Licensed,(tx,input,actor)=>
             DomainCommands.Json(Post(tx,DomainCommands.Read<SaleRequest>(input),actor,context.TimeProvider.GetUtcNow())));
         DomainCommands.Register(context,"reverse","sales.write",CommandAccess.Licensed,(tx,input,actor)=>
             DomainCommands.Json(Reverse(tx,DomainCommands.Read<SaleReverse>(input),actor,context.TimeProvider.GetUtcNow())));
         DomainCommands.Register(context,"export","sales.export",CommandAccess.RecoveryReadOnly,(tx,input,_)=>DomainCommands.Json(new {
-            csv=DomainCommands.Csv(new[]{new[]{"Bizonylat","Vevő","Nettó","Áfa","Bruttó","Pénznem","Állapot"}}.Concat(MatchingRecords(tx,input).Select(s=>new[]{s.Number,s.CustomerName,s.Net.ToString(CultureInfo.InvariantCulture),s.Vat.ToString(CultureInfo.InvariantCulture),s.Gross.ToString(CultureInfo.InvariantCulture),s.Currency,s.Status})))}));
+            csv=DomainCommands.Csv(new[]{new[]{"Bizonylat","Vevő","Nettó","Áfa","Bruttó","Pénznem","Állapot","Fizetés","Számlaigény"}}.Concat(MatchingRecords(tx,input).Select(s=>new[]{s.Number,s.CustomerName,s.Net.ToString(CultureInfo.InvariantCulture),s.Vat.ToString(CultureInfo.InvariantCulture),s.Gross.ToString(CultureInfo.InvariantCulture),s.Currency,s.Status,s.PaymentMethod??"ismeretlen",s.InvoiceRequested?"igen":"nem"})))}));
         context.RegisterPage(new("sales",context.ModuleId,"Eladás","Helyi eladási bizonylat és készletcsökkentés. Nem adóügyi számla.","\uE719",
             [new("number","Bizonylat")],[new("number","Bizonylat"),new("customerName","Vevő"),new("gross","Bruttó"),new("statusLabel","Állapot")],new("list","save","reverse","export")) {ViewKind="sales"});
         return ValueTask.CompletedTask;
@@ -47,12 +39,21 @@ public sealed class SalesModule:IModule
     public static SaleRecord Post(ICompanyTransaction tx,SaleRequest request,string actor,DateTimeOffset at)
     {
         if(request.OperationId==Guid.Empty || request.Lines is null || request.Lines.Length is <1 or >400 || request.Lines.Any(l=>l is null))throw new ArgumentException("Egy eladáshoz 1–400 tétel és műveletazonosító kell.");
-        var fingerprint=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {request.OperationId,request.CustomerId,request.Warehouse,request.Lines},CompanyDocuments.Json))));
+        if(request.PaymentMethod is not ("cash" or "card"))throw new ArgumentException("Válassz készpénzes vagy kártyás fizetést.");
+        if(request.InvoiceRequested&&request.CustomerId is null)throw new ArgumentException("Számlaigényhez válassz vevőt.");
+        var fingerprint=Fingerprint(request);
+        var legacyFingerprint=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {request.OperationId,request.CustomerId,request.Warehouse,request.Lines},CompanyDocuments.Json))));
         var key="sale/"+request.OperationId.ToString("N");
         if(tx.Read<SaleRecord>("sales",key) is { } existing)
-        {if(existing.Fingerprint!=fingerprint)throw new ArgumentException("Ezzel az azonosítóval másik eladás készült.");return existing;}
+        {if(existing.Fingerprint!=fingerprint && !(existing.PaymentMethod is null&&!request.InvoiceRequested&&request.PaymentMethod=="cash"&&existing.Fingerprint==legacyFingerprint))throw new ArgumentException("Ezzel az azonosítóval másik eladás készült.");return existing;}
         var customer=request.CustomerId is null ? null : CompanyReferenceQueries.Partners(tx).SingleOrDefault(p=>p.Id==request.CustomerId&&p.IsActive&&p.IsCustomer)
             ?? throw new ArgumentException("A kiválasztott vevő nem aktív.");
+        BillingCustomer? billing=null;
+        if(request.InvoiceRequested)
+        {
+            billing=CompanyReferenceQueries.BillingCustomers(tx).SingleOrDefault(c=>c.Id==request.CustomerId&&c.IsActive&&c.IsCustomer)??throw new ArgumentException("A vevő nem aktív.");
+            if(new[]{billing.Name,billing.Country,billing.PostalCode,billing.City,billing.Address}.Any(string.IsNullOrWhiteSpace))throw new ArgumentException("Számlaigényhez a vevő neve és teljes címe szükséges.");
+        }
         var warehouse=StockLedger.Warehouse(request.Warehouse);
         var products=CompanyReferenceQueries.Products(tx);
         var lines=request.Lines.Select(line=>
@@ -70,7 +71,7 @@ public sealed class SalesModule:IModule
         StockLedger.Post(tx,"sale:"+request.OperationId.ToString("N"),"sales",request.OperationId,
             lines.Select(l=>new StockChange(l.ProductId,l.Name,l.UnitCode,warehouse,-l.Quantity)).ToArray(),"Eladás "+number,actor,at);
         var netTotal=lines.Sum(l=>l.Net);var vatTotal=lines.Sum(l=>l.Vat);
-        var record=new SaleRecord(request.OperationId,1,number,customer?.Id,customer?.Name??"Alkalmi vevő",warehouse,"HUF",lines,netTotal,vatTotal,netTotal+vatTotal,"vegleges",at,actor,fingerprint);
+        var record=new SaleRecord(request.OperationId,1,number,customer?.Id,customer?.Name??"Alkalmi vevő",warehouse,"HUF",lines,netTotal,vatTotal,netTotal+vatTotal,"vegleges",at,actor,fingerprint,PaymentMethod:request.PaymentMethod,InvoiceRequested:request.InvoiceRequested,InvoiceCustomer:billing);
         tx.Write("sales",key,record);tx.Write("sales","counter/"+year,new SaleCounter(counter+1));return record;
     }
     public static SaleRecord Reverse(ICompanyTransaction tx,SaleReverse request,string actor,DateTimeOffset at)
