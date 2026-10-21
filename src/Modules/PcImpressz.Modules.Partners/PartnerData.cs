@@ -28,9 +28,6 @@ public sealed record PartnerSave(Guid CompanyId, Guid? Id, long Version, Partner
 public sealed record PartnerQuery(Guid CompanyId, string Search = "", string Filter = "all", int Page = 0, int PageSize = 50,
     string Sort = "", bool Descending = false);
 public sealed record PartnerArchive(Guid CompanyId, Guid Id, long Version);
-public sealed record ImportOptions(Guid CompanyId, string ServerUrl, string ApiToken, bool AllowLocalHttp = false);
-public sealed record ImportCommit(Guid CompanyId, Guid PreviewId);
-public sealed record ImportPreview(Guid PreviewId, int NewCount, int SkippedCount, int InvalidCount, string[] Warnings, PartnerData[] Sample);
 public sealed class PartnerConflictException(string message) : Exception(message);
 public static class PartnerJson
 {

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using PcImpressz.Contracts;
 
 namespace PcImpressz.Core.Companies;
@@ -23,7 +23,7 @@ public sealed class CompanyStore
             return list;
         }
     }
-    public CompanyInfo Create(string name, bool isDemo)
+    public CompanyInfo Create(string name, bool isDemo, Action<string>? initialize = null)
     {
         lock (_gate)
         {
@@ -35,6 +35,7 @@ public sealed class CompanyStore
             if (all.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 throw new ArgumentException("Már van ilyen nevű cég.");
             var company = new CompanyInfo(Guid.NewGuid(), name, isDemo, DateTimeOffset.UtcNow);
+            initialize?.Invoke(CompanyFolder(company.Id));
             Directory.CreateDirectory(_directory);
             var file = Path.Combine(_directory, "companies.json");
             var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -84,6 +85,14 @@ public sealed class CompanyStore
             foreach (var entry in Directory.EnumerateFileSystemEntries(current)) pending.Push(entry);
         }
         Directory.Delete(directory, recursive: true);
+    }
+    public string DataDirectory(Guid companyId)
+    {
+        lock (_gate)
+        {
+            if (!List().Any(c => c.Id == companyId)) throw new ArgumentException("A kiválasztott cég nem létezik.");
+            return CompanyFolder(companyId);
+        }
     }
     public string ModuleDataDirectory(Guid companyId, string moduleId)
     {

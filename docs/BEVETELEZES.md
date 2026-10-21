@@ -1,4 +1,6 @@
-# Bevételezés – 0.3
+﻿# Bevételezés – 0.3
+
+**v0.4 frissítés:** a lenti v0.3 leírás a korábbi működés dokumentuma. A Host most cégenként SQLite-adatbázist használ; a régi JSON-fájlok migrációs források. A bevételezés már készletet mozgat, az eladás és a cégmentés elkészült. Az aktuális használat és korlátok: [Készlet, eladás és cégmentés](KESZLET-ELADAS-ES-MENTES.md).
 
 A bevételezés bejövő számlát tart. A lista elején lehet választani, honnan jön a számla. Ami bekerül, új állapotba kerül, és a besorolás dönti el a sorsát: bevételezés, költség vagy függő. A lezárt számla nem írható felül.
 

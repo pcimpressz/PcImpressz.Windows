@@ -32,12 +32,13 @@ public sealed partial class ShellViewModel
             _ = LoadNavAsync();
         }
     }
-    public bool WorkspaceIsIdle => !_entityPages.Values.Any(p => p.IsBusy);
+    public bool WorkspaceIsIdle => !_maintenanceBusy && !_entityPages.Values.Any(p => p.IsBusy);
     public string CompanyMode => SelectedCompany is { IsDemo: true } ? "DEMÓ CÉG · ELKÜLÖNÍTETT ADATOK" : "SAJÁT CÉGES ADATOK";
     public ICommand CreateCompanyCommand { get; private set; } = null!;
 
     private void InitializeWorkspace()
     {
+        InitializeBackups();
         CreateCompanyCommand = new RelayCommand(CreateCompany);
         ClearDemoDataCommand = new RelayCommand(() => _ = ClearDemoDataAsync());
     }
@@ -55,7 +56,9 @@ public sealed partial class ShellViewModel
         {
             var key = page.ModuleId + "." + page.Id;
             if (_entityPages.ContainsKey(key)) continue;
-            IWorkspacePage vm = page.ModuleId == "receiving" && page.Id == "receiving"
+            IWorkspacePage vm = page.ViewKind is "inventory" or "sales"
+                ? new OperationsPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts)
+                : page.ViewKind == "receiving"
                 ? new ReceivingPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts)
                 : new EntityPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts);
             vm.PropertyChanged += (_, e) => { if (e.PropertyName == "IsBusy") Changed(nameof(WorkspaceIsIdle)); };
@@ -75,10 +78,18 @@ public sealed partial class ShellViewModel
         }
     }
 
-    public bool CanClose() => !_entityPages.Values.Any(p => p.IsDirty) || MessageBox.Show(
-        "Elveted a nem mentett adatlapváltozásokat?", "Kilépés", MessageBoxButton.YesNo,
-        MessageBoxImage.Question) == MessageBoxResult.Yes;
-
+    public bool CanClose()
+    {
+        if (!WorkspaceIsIdle)
+        {
+            MessageBox.Show("Várd meg a folyamatban lévő művelet végét, majd próbáld újra a bezárást.",
+                "Folyamatban lévő művelet", MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        return !_entityPages.Values.Any(p => p.IsDirty) || MessageBox.Show(
+            "Elveted a nem mentett adatlapváltozásokat?", "Kilépés", MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
+    }
     private void SyncNavigation()
     {
         var selectedId = _selectedNavigation.Id;

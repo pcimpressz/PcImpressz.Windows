@@ -73,7 +73,8 @@ public sealed class LicenseEvaluator : ILicenseEvaluator
             return Deny(LicenseStatus.WrongInstallation, "A működési engedély más telepítéshez tartozik.");
         if (license.LicenseId != lease.LicenseId || license.Revision != lease.Revision
             || lease.Iat < license.Iat || lease.Exp > license.Exp
-            || lease.Exp - lease.Iat > _policy.MaximumLeaseDuration.TotalSeconds)
+            || lease.Exp - lease.Iat > (IsDevelopmentMaster(license, lease)
+                ? TimeSpan.FromDays(36500).TotalSeconds : _policy.MaximumLeaseDuration.TotalSeconds))
             return Deny(LicenseStatus.Invalid, "A licenc és a működési engedély nem illeszkedik.");
         if (license.Iat > now + _policy.FutureIssueTolerance.TotalSeconds
             || lease.Iat > now + _policy.FutureIssueTolerance.TotalSeconds
@@ -100,6 +101,18 @@ public sealed class LicenseEvaluator : ILicenseEvaluator
             return Deny(LicenseStatus.Expired, "A modul előfizetése lejárt.");
         return new(LicenseStatus.Active, "Érvényes jogosultság.", DateTimeOffset.FromUnixTimeSeconds(until));
     }
+
+    // A long-lived lease is permitted only for the separately signed development issuer.
+    // Production issuers retain the strict seven-day maximum. No unsigned bypass exists.
+    private bool IsDevelopmentMaster(EntitlementDocument license, LeaseDocument lease) =>
+        _policy.Issuer == "pcimpressz-development"
+        && _policy.OrganizationId == "development"
+        && license.Iss == "pcimpressz-development"
+        && lease.Iss == "pcimpressz-development"
+        && license.OrganizationId == "development"
+        && lease.OrganizationId == "development"
+        && license.LicenseId.StartsWith("development-", StringComparison.Ordinal)
+        && lease.LicenseId == license.LicenseId;
 
     private static LicenseDecision Deny(LicenseStatus status, string reason) => new(status, reason);
 

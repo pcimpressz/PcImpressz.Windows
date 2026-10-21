@@ -47,11 +47,6 @@ public sealed record ProductSave(Guid CompanyId, Guid? Id, long Version, Product
 public sealed record CatalogQuery(Guid CompanyId, string Search = "", string Filter = "all", int Page = 0, int PageSize = 50,
     string Sort = "", bool Descending = false);
 public sealed record CatalogArchive(Guid CompanyId, Guid Id, long Version);
-public sealed record CatalogImportOptions(Guid CompanyId, string ServerUrl, string ApiToken, bool AllowLocalHttp = false);
-public sealed record CatalogImportCommit(Guid CompanyId, Guid PreviewId);
-public sealed record CatalogImportPreview(Guid PreviewId, int NewCount, int SkippedCount, int InvalidCount,
-    string[] Warnings, ProductData[] Sample);
-public sealed record CatalogAdditions(CategoryRecord[] Categories, UnitRecord[] Units, ProductRecord[] Products);
 public sealed class CatalogConflictException(string message) : Exception(message);
 
 public static class CatalogJson

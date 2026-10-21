@@ -1,4 +1,4 @@
-<Window x:Class="PcImpressz.Shell.Windows.MainWindow"
+﻿<Window x:Class="PcImpressz.Shell.Windows.MainWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
@@ -97,7 +97,7 @@
    </Grid>
    <Border Grid.Row="2" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,1,0,0">
     <Grid Margin="20,0"><TextBlock Text="{Binding ConnectionMessage}" FontSize="{DynamicResource CaptionSize}" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
-     <TextBlock Text="PC-Impressz  ·  0.3  /  Windows Edition" FontSize="{DynamicResource CaptionSize}" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" /></Grid>
+     <TextBlock Text="PC-Impressz  ·  0.4  /  Windows Edition" FontSize="{DynamicResource CaptionSize}" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" /></Grid>
    </Border>
   </Grid>
  </Border>

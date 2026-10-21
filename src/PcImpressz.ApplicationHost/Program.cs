@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -49,6 +49,10 @@ internal static class Program
             if (companies.List().Length == 0) companies.Create("Demó cég", true);
             var moduleEnablement = new ModuleEnablementStore(options.DataDirectory);
             builder.Services.AddSingleton(companies);
+            var companyDatabase = new CompanyDatabase(companies.DataDirectory);
+            builder.Services.AddSingleton(companyDatabase);
+            builder.Services.AddSingleton(new CompanyBackupService(companies, companyDatabase));
+            builder.Services.AddSingleton<ICompanyDatabase>(companyDatabase);
             builder.Services.AddSingleton(moduleEnablement);
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
             builder.Services.AddSingleton<ILicenseCheckpointStore>(new FileLicenseCheckpointStore(
@@ -60,7 +64,7 @@ internal static class Program
             builder.Services.AddSingleton<ICommandDispatcher>(sp => sp.GetRequiredService<CommandDispatcher>());
             builder.Services.AddSingleton(sp => new ModuleRuntime(moduleVerifier,
                 sp.GetRequiredService<CommandDispatcher>(), sp.GetRequiredService<TimeProvider>(),
-                sp.GetRequiredService<ILogger<ModuleRuntime>>(), companies.ModuleDataDirectory));
+                sp.GetRequiredService<ILogger<ModuleRuntime>>(), companies.ModuleDataDirectory, companyDatabase));
             builder.Services.AddSingleton(options);
             builder.Services.AddSingleton(new InstallationInfo(installationId));
             builder.Services.AddSingleton<HostDiagnosticSource>();

@@ -92,8 +92,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
     public string EditorTitle => (_editId is null ? Labels.NewTitle : Labels.EditTitle) + (IsDirty ? " · nincs mentve" : "");
     public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); Changed(nameof(CanOpenDossier)); } }
     public bool IsNotBusy => !IsBusy;
-    // The dossier command belongs to the partner page. The page contract stays unchanged so already loaded modules keep starting.
-    public bool HasDossier => Definition.ModuleId == "partners" && Definition.Id == "partners";
+    public bool HasDossier => !string.IsNullOrWhiteSpace(Definition.DossierCommand);
     public bool CanOpenDossier => HasDossier && _editId is not null && !IsBusy;
     public bool IsDossierOpen { get => _dossierOpen; private set { _dossierOpen = value; Changed(); Changed(nameof(ShowPartnerList)); } }
     public bool ShowPartnerList => !IsDossierOpen;
@@ -112,13 +111,12 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
     public string SortColumn => _columns.SortColumn;
     public bool SortDescending => _columns.SortDescending;
     public IReadOnlyList<EntityColumn> VisibleColumns => _columns.VisibleColumns;
-    public bool CanImport => Definition.Commands.ImportPreview is not null;
     public EntityRow? SelectedRow
     {
         get => _selected;
         set
         {
-            if (value is null || ReferenceEquals(value, _selected)) return;
+            if (IsBusy || value is null || ReferenceEquals(value, _selected)) return;
             if (!CanDiscard()) { Changed(); return; }
             _selected = value; Populate(value); Changed();
         }
@@ -129,7 +127,6 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
     public ICommand SaveCommand { get; }
     public ICommand ArchiveCommand { get; }
     public ICommand ExportCommand { get; }
-    public ICommand ImportCommand { get; }
     public ICommand NextCommand { get; }
     public ICommand PreviousCommand { get; }
     public ICommand DossierCommand { get; }
@@ -157,11 +154,10 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
             Fields.Add(vm);
         }
         SearchCommand = new RelayCommand(() => { _typed.CancelPending(); _page = 0; _ = LoadAsync(); });
-        NewCommand = new RelayCommand(() => { if (CanDiscard()) Populate(null); });
+        NewCommand = new RelayCommand(() => { if (!IsBusy && CanDiscard()) Populate(null); });
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
         ArchiveCommand = new RelayCommand(() => _ = ArchiveAsync());
         ExportCommand = new RelayCommand(() => _ = ExportAsync());
-        ImportCommand = new RelayCommand(() => ImportDialog.Show(this));
         NextCommand = new RelayCommand(() => { if ((_page + 1) * 50 < _total && CanDiscard()) { _page++; _ = LoadAsync(); } });
         PreviousCommand = new RelayCommand(() => { if (_page > 0 && CanDiscard()) { _page--; _ = LoadAsync(); } });
         DossierCommand = new RelayCommand(() => _ = LoadDossierAsync());
@@ -218,7 +214,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
         IsBusy = true;
         try
         {
-            var result = await ExecuteAsync("dossier", new
+            var result = await ExecuteAsync(Definition.DossierCommand!, new
             {
                 id = _editId, from = PeriodFrom?.ToString("yyyy-MM-dd"), to = PeriodTo?.ToString("yyyy-MM-dd")
             });

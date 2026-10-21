@@ -7,8 +7,7 @@ public sealed class CatalogModule : IModule
 {
     public ValueTask StartAsync(IModuleContext context, CancellationToken cancellationToken)
     {
-        var repository = new CatalogRepository(context.GetCompanyDataDirectory, context.TimeProvider);
-        var importer = new InvenTreeCatalogImport(repository, context.TimeProvider);
+        var repository = new CatalogRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
         Register(context, "categories-list", "catalog.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = ReadQuery(input);
@@ -47,7 +46,13 @@ public sealed class CatalogModule : IModule
         {
             var query = ReadQuery(input);
             var matching = FilterProducts((await repository.Snapshot(query.CompanyId, ct)).Products, query);
-            return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(ProductRow), matching.Length);
+            if (context.Database is null) return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p => ProductRow(p)), matching.Length);
+            return context.Database.Execute(query.CompanyId, tx =>
+            {
+                var quantities = CompanyReferenceQueries.StockQuantities(tx);
+                if (query.Sort == "quantity") matching = (query.Descending ? matching.OrderByDescending(p=>quantities.GetValueOrDefault(p.Id)) : matching.OrderBy(p=>quantities.GetValueOrDefault(p.Id))).ToArray();
+                return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p=>ProductRow(p, quantities.GetValueOrDefault(p.Id))), matching.Length);
+            });
         });
         Register(context, "products-save", "catalog.write", CommandAccess.Licensed, async (input, actor, ct) =>
             ProductRow(await repository.SaveProduct(CatalogJson.Read<ProductSave>(input), actor, ct)));
@@ -63,10 +68,6 @@ public sealed class CatalogModule : IModule
                  p.Data.IsPurchaseable ? "Igen" : "Nem", p.Data.IsSalable ? "Igen" : "Nem", p.Data.IsActive ? "Igen" : "Nem",
                  p.Data.Description, p.Data.Parameters, p.Data.Notes]) });
         });
-        Register(context, "products-import-preview", "catalog.import", CommandAccess.Licensed, async (input, actor, ct) =>
-            CatalogJson.Element(await importer.Preview(CatalogJson.Read<CatalogImportOptions>(input), actor, ct)));
-        Register(context, "products-import-commit", "catalog.import", CommandAccess.Licensed, async (input, actor, ct) =>
-            CatalogJson.Element(new { imported = await importer.Commit(CatalogJson.Read<CatalogImportCommit>(input), actor, ct) }));
         context.RegisterPage(Page("categories", context.ModuleId, "Kategóriák", "Termékcsoportok, egymásba ágyazható kóddal.", "\uE8FD",
             [new("name", "Kategória neve", Required: true), new("code", "Kód", Required: true), new("parentCode", "Szülő kódja"),
              new("description", "Leírás", "multiline"), new("isActive", "Aktív", "boolean", DefaultChecked: true)],
@@ -90,7 +91,7 @@ public sealed class CatalogModule : IModule
             [new("name", "Termék", 220), new("sku", "Cikkszám", 140), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90),
              new("quantity", "Darabszám", 110), new("revision", "Revízió", 90, false), new("barcode", "Vonalkód", 140, false),
              new("isPurchaseable", "Beszerzés", 110, false), new("isSalable", "Eladás", 100, false)],
-            new("products-list", "products-save", "products-archive", "products-export", "products-import-preview", "products-import-commit"),
+            new("products-list", "products-save", "products-archive", "products-export"),
             new EntityPageLabels
             {
                 NewLabel = "Új termék", NewTitle = "Új termék", EditTitle = "Termék szerkesztése", CountNoun = "termék",
@@ -99,11 +100,7 @@ public sealed class CatalogModule : IModule
                 ArchiveQuestion = "A termék inaktív állapotba kerül. Az adatai megmaradnak.",
                 ArchiveTitle = "Termék archiválása", ArchivedMessage = "A termék archiválva.",
                 ExportFileName = "termekek.csv", ExportedMessage = "A szűrt terméklista exportálva.",
-                SearchHint = "Keresés név, cikkszám, vonalkód, kategória vagy mértékegység alapján",
-                ImportWindowTitle = "InvenTree-termékek importálása", ImportLead = "Hozd át a meglévő terméktörzset.",
-                ImportHelp = "Csak olvasunk az InvenTree-ből. Az import a kiválasztott helyi cégbe kerül, a már meglévő termékeket nem írja felül. Készlet, ár és rendelés nem kerül át.",
-                ImportIdle = "A kulcsot nem mentjük el. A kategóriák, mértékegységek és termék-alapadatok kerülnek átvételre.",
-                ImportCommitLabel = "Új törzsadatok importálása", ResultNoun = "törzsadat"
+                SearchHint = "Keresés név, cikkszám, vonalkód, kategória vagy mértékegység alapján"
             },
             [new("all", "Aktív termékek"), new("purchaseable", "Beszerzésre jelöltek"), new("salable", "Eladásra jelöltek"), new("archived", "Archiváltak")]));
         return ValueTask.CompletedTask;
@@ -142,10 +139,11 @@ public sealed class CatalogModule : IModule
     private static bool IsSort(string sort) => sort.Length <= 40 && sort.All(char.IsAsciiLetterOrDigit);
     private static JsonElement CategoryRow(CategoryRecord record) => Row(record.Data, record.Id, record.Version);
     private static JsonElement UnitRow(UnitRecord record) => Row(record.Data, record.Id, record.Version);
-    private static JsonElement ProductRow(ProductRecord record)
+    private static JsonElement ProductRow(ProductRecord record) => ProductRow(record, null);
+    private static JsonElement ProductRow(ProductRecord record, decimal? quantity)
     {
         var node = JsonSerializer.SerializeToNode(record.Data, CatalogJson.Options)!;
-        node["id"] = record.Id; node["version"] = record.Version; node["quantity"] = "—";
+        node["id"] = record.Id; node["version"] = record.Version; node["quantity"] = quantity is null ? JsonSerializer.SerializeToNode("—") : JsonSerializer.SerializeToNode(quantity.Value);
         return JsonSerializer.SerializeToElement(node);
     }
     private static JsonElement Row<T>(T data, Guid id, long version)

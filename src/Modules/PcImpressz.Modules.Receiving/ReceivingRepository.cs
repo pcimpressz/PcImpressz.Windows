@@ -1,18 +1,29 @@
+﻿using PcImpressz.Business;
+using PcImpressz.Contracts;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 
 namespace PcImpressz.Modules.Receiving;
 
-public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, TimeProvider time)
+public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, TimeProvider time, ICompanyDatabase? database = null)
 {
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
-    private async Task<T> Locked<T>(Guid company, Func<string, ReceiptState, T> action, CancellationToken ct)
+    private async Task<T> Locked<T>(Guid company, Func<ModuleStorageScope, ReceiptState, T> action, CancellationToken ct)
     {
         var directory = companyDirectory(company);
         var gate = _locks.GetOrAdd(company, _ => new(1, 1));
         await gate.WaitAsync(ct);
-        try { return action(directory, Read(directory)); }
+        try
+        {
+            if (database is not null) return database.Execute(company, tx =>
+            {
+                var scope = new ModuleStorageScope(directory, tx);
+                return action(scope, Read(scope));
+            });
+            var legacy = new ModuleStorageScope(directory, null);
+            return action(legacy, Read(legacy));
+        }
         finally { gate.Release(); }
     }
     public Task<ReceiptState> Snapshot(Guid company, CancellationToken ct = default) => Locked(company, (_, state) => state, ct);
@@ -23,40 +34,46 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
     public Task<ReceiptRecord> Import(ReceiptImport request, ImportedDocument document, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (directory, state) => WriteImport(directory, state, request, document, actor), ct);
 
-    private ReceiptRecord WriteManual(string directory, ReceiptState state, ReceiptSave request, string actor)
+    private ReceiptRecord WriteManual(ModuleStorageScope scope, ReceiptState state, ReceiptSave request, string actor)
     {
         var draft = request.Draft ?? throw new ArgumentException("Hiányzó számlaadat.");
         var existing = Find(state, request.Id, request.Version);
         if (existing is not null && existing.Data.Status is not ("uj" or "fuggo"))
             throw new ArgumentException("A lezárt számla nem módosítható.");
-        var index = MasterIndex.Load(directory);
+        var index = MasterIndex.Load(scope.Directory, scope.Transaction);
         var supplier = Supplier(index, draft.SupplierId, null)
             ?? throw new ArgumentException("A szállító nem található az aktív beszállítók között. Vedd fel a partnertörzsben, vagy hozd létre innen.");
         var data = Compose(draft.Number, supplier, draft.IssuedOn, draft.DueOn, draft.Notes, draft.Warehouse,
             existing?.Data.Source ?? "manual", existing?.Data.Status ?? "uj", existing?.Data.ReceivedAt,
             ReceivingMatching.Build(draft.Lines ?? throw new ArgumentException("Hiányzó tételek."), index.Products));
+        data = data with { SourceNet=existing?.Data.SourceNet, SourceVat=existing?.Data.SourceVat, SourceGross=existing?.Data.SourceGross };
         RejectDuplicate(state, existing?.Id, data);
-        return Store(directory, state, existing, data, actor, existing is null ? "create" : "update");
+        return Store(scope, state, existing, data, actor, existing is null ? "create" : "update");
     }
-    private ReceiptRecord WriteImport(string directory, ReceiptState state, ReceiptImport request, ImportedDocument document, string actor)
+    private ReceiptRecord WriteImport(ModuleStorageScope scope, ReceiptState state, ReceiptImport request, ImportedDocument document, string actor)
     {
         var source = request.Source is "xls" or "nav" ? request.Source : throw new ArgumentException("Ismeretlen importforrás.");
-        var index = MasterIndex.Load(directory);
+        if (document.Currency != "HUF") throw new ArgumentException("Most csak HUF számla importálható; a devizás összeget nem számítjuk át automatikusan.");
+        var index = MasterIndex.Load(scope.Directory, scope.Transaction);
         var supplier = Supplier(index, request.SupplierId, document.SupplierTaxId)
             ?? throw new ArgumentException(string.IsNullOrWhiteSpace(document.SupplierName)
                 ? "Válassz szállítót a partnertörzs beszállítói közül."
                 : "Nincs ilyen beszállító a partnertörzsben: " + document.SupplierName.Trim() + ". Vedd fel kézzel, majd olvasd be újra.");
+        if (!string.IsNullOrWhiteSpace(document.SupplierTaxId) && ReceivingText.TaxKey(supplier.TaxId) != ReceivingText.TaxKey(document.SupplierTaxId))
+            throw new ArgumentException("A kiválasztott szállító adószáma eltér az importált számlától.");
         var number = string.IsNullOrWhiteSpace(request.Number) ? document.Number : request.Number;
         var issued = string.IsNullOrWhiteSpace(request.IssuedOn) ? document.IssuedOn : request.IssuedOn;
         if (string.IsNullOrWhiteSpace(issued)) issued = time.GetUtcNow().ToString("yyyy-MM-dd");
         var due = string.IsNullOrWhiteSpace(request.DueOn) ? document.DueOn : request.DueOn;
-        var lines = ReceivingMatching.Build(document.Lines.Select(line => new ReceiptLineDraft(null, null, line.Name, line.Sku, line.Barcode, "DB",
-            line.Quantity, line.NetUnitPrice, 27)).ToArray(), index.Products);
+        var lines = ReceivingMatching.Build(document.Lines.Select(line => new ReceiptLineDraft(null, null, line.Name, line.Sku, line.Barcode, line.UnitCode,
+            line.Quantity, line.NetUnitPrice, line.VatRate ?? throw new ArgumentException("Hiányzó áfakulcs: add meg az importban."), line.IsService)).ToArray(), index.Products);
         var data = Compose(number, supplier, issued, due, "", "Bolt", source, "uj", null, lines);
+        data = data with { SourceNet=document.ExpectedNet, SourceVat=document.ExpectedVat, SourceGross=document.ExpectedGross };
+        CheckSourceTotals(data);
         RejectDuplicate(state, null, data);
-        return Store(directory, state, null, data, actor, "import");
+        return Store(scope, state, null, data, actor, "import");
     }
-    private ReceiptRecord WriteClassification(string directory, ReceiptState state, ReceiptClassify request, string actor)
+    private ReceiptRecord WriteClassification(ModuleStorageScope scope, ReceiptState state, ReceiptClassify request, string actor)
     {
         var existing = Find(state, request.Id, request.Version) ?? throw new ReceivingConflictException("A számla nem található.");
         var next = request.Status ?? "";
@@ -66,10 +83,30 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
             throw new ArgumentException("A lezárt számla besorolása nem változik.");
         if (next == existing.Data.Status) throw new ArgumentException("A számla már ebben az állapotban van.");
         if (next == "uj" && existing.Data.Status != "fuggo") throw new ArgumentException("Új állapotba csak a függő számla tehető vissza.");
-        if (next == "bevetelezve") ReceivingMatching.EnsureReceivable(existing.Data.Lines);
+        if (next == "bevetelezve")
+        {
+            CheckSourceTotals(existing.Data);
+            ReceivingMatching.EnsureReceivable(existing.Data.Lines);
+            if (scope.Transaction is { } transaction)
+            {
+                var products = CompanyReferenceQueries.Products(transaction);
+                foreach (var line in existing.Data.Lines.Where(l => l.ProductId is not null))
+                    if (!products.Any(p => p.Id == line.ProductId && p.IsActive && p.UnitCode == line.UnitCode))
+                        throw new ArgumentException("A termék vagy a mértékegysége közben megváltozott; ellenőrizd a számlát.");
+                var changes = existing.Data.Lines.Where(l => l.ProductId is not null)
+                    .Select(l => new StockChange(l.ProductId!.Value,l.Name,l.UnitCode,existing.Data.Warehouse,l.Quantity)).ToArray();
+                StockLedger.Post(transaction,"receipt:"+existing.Id.ToString("N"),"receiving",existing.Id,changes,
+                    "Bevételezés "+existing.Data.Number,actor,time.GetUtcNow());
+            }
+        }
         var received = next == "bevetelezve" ? time.GetUtcNow() : (DateTimeOffset?)null;
-        var data = existing.Data with { Status = next, ReceivedAt = received };
-        return Store(directory, state, existing, data, actor, "classify");
+        var data = existing.Data with { Status = next, ReceivedAt = received, StockPosted = next == "bevetelezve" && scope.Transaction is not null };
+        return Store(scope, state, existing, data, actor, "classify");
+    }
+    private static void CheckSourceTotals(ReceiptData data)
+    {
+        if ((data.SourceNet is { } net && net != data.Net) || (data.SourceVat is { } vat && vat != data.Vat) || (data.SourceGross is { } gross && gross != data.Gross))
+            throw new ArgumentException("Az importált számla eredeti összege és a tételsorok számított összege eltér. Ellenőrizd az áfát, mennyiséget, egységárat és kerekítést; a számla nem véglegesíthető.");
     }
     private static ReceiptData Compose(string? number, SupplierCard supplier, string? issued, string? due, string? notes, string? warehouse,
         string source, string status, DateTimeOffset? received, ReceiptLine[] lines)
@@ -103,14 +140,14 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
             && string.Equals(receipt.Data.Number, data.Number, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Ezzel a számlaszámmal ennél a szállítónál már van bevételezés.");
     }
-    private ReceiptRecord Store(string directory, ReceiptState state, ReceiptRecord? existing, ReceiptData data, string actor, string action)
+    private ReceiptRecord Store(ModuleStorageScope scope, ReceiptState state, ReceiptRecord? existing, ReceiptData data, string actor, string action)
     {
         var now = time.GetUtcNow();
         var record = new ReceiptRecord(existing?.Id ?? Guid.NewGuid(), (existing?.Version ?? 0) + 1, data,
             existing?.CreatedAt ?? now, existing?.CreatedBy ?? actor, now, actor);
         var receipts = existing is null ? state.Receipts.Append(record).ToArray()
             : state.Receipts.Select(receipt => receipt.Id == record.Id ? record : receipt).ToArray();
-        Write(directory, state with { Revision = state.Revision + 1, Receipts = receipts, Audit = state.Audit.Append(new ReceiptAudit(record.Id, action, record.Version, now, actor)).ToArray() });
+        Write(scope, state with { Revision = state.Revision + 1, Receipts = receipts, Audit = state.Audit.Append(new ReceiptAudit(record.Id, action, record.Version, now, actor)).ToArray() });
         return record;
     }
     private static ReceiptRecord? Find(ReceiptState state, Guid? id, long version)
@@ -136,14 +173,15 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var text = Text(value, 80, "Raktár");
         return text.Length == 0 ? "Bolt" : text;
     }
-    private static ReceiptState Read(string directory)
+    private static ReceiptState Read(ModuleStorageScope scope)
     {
+        var directory = scope.Directory;
+        var body = scope.Read("receiving", "receipts.json");
         var file = Path.Combine(directory, "receipts.json");
-        if (!File.Exists(file)) return new(1, 0, [], []);
+        if (body is null) return new(1, 0, [], []);
         try
         {
-            if (new FileInfo(file).Length > 64 * 1024 * 1024) throw new IOException("Az adattár túl nagy.");
-            var state = JsonSerializer.Deserialize<ReceiptState>(File.ReadAllText(file), ReceivingJson.Options) ?? throw new IOException("Üres adattár.");
+            var state = JsonSerializer.Deserialize<ReceiptState>(body, ReceivingJson.Options) ?? throw new IOException("Üres adattár.");
             if (state.SchemaVersion != 1 || state.Revision < 0 || state.Receipts is null || state.Audit is null
                 || state.Receipts.Any(receipt => receipt.Id == Guid.Empty || receipt.Version < 1 || receipt.Data is null || receipt.Data.Lines is null)
                 || state.Receipts.Select(receipt => receipt.Id).Distinct().Count() != state.Receipts.Length)
@@ -152,10 +190,12 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         }
         catch (JsonException) { throw new IOException("A bevételezés sérült. A receipts.json.bak mentésből állítható helyre."); }
     }
-    private static void Write(string directory, ReceiptState state)
+    private static void Write(ModuleStorageScope scope, ReceiptState state)
     {
+        var directory = scope.Directory;
         if (state.Receipts.Length > 20_000 || state.Audit.Length > 200_000)
             throw new IOException("Az első változat adattárkorlátja elérve.");
+        if (scope.Write("receiving", JsonSerializer.Serialize(state, ReceivingJson.Options))) return;
         Directory.CreateDirectory(directory);
         var file = Path.Combine(directory, "receipts.json");
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -165,6 +205,7 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
             {
                 JsonSerializer.Serialize(stream, state, ReceivingJson.Options); stream.Flush(true);
             }
+            if (new FileInfo(temporary).Length > 64 * 1024 * 1024) throw new IOException("Az adattár túl nagy; a korábbi mentés változatlan maradt.");
             if (File.Exists(file)) File.Replace(temporary, file, file + ".bak");
             else File.Move(temporary, file);
         }

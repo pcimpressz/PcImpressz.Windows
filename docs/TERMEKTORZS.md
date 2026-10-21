@@ -1,5 +1,7 @@
 # Terméktörzs – 0.3
 
+**v0.4 frissítés:** a lenti v0.3 leírás a korábbi működés dokumentuma. A Host most cégenként SQLite-adatbázist használ; a régi JSON-fájlok migrációs források. A bevételezés már készletet mozgat, az eladás és a cégmentés elkészült. Az aktuális használat és korlátok: [Készlet, eladás és cégmentés](KESZLET-ELADAS-ES-MENTES.md).
+
 A terméktörzs a Partnertörzs mintájára készült helyi modul. Kategóriát, mértékegységet és terméket tart. Készlet, beszerzési rendelés, eladás és gyártás nincs benne.
 
 ## Használat
@@ -11,9 +13,9 @@ A terméktörzs a Partnertörzs mintájára készült helyi modul. Kategóriát,
 5. Az archiválás inaktívvá teszi a rekordot. Használt kategória vagy mértékegység nem archiválható, amíg aktív termék vagy alkategória hivatkozik rá.
 6. A CSV-export az aktuális keresést és szűrőt menti.
 
-## InvenTree
+## Korábbi külső kapcsolat
 
-A Terméktörzs oldal Import InvenTree-ből gombja a `part/category/` és `part/` végpontokat olvassa. Készletet, árat, beszállítót és darabjegyzéket nem kér le. A kulcs nem kerül mentésre. A már meglévő rekordot külső azonosító, kód, cikkszám vagy név alapján kihagyja, nem írja felül.
+Az InvenTree-kapcsolat 2026-10-21-én kivezetve. Nincs importgomb, API-kliens vagy tokenkezelés. A meglévő rekordok eredetadatai megmaradnak.
 
 ## Tárolás
 

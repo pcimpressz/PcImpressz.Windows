@@ -106,63 +106,6 @@ internal static class PartnerTests
             var saved=await f.Repository.Save(new(f.First.Id,null,0,Data("=HYPERLINK(bad)")),"operator");
             var csv=PartnerRepository.ExportCsv([saved]); Check.True(csv.Contains("\"'=HYPERLINK(bad)\"",StringComparison.Ordinal));
         });
-        yield return Case("import preview does not write and commit imports once", async f =>
-        {
-            var importer=f.Importer();var preview=await importer.Preview(f.Options(),"operator",default);
-            Check.Equal(2,preview.NewCount); Check.Equal(0,(await f.Repository.Snapshot(f.First.Id)).Partners.Length);
-            Check.Equal(2,await importer.Commit(new(f.First.Id,preview.PreviewId),"operator",default));
-            var records=(await f.Repository.Snapshot(f.First.Id)).Partners;Check.Equal("Budapest",records.Single(p=>p.ExternalId==1).Data.City);
-            await Check.ThrowsAsync<ArgumentException>(async()=>await importer.Commit(new(f.First.Id,preview.PreviewId),"operator",default));
-            Check.Equal(2,(await f.Repository.Snapshot(f.First.Id)).Partners.Length);
-        });
-        yield return Case("repeated import skips existing partners", async f =>
-        {
-            var importer=f.Importer();var preview=await importer.Preview(f.Options(),"operator",default);
-            await importer.Commit(new(f.First.Id,preview.PreviewId),"operator",default);
-            var repeated=await importer.Preview(f.Options(),"operator",default);
-            Check.Equal(0,repeated.NewCount);Check.Equal(2,repeated.SkippedCount);
-        });
-        yield return Case("import preview is bound to company and actor", async f =>
-        {
-            var importer=f.Importer();var preview=await importer.Preview(f.Options(),"operator",default);
-            await Check.ThrowsAsync<ArgumentException>(async()=>await importer.Commit(new(f.Second.Id,preview.PreviewId),"operator",default));
-            await Check.ThrowsAsync<ArgumentException>(async()=>await importer.Commit(new(f.First.Id,preview.PreviewId),"other",default));
-            Check.Equal(0,(await f.Repository.Snapshot(f.First.Id)).Partners.Length);
-        });
-        yield return Case("expired import preview cannot commit", async f =>
-        {
-            var importer=f.Importer();var preview=await importer.Preview(f.Options(),"operator",default); f.Clock.Now=f.Clock.Now.AddMinutes(11);
-            await Check.ThrowsAsync<ArgumentException>(async()=>await importer.Commit(new(f.First.Id,preview.PreviewId),"operator",default));
-        });
-        yield return Case("import does not overwrite edits after preview", async f =>
-        {
-            var importer=f.Importer();var preview=await importer.Preview(f.Options(),"operator",default);
-            await f.Repository.Save(new(f.First.Id,null,0,Data("Közben felvett partner")),"operator");
-            await Check.ThrowsAsync<PartnerConflictException>(async()=>await importer.Commit(new(f.First.Id,preview.PreviewId),"operator",default));
-            Check.Equal(1,(await f.Repository.Snapshot(f.First.Id)).Partners.Length);
-        });
-        yield return Case("import token is never persisted", async f =>
-        {
-            var importer=f.Importer();var preview=await importer.Preview(f.Options(),"operator",default);
-            await importer.Commit(new(f.First.Id,preview.PreviewId),"operator",default);
-            foreach(var file in Directory.EnumerateFiles(f.Directory.Path,"*",SearchOption.AllDirectories))
-                Check.True(!File.ReadAllText(file).Contains("TEST-API-TOKEN",StringComparison.Ordinal));
-        });
-        yield return Case("cross-origin pagination never receives the API token", async f =>
-        {
-            var calls=0;var importer=new InvenTreeImport(f.Repository,f.Clock,()=>new FakeHandler(_=>
-            { calls++;return "{\"results\":[],\"next\":\"https://other.invalid/api/company/\"}"; }));
-            await Check.ThrowsAsync<HttpRequestException>(async()=>await importer.Preview(f.Options(),"operator",default));
-            Check.Equal(1,calls);
-        });
-        yield return ("HTTP import requires explicit LAN permission", ()=>
-        {
-            Check.Throws<ArgumentException>(()=>InvenTreeImport.ValidateServer("http://192.168.110.71",false));
-            Check.Equal("http://192.168.110.71/api/",InvenTreeImport.ValidateServer("http://192.168.110.71",true).AbsoluteUri);
-            Check.Throws<ArgumentException>(()=>InvenTreeImport.ValidateServer("http://public.invalid",true));
-            Check.Throws<ArgumentException>(()=>InvenTreeImport.ValidateServer("https://user:secret@host.invalid",false));
-            return Task.CompletedTask;
-        });
         yield return ("bounded protocol rejects an oversized request before allocation",async()=>
         {
             using var stream=new MemoryStream();var header=new byte[4];
@@ -194,19 +137,6 @@ internal static class PartnerTests
             Companies=new(Directory.Path);First=Companies.Create("Saját cég",false);Second=Companies.Create("Üres demó",true);
             Repository=new(id=>Companies.ModuleDataDirectory(id,"partners"),Clock);
         }
-        public ImportOptions Options()=>new(First.Id,"https://inventree.test","TEST-API-TOKEN");
-        public InvenTreeImport Importer()=>new(Repository,Clock,()=>new FakeHandler(request=>
-            request.RequestUri!.AbsolutePath.Contains("/address/",StringComparison.Ordinal)
-            ? "[{\"pk\":3,\"company\":1,\"primary\":true,\"country\":\"HU\",\"postal_city\":\"Budapest\",\"postal_code\":\"1111\",\"line1\":\"Teszt utca 1.\"}]"
-            : "{\"results\":[{\"pk\":1,\"name\":\"Első partner\",\"tax_id\":\"1234\",\"is_customer\":true},{\"pk\":2,\"name\":\"Második partner\",\"tax_id\":\"5678\",\"is_supplier\":true}],\"next\":null}"));
         public void Dispose()=>Directory.Dispose();
-    }
-    private sealed class FakeHandler(Func<HttpRequestMessage,string> response):HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancellationToken)
-        {
-            Check.Equal(HttpMethod.Get,request.Method);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(response(request),Encoding.UTF8,"application/json")});
-        }
     }
 }

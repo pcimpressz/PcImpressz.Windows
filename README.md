@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + Partnertörzs v0.3
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -18,11 +18,11 @@ PowerShellből:
 
 A fordításhoz .NET SDK 10.0.402 szükséges, vagy a `global.json` által elfogadott újabb javítókiadás. A helyi SDK a projekt `.tools/dotnet` könyvtárában van, a forrásoktól elkülönítve. Másik gépen telepíthető a [Microsoft .NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). A helyi SDK hivatalos kiadási metaadat szerinti SHA-512 ellenőrzéssel került letöltésre.
 
-Nincs külső NuGet-csomag, npm, Python vagy adatbázis-előfeltétel. A .NET SDK mellett a Microsoft ASP.NET Core megosztott keretrendszerét használjuk konfigurációhoz, naplózáshoz és a folyamat életciklusához. A NuGet-forráslista szándékosan üres.
+A Core a hivatalos Microsoft.Data.Sqlite 10.0.13 csomagot használja, rögzített NuGet-feloldással. Külön adatbázis-szerver, npm és Python nem szükséges a program futásához vagy fordításához. A NuGet-forrás a nuget.org; az első restore internetkapcsolatot igényel. Az ASP.NET Core megosztott keretrendszer konfigurációt, naplózást és folyamat-életciklust biztosít.
 
 A `Publish` jelenleg keretrendszerfüggő kiadást ad: másik gépen .NET Desktop 10 és ASP.NET Core 10 futtatókörnyezet kell hozzá. A grafikus alkalmazás az `artifacts/desktop`, a mag annak `host` alkönyvtárába kerül. Ez még nem ügyféltelepítő és nem Windows-szolgáltatásként regisztrált alkalmazás.
 
-Ellenőrzött állapot: Release fordítás 0 hibával és 0 figyelmeztetéssel; 82/82 sikeres teszt. A teszteket a `Test` művelet futtatja, nem a `dotnet test`. A grafikus ablak külön, ugyanazon Windows-felhasználóra korlátozott helyi csatornán olvassa a mag aktuális állapotát; a diagnosztikai csatorna üzleti parancsot nem fogad. A cég- és modulműveletek külön, ugyanazon Windows-felhasználóra korlátozott helyi parancscsatornán futnak.
+Ellenőrzött állapot (2026-10-21): Release fordítás, üzleti/Core/Host regressziók, görgetési próba és WPF nézetrender. A pontos eredmény és a fennmaradó auditfeladatok: [Auditintegráció](docs/AUDIT-INTEGRACIO-2026-10-21.md). A teszteket a `Test` művelet futtatja, nem a `dotnet test`. A grafikus ablak külön, ugyanazon Windows-felhasználóra korlátozott helyi csatornán olvassa a mag aktuális állapotát; a diagnosztikai csatorna üzleti parancsot nem fogad. A cég- és modulműveletek külön, ugyanazon Windows-felhasználóra korlátozott helyi parancscsatornán futnak.
 
 ## A felület testreszabása
 
@@ -30,7 +30,7 @@ A **Megjelenés** oldalon azonnal válthatsz az Éjkék, Porcelán és Grafit t�
 
 Saját skinhez használd a **Jelenlegi skin exportálása** gombot, vagy másold a `skins/sajat-skin.json` mintát. A fájl színeit `#RRGGBB` formában lehet szerkeszteni, majd a **Skin importálása** gombbal visszatölteni. A skin kizárólag ellenőrzött színadatokat tartalmazhat, futtatható kódot vagy XAML-t nem. A túl alacsony szövegkontrasztú palettát a program elutasítja.
 
-A felület a valódi helyi állapotot, a modulokat, licencet és megjelenést kezeli. Üzleti modul a Partnertörzs, a Terméktörzs és a Bevételezés. A partnerek használata: docs/PARTNERTORZS.md. A terméktörzs kategóriát, mértékegységet, cikkszámot és alapparamétert tart, CSV-exporttal és csak olvasó InvenTree-importtal: docs/TERMEKTORZS.md. A bevételezés kézi számlát, NAV-számla XML-t és Excel/CSV importot fogad, majd besorolja: docs/BEVETELEZES.md. Online előfizetési aktiválás és drag & drop szerkesztőmód még nincs benne.
+A felület a valódi helyi állapotot, a modulokat, licencet és megjelenést kezeli. Üzleti modul a Partnertörzs, a Terméktörzs, a Bevételezés, a Készlet és az Eladás. A partnerek használata: docs/PARTNERTORZS.md. A terméktörzs kategóriát, mértékegységet, cikkszámot és alapparamétert tart, CSV-exporttal: docs/TERMEKTORZS.md. A bevételezés kézi számlát, NAV-számla XML-t és Excel/CSV importot fogad, majd besorolja: docs/BEVETELEZES.md. Az új készlet-, eladás- és cégmentési funkciók használata: [KESZLET-ELADAS-ES-MENTES.md](docs/KESZLET-ELADAS-ES-MENTES.md). A közös fejlesztési irány és a munkamegosztás: [KOZOS-MUNKANAPLO.md](KOZOS-MUNKANAPLO.md). Online előfizetési aktiválás és drag & drop szerkesztőmód még nincs benne.
 
 ## Mi működik?
 
@@ -56,10 +56,15 @@ A mag üzleti modul nélkül is fut. Nincs beépített raktár, terméktörzs, p
 - `src/PcImpressz.Shell.Customization`: felülettől független skin- és beállításkezelés, kontrasztellenőrzéssel.
 - `tests/PcImpressz.Core.Tests`: külső tesztkeretrendszer nélküli tesztfuttató, hiba esetén nem nulla kilépési kóddal.
 - `src/Modules/PcImpressz.Modules.Catalog`: terméktörzs, kategória és mértékegység. Nem készletmodul.
-- `src/Modules/PcImpressz.Modules.Receiving`: bejövő számla, kézi felvétel, NAV XML és Excel/CSV. Nem mozgat készletet.
+- `src/Modules/PcImpressz.Modules.Receiving`: bejövő számla, NAV XML és Excel/CSV; véglegesítéskor közös tranzakcióban készletbevét.
+- `src/Modules/PcImpressz.Modules.Inventory`: nyitókészlet, korrekció, mozgásnapló és készletegyenleg.
+- `src/Modules/PcImpressz.Modules.Sales`: eladási bizonylat, készletcsökkentés és visszafordítás.
+- `src/PcImpressz.Business`: közös, pontos mennyiségekkel dolgozó készletnaplózási szabályok; a modulcsomagok aláírt függősége.
+- `tools/PcImpressz.Maintenance`: felülettől független cégmentés és visszaállítás.
+- `tests/PcImpressz.Shell.UiTests`: készlet és eladás renderelése mindhárom skinnel, kötési és oszlopszélességi ellenőrzéssel.
 - `tests/PcImpressz.TestModule`: kizárólag teszteléshez fordított modulszerelvény; nem része a kiadásnak.
 
-A Core nem hivatkozik a Hostra vagy a grafikus felületre. A Shell nem hivatkozik a Core-ra: a Contracts diagnosztikai szerződését használja. Egy modul csak a Contracts csomagra hivatkozzon. Új üzleti modul hozzáadásához a Core és Host forrását nem kell módosítani; a mező- és oszlopleírásokat a modul regisztrálja, a Shell ebből építi fel a képernyőt.
+A Core nem hivatkozik a Hostra vagy a grafikus felületre. A Shell nem hivatkozik a Core-ra: a Contracts diagnosztikai szerződését használja. A modul a Contracts szerződéseire és szükség szerint a csomagjában aláírt közös Business könyvtárra hivatkozhat; a Core implementációjára nem. Új üzleti modul hozzáadásához a Core és Host forrását nem kell módosítani; a mező- és oszlopleírásokat a modul regisztrálja, a Shell ebből építi fel a képernyőt.
 
 ## Saját adatok és konfiguráció
 
@@ -75,6 +80,7 @@ Az adatmappában:
 - `license-checkpoint.json`: legnagyobb észlelt helyi idő és jogosultságverziók, nem titkos adat.
 - `modules/<csomag>/manifest.jws` és a jegyzékben felsorolt DLL-ek: telepített modulok.
 - `logs/core.jsonl`, legfeljebb két forgatott előzménnyel: működési napló.
+- `companies/<cégazonosító>/company.db`: az adott cég SQLite-adatbázisa. Első használatkor a régi JSON-adatok tranzakcióban migrálódnak; a régi fájlok megmaradnak, de a Host már nem írja őket.
 - `appearance.json`, `skins/*.json`: saját megjelenési beállítások és importált témák.
 
 Az alapértelmezett szervezet üres, megbízható kulcs nincs. Így új telepítés nem kap üzleti írási jogot. A `pcimpressz-issuer` csak helyi konfigurációs alapérték, nem létező aktiválási végpont.
@@ -83,7 +89,7 @@ A licencfájlokat frissítéskor ideiglenes fájl és atomi átnevezés segíts�
 
 ## Modulcsomag v1
 
-A csomag lapos könyvtár: aláírt `manifest.jws` és csak a jegyzékben felsorolt managed DLL-ek. A jegyzék típusa `pcimpressz-module+jws`. Tartalma a `ModuleManifest` osztály mezőit követi; verziói háromtagúak, például `1.0.0`, a Contracts API pontosan `1.0`.
+A csomag lapos könyvtár: aláírt `manifest.jws` és csak a jegyzékben felsorolt managed DLL-ek. A jegyzék típusa `pcimpressz-module+jws`. Tartalma a `ModuleManifest` osztály mezőit követi; verziói háromtagúak, például `1.0.0`, a Contracts API pontosan `1.1`.
 
 Az egyes DLL-ekhez SHA-256 kivonat tartozik. A fő DLL és a függőségek az ellenőrzött memóriabeli bájtokból töltődnek be. A Contracts DLL nem csomagolható a modul mellé. Natív függőségek, alkönyvtárak, csatolt útvonalak, forró modulcsere és részleges csomagfrissítés nem támogatottak ebben a verzióban.
 
@@ -105,6 +111,8 @@ A `CallerIdentity` egy későbbi megbízható hitelesítési réteg eredménye. 
 
 Élesítés előtt külön kulcskezelés, OS-hozzáférésvédelem, megbízható hitelesítés, támogatott frissítési/telepítési eljárás, helyreállítási próba és a licencellenőrzés független biztonsági felülvizsgálata szükséges.
 
-## Következő lépés
+## További lépések
 
-A bevételezés a szállítót a partnertörzs beszállítói közül, a terméket a terméktörzsből választja. A besorolás megmarad: bevételezés, költség vagy függő. Készletmozgás, élő NAV Online Számla lekérdezés és PDF-olvasás még nincs. A kiadói aktiválás, gépkulcsos megújítás és a drag & drop szerkesztő külön későbbi fejlesztés.
+A bevételezés a szállítót a partnertörzs beszállítói közül, a terméket a terméktörzsből választja. A besorolás megmarad: bevételezés, költség vagy függő. Készletmozgás, helyi eladás és ellenőrzött cégmentés már működik. Élő NAV Online Számla lekérdezés és PDF-olvasás még nincs. A kiadói aktiválás, gépkulcsos megújítás és a drag & drop szerkesztő külön későbbi fejlesztés.
+
+A fejlesztői mesterlicenc aláírt és telepítéshez kötött, 2099-12-31-ig használható; normál ügyféllicencnél a legfeljebb 7 napos működési engedély megmarad. Részletek: [Fejlesztői licenc](docs/DEVELOPER_MASTER_LICENSE.md). Az InvenTree-kapcsolat kivezetve; az alkalmazás saját adatbázissal működik.

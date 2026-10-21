@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -31,7 +31,7 @@ internal static class ListGrid
         {
             var header = new TextBlock { Text = column.Label };
             if (column.Id == "quantity")
-                header.ToolTip = "A készlet még nem kapcsolódik a terméktörzshöz. Amíg nincs készletmozgás, gondolatjel látszik.";
+                header.ToolTip = "A termék készlete az összes raktárban. Raktárankénti bontás a Készlet oldalon.";
             var text = new DataGridTextColumn
             {
                 Header = header,

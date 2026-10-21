@@ -7,8 +7,7 @@ public sealed class PartnersModule : IModule
 {
     public ValueTask StartAsync(IModuleContext context, CancellationToken cancellationToken)
     {
-        var repository = new PartnerRepository(context.GetCompanyDataDirectory, context.TimeProvider);
-        var importer = new InvenTreeImport(repository, context.TimeProvider);
+        var repository = new PartnerRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
         context.RegisterCommand(new Handler("list", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerQuery>(input);
@@ -29,19 +28,20 @@ public sealed class PartnersModule : IModule
             var query = PartnerJson.Read<PartnerQuery>(input);
             return PartnerJson.Element(new { csv = PartnerRepository.ExportCsv(PartnerListing.Match((await repository.Snapshot(query.CompanyId, ct)).Partners, query)) });
         }));
-        context.RegisterCommand(new Handler("import-preview", "partners.import", CommandAccess.Licensed, async (input, actor, ct) =>
-            PartnerJson.Element(await importer.Preview(PartnerJson.Read<ImportOptions>(input), actor, ct))));
-        context.RegisterCommand(new Handler("import-commit", "partners.import", CommandAccess.Licensed, async (input, actor, ct) =>
-            PartnerJson.Element(new { imported = await importer.Commit(PartnerJson.Read<ImportCommit>(input), actor, ct) })));
         context.RegisterCommand(new Handler("dossier", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerDossierQuery>(input);
             var (from, to) = PartnerDossier.Period(query.From, query.To);
             var view = PartnerDossier.Open(await repository.Snapshot(query.CompanyId, ct), query.Id);
             var directory = context.GetCompanyDataDirectory(query.CompanyId);
-            var snapshot = PartnerDossier.FromReceipts(directory, query.Id) ?? PartnerDossier.Read(directory, query.Id);
+            var snapshot = context.Database is null
+                ? PartnerDossier.FromReceipts(directory, query.Id) ?? PartnerDossier.Read(directory, query.Id)
+                : context.Database.Execute(query.CompanyId, tx => PartnerDossier.FromReceipts(directory, query.Id, tx) ?? PartnerDossier.Read(directory, query.Id, tx));
             if (snapshot is not null) snapshot = PartnerDossier.Within(snapshot, from, to);
-            return PartnerJson.Element(PartnerDossier.Apply(view, snapshot, from is not null || to is not null));
+            var result = PartnerDossier.Apply(view, snapshot, from is not null || to is not null);
+            if (context.Database is not null) result = context.Database.Execute(query.CompanyId,
+                tx => PartnerDossier.ApplySales(result, CompanyReferenceQueries.Sales(tx), from, to));
+            return PartnerJson.Element(result);
         }));
         context.RegisterPage(new("partners", context.ModuleId, "Partnertörzs",
             "Vevők, szállítók és gyártók. A dosszié a bevételezés számláit mutatja ennél a partnernél.", "\uE716",
@@ -54,7 +54,7 @@ public sealed class PartnersModule : IModule
             [new("name", "Partner", 240), new("taxId", "Adószám", 150), new("city", "Település", 150), new("email", "E-mail", 230),
              new("phone", "Telefon", 140, false), new("country", "Ország", 90, false),
              new("isCustomer", "Vevő", 90, false), new("isSupplier", "Szállító", 100, false), new("isManufacturer", "Gyártó", 90, false)],
-            new("list", "save", "archive", "export", "import-preview", "import-commit")));
+            new("list", "save", "archive", "export")) { DossierCommand = "dossier" });
         return ValueTask.CompletedTask;
     }
     public ValueTask StopAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;

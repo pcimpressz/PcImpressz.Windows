@@ -22,9 +22,6 @@ public sealed class EntityPageView : UserControl
         toolbar.Children.Add(ActionButton("Keresés", "SearchCommand"));
         var create = ActionButton("Új", "NewCommand"); toolbar.Children.Add(create);
         toolbar.Children.Add(ActionButton("CSV export", "ExportCommand"));
-        var import = ActionButton("Import InvenTree-ből", "ImportCommand");
-        import.SetBinding(VisibilityProperty, new Binding("CanImport") { Converter = new BooleanToVisibilityConverter() });
-        toolbar.Children.Add(import);
         toolbar.Children.Add(ListGrid.ColumnButton(() => DataContext as IColumnList));
         root.Children.Add(toolbar);
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,16) };
@@ -43,6 +40,7 @@ public sealed class EntityPageView : UserControl
         grid.SetResourceReference(Control.BackgroundProperty, "SurfaceBrush"); grid.SetResourceReference(Control.ForegroundProperty, "TextBrush");
         grid.SetResourceReference(DataGrid.RowBackgroundProperty, "SurfaceBrush");
         grid.SetResourceReference(DataGrid.AlternatingRowBackgroundProperty, "ElevatedBrush");
+        grid.SetBinding(IsEnabledProperty, new Binding("IsNotBusy"));
         grid.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Rows"));
         grid.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedRow") { Mode = BindingMode.TwoWay });
         var headerStyle = new Style(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader),
@@ -75,6 +73,7 @@ public sealed class EntityPageView : UserControl
         var title = new TextBlock { FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new(0,0,0,20) };
         title.SetBinding(TextBlock.TextProperty, new Binding("EditorTitle")); editor.Children.Add(title);
         var fields = new Grid(); fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new());
+        fields.SetBinding(IsEnabledProperty, new Binding("IsNotBusy"));
         editor.Children.Add(fields);
         var save = new WrapPanel { Margin = new(0,20,0,0) };
         var saveButton = ActionButton("Mentés", "SaveCommand"); saveButton.SetResourceReference(StyleProperty, "PrimaryButton");

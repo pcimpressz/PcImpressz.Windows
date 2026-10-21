@@ -23,16 +23,17 @@ public sealed record EntityPageLabels
     public string ExportFileName { get; init; } = "partnerek.csv";
     public string ExportedMessage { get; init; } = "A szűrt partnerlista exportálva.";
     public string SearchHint { get; init; } = "Keresés név, adószám, e-mail, telefon vagy település alapján";
-    public string ImportWindowTitle { get; init; } = "InvenTree-partnerek importálása";
+    public string ImportWindowTitle { get; init; } = "Adatok importálása";
     public string ImportLead { get; init; } = "Hozd át a meglévő partnereidet.";
-    public string ImportHelp { get; init; } = "Csak olvasunk az InvenTree-ből. Az import a kiválasztott helyi cégbe kerül, a már meglévő partnereket nem írja felül.";
+    public string ImportHelp { get; init; } = "Az import a kiválasztott helyi cégbe kerül.";
     public string ImportIdle { get; init; } = "A kulcsot nem mentjük el. A címek és a partner-alapadatok kerülnek átvételre.";
     public string ImportCommitLabel { get; init; } = "Új partnerek importálása";
     public string ResultNoun { get; init; } = "partner";
 }
 public sealed record EntityPageDescriptor(string Id, string ModuleId, string Title, string Description,
     string Icon, EntityField[] Fields, EntityColumn[] Columns, EntityPageCommands Commands,
-    EntityPageLabels? Labels = null, EntityFilterOption[]? Filters = null);
+    EntityPageLabels? Labels = null, EntityFilterOption[]? Filters = null)
+{ public string ViewKind { get; init; } = "entity"; public string? DossierCommand { get; init; } }
 public sealed record ModuleCommandRequest(Guid CompanyId, string ModuleId, string Command, JsonElement Input);
 public sealed record LocalRequest(string Operation, JsonElement Payload);
 public sealed record LocalResponse(bool Success, JsonElement? Data = null, string? Error = null, string? Code = null);
@@ -71,3 +72,6 @@ public static class LocalProtocol
         return JsonSerializer.Deserialize<T>(payload) ?? throw new IOException("Üres üzenet.");
     }
 }
+
+public sealed record CompanyBackupRequest(Guid CompanyId, string FileName);
+public sealed record CompanyRestoreRequest(string FileName, string Name, bool IsDemo);

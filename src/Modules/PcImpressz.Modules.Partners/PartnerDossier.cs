@@ -1,3 +1,4 @@
+﻿using PcImpressz.Contracts;
 using System.Globalization;
 using System.Text.Json;
 
@@ -11,7 +12,7 @@ public sealed record PartnerDossierSection(string Id, string Title, string Statu
 public sealed record PartnerDossierView(Guid PartnerId, string Title, string Subtitle, bool FiguresAvailable,
     string Notice, PartnerDossierCard[] Cards, PartnerDossierSection[] Sections);
 public sealed record PartnerDossierItem(string Name, decimal Quantity, decimal Net);
-public sealed record PartnerDossierInvoice(string Number, string Date, decimal Net, decimal Gross, bool Paid, string Status, PartnerDossierItem[] Items);
+public sealed record PartnerDossierInvoice(string Number, string Date, decimal Net, decimal Gross, bool? Paid, string Status, PartnerDossierItem[] Items);
 public sealed record PartnerDossierSnapshot(Guid PartnerId, decimal PurchaseNet, decimal PurchaseGross, string? First, string? Last,
     PartnerDossierItem[] Frequent, PartnerDossierInvoice[] Invoices);
 public sealed record PartnerDossierDocument(int SchemaVersion, PartnerDossierSnapshot[] Items);
@@ -71,14 +72,15 @@ public static class PartnerDossier
     {
         if (from is null && to is null) return snapshot;
         var invoices = snapshot.Invoices.Where(invoice => InPeriod(invoice.Date, from, to)).ToArray();
-        var frequent = invoices.SelectMany(invoice => invoice.Items)
+        var received = invoices.Where(invoice => invoice.Status.Equals("Bevételezve", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var frequent = received.SelectMany(invoice => invoice.Items)
             .GroupBy(item => item.Name.Trim(), StringComparer.Create(Hungarian, true))
             .Select(group => new PartnerDossierItem(group.First().Name, group.Sum(item => item.Quantity), group.Sum(item => item.Net)))
             .OrderByDescending(item => item.Quantity).ThenBy(item => item.Name, StringComparer.Create(Hungarian, true)).Take(15).ToArray();
         var dates = invoices.Select(invoice => invoice.Date).Where(date => date.Length > 0).Order(StringComparer.Ordinal).ToArray();
         return snapshot with
         {
-            PurchaseNet = invoices.Sum(invoice => invoice.Net), PurchaseGross = invoices.Sum(invoice => invoice.Gross),
+            PurchaseNet = received.Sum(invoice => invoice.Net), PurchaseGross = received.Sum(invoice => invoice.Gross),
             First = dates.FirstOrDefault(), Last = dates.LastOrDefault(), Frequent = frequent, Invoices = invoices
         };
     }
@@ -123,8 +125,12 @@ public static class PartnerDossier
         };
     }
 
-    public static PartnerDossierSnapshot? FromReceipts(string partnerDirectory, Guid partnerId)
+    public static PartnerDossierSnapshot? FromReceipts(string partnerDirectory, Guid partnerId, ICompanyTransaction? transaction = null)
     {
+        if (transaction is not null)
+            return Assemble(partnerId, CompanyReferenceQueries.Receipts(transaction).Where(r => r.SupplierId == partnerId)
+                .Select(r => new PartnerDossierInvoice(r.Number,r.Date,r.Net,r.Gross,null,ReceiptStatus(r.Status),
+                    r.Lines.Select(l=>new PartnerDossierItem(l.Name,l.Quantity,l.Quantity*l.NetUnitPrice)).ToArray())).ToList());
         var modules = Directory.GetParent(partnerDirectory)?.FullName;
         if (modules is null) return null;
         var file = Path.Combine(modules, "receiving", "receipts.json");
@@ -133,7 +139,9 @@ public static class PartnerDossier
             throw new IOException("A bevételezés hivatkozás, ezért a dosszié nem olvassa.");
         if (new FileInfo(file).Length > 64 * 1024 * 1024) throw new IOException("A bevételezés túl nagy.");
         JsonDocument document;
-        try { document = JsonDocument.Parse(File.ReadAllText(file)); }
+        var body = File.ReadAllText(file);
+        if (body is null) return null;
+        try { document = JsonDocument.Parse(body); }
         catch (JsonException) { throw new IOException("A bevételezés sérült, a dosszié nem tudja olvasni."); }
         using (document)
         {
@@ -153,8 +161,13 @@ public static class PartnerDossier
                     }
                 }
                 invoices.Add(new(JsonText(data, "number"), JsonText(data, "issuedOn"), JsonAmount(data, "net"), JsonAmount(data, "gross"),
-                    false, ReceiptStatus(JsonText(data, "status")), items.ToArray()));
+                    null, ReceiptStatus(JsonText(data, "status")), items.ToArray()));
             }
+            return Assemble(partnerId, invoices);
+        }
+    }
+    private static PartnerDossierSnapshot? Assemble(Guid partnerId, List<PartnerDossierInvoice> invoices)
+    {
             if (invoices.Count == 0) return null;
             var received = invoices.Where(invoice => invoice.Status == "Bevételezve").ToArray();
             var frequent = received.SelectMany(invoice => invoice.Items)
@@ -165,25 +178,42 @@ public static class PartnerDossier
             return new(partnerId, received.Sum(invoice => invoice.Net), received.Sum(invoice => invoice.Gross),
                 dates.FirstOrDefault(), dates.LastOrDefault(), frequent,
                 invoices.OrderByDescending(invoice => invoice.Date, StringComparer.Ordinal).ToArray());
-        }
     }
 
-    public static PartnerDossierSnapshot? Read(string directory, Guid partnerId)
+    public static PartnerDossierSnapshot? Read(string directory, Guid partnerId, ICompanyTransaction? transaction = null)
     {
         var file = Path.Combine(directory, "dossiers.json");
-        if (!File.Exists(file)) return null;
-        if (new FileInfo(file).Length > 32 * 1024 * 1024) throw new IOException("A partnerdosszié túl nagy.");
+        if (transaction is null && !File.Exists(file)) return null;
+        if (transaction is null && new FileInfo(file).Length > 32 * 1024 * 1024) throw new IOException("A partnerdosszié túl nagy.");
         PartnerDossierDocument? document;
-        try { document = JsonSerializer.Deserialize<PartnerDossierDocument>(File.ReadAllText(file), PartnerJson.Options); }
+        var body = transaction is null ? File.ReadAllText(file) : transaction.Get("partners", "dossiers");
+        if (body is null) return null;
+        try { document = JsonSerializer.Deserialize<PartnerDossierDocument>(body, PartnerJson.Options); }
         catch (JsonException) { throw new IOException("A partnerdosszié fájl sérült."); }
         if (document is null || document.SchemaVersion != 1 || document.Items is null)
             throw new IOException("A partnerdosszié fájl sérült.");
         return document.Items.FirstOrDefault(item => item.PartnerId == partnerId);
     }
 
+    public static PartnerDossierView ApplySales(PartnerDossierView view, OutgoingSaleReference[] source, DateOnly? from, DateOnly? to)
+    {
+        var all=source.Where(s=>s.CustomerId==view.PartnerId).ToArray();
+        if(all.Length==0)return view;
+        var sales=all.Where(s=>InPeriod(s.Date,from,to)).ToArray();
+        var active=sales.Where(s=>s.Status=="vegleges").ToArray();
+        var lines=sales.OrderByDescending(s=>s.Date,StringComparer.Ordinal).Select(s=>new PartnerDossierLine(s.Number,s.Date+" · "+(s.Status=="vegleges"?"Végleges":"Visszafordítva"),Money(s.Gross),
+            s.Lines.Select(l=>new PartnerDossierItemView(l.Name,Quantity(l.Quantity),Money(l.Quantity*l.NetUnitPrice))).ToArray())).ToArray();
+        return view with
+        {
+            FiguresAvailable=true,
+            Cards=view.Cards.Select(c=>c.Id=="turnover"?c with{Value=Money(active.Sum(s=>s.Gross)),Status=Ready}:c).ToArray(),
+            Sections=view.Sections.Select(s=>s.Id=="sales"?s with{Title="Helyi eladások",Status=Ready,Source="Eladás",Detail="A végleges helyi eladási bizonylatok bruttó összege. A visszafordított eladás nem növeli a forgalmat. Ezek nem adóügyi számlák.",Lines=lines}:s).ToArray(),
+            Notice="A helyi eladások és a bejövő számlák adatai megjelennek. Adóügyi kimenő számla, pénzügyi kiegyenlítés és ajánlatkezelés még nincs bekötve."
+        };
+    }
     private static PartnerDossierLine InvoiceLine(PartnerDossierInvoice invoice)
     {
-        var paid = invoice.Paid ? "fizetve" : "nincs fizetve";
+        var paid = invoice.Paid switch { true => "fizetve", false => "nincs fizetve", null => "fizetettség nem ismert" };
         var detail = string.Join(" · ", new[] { invoice.Date, paid, invoice.Status, invoice.Items.Length + " tétel" }.Where(part => part.Length > 0));
         var items = invoice.Items.Select(item => new PartnerDossierItemView(item.Name, Quantity(item.Quantity) + " db", Money(item.Net))).ToArray();
         return new(invoice.Number.Length > 0 ? invoice.Number : "számla", detail, Money(invoice.Gross), items);

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using PcImpressz.Contracts;
@@ -69,7 +69,7 @@ internal static class ReceivingTests
             var supplier = await f.Supplier("Nagyker Kft.", "12345678-2-42");
             await f.Unit();
             await f.Product("Egér", "EGR-1", "5991234567890");
-            var csv = "termék neve;mennyiség;nettó egységár\r\nSzállítási díj;1;1500\r\n";
+            var csv = "termék neve;mennyiség;nettó egységár;áfa;szolgáltatás\r\nSzállítási díj;1;1500;27;igen\r\n";
             var csvBody = Convert.ToBase64String(Encoding.UTF8.GetBytes(csv));
             var imported = await f.Receipts.Import(new(f.First.Id, supplier.Id, "XLS-1", null, null, "xls", "szamla.csv", csvBody),
                 ReceivingImport.Read("szamla.csv", csvBody), "operator");
@@ -77,10 +77,10 @@ internal static class ReceivingTests
             Check.Equal("szolgaltatas", imported.Data.Lines.Single().Match);
             var xml = """
                 <InvoiceData>
-                  <invoiceNumber>NAV-1</invoiceNumber>
+                  <invoiceNumber>NAV-1</invoiceNumber><currencyCode>HUF</currencyCode>
                   <invoiceIssueDate>2026-10-01</invoiceIssueDate>
                   <supplierTaxNumber>12345678-2-42</supplierTaxNumber>
-                  <line><lineDescription>Egér</lineDescription><quantity>2</quantity><unitPrice>1000</unitPrice>
+                  <line><lineDescription>Egér</lineDescription><quantity>2</quantity><unitPrice>1000</unitPrice><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate>
                     <productCode><productCodeCategory>EAN</productCodeCategory><productCodeValue>5991234567890</productCodeValue></productCode>
                   </line>
                 </InvoiceData>
@@ -173,7 +173,7 @@ internal static class ReceivingTests
         });
     }
 
-    private static ReceiptLineDraft Line(string name, decimal quantity, decimal price) => new(null, null, name, "", "", "DB", quantity, price, 27);
+    private static ReceiptLineDraft Line(string name, decimal quantity, decimal price) => new(null, null, name, "", "", "DB", quantity, price, 27, name == "Szállítási díj");
     private static ReceiptDraft Draft(Guid supplier, string number, params ReceiptLineDraft[] lines) =>
         new(number, supplier, "2026-10-20", "", "", "Bolt", lines);
     private static (string, Func<Task>) Case(string name, Func<Fixture, Task> test) => (name, async () => { using var f = new Fixture(); await test(f); });

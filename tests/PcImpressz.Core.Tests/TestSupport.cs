@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -119,7 +119,7 @@ internal sealed class RuntimeFixture : IAsyncDisposable
         Runtime = new(Crypto.Verifier, Dispatcher, Crypto.Clock, NullLogger<ModuleRuntime>.Instance);
     }
     public ModuleManifest Package(string id = "probe", ModuleDependency[]? dependencies = null,
-        string entryType = "PcImpressz.TestModule.ProbeModule", string apiVersion = "1.0")
+        string entryType = "PcImpressz.TestModule.ProbeModule", string apiVersion = PcImpressz.Contracts.PlatformContract.ApiVersion)
     {
         var destination = System.IO.Path.Combine(Directory.Path, id);
         System.IO.Directory.CreateDirectory(destination);

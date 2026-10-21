@@ -1,5 +1,6 @@
-<Solution>
+﻿<Solution>
   <Folder Name="/src/">
+    <Project Path="src/PcImpressz.Business/PcImpressz.Business.csproj" />
     <Project Path="src/PcImpressz.Contracts/PcImpressz.Contracts.csproj" />
     <Project Path="src/PcImpressz.Core/PcImpressz.Core.csproj" />
     <Project Path="src/PcImpressz.ApplicationHost/PcImpressz.ApplicationHost.csproj" />
@@ -7,12 +8,15 @@
     <Project Path="src/PcImpressz.Shell.Windows/PcImpressz.Shell.Windows.csproj" />
   </Folder>
   <Folder Name="/modules/">
+    <Project Path="src/Modules/PcImpressz.Modules.Inventory/PcImpressz.Modules.Inventory.csproj" />
+    <Project Path="src/Modules/PcImpressz.Modules.Sales/PcImpressz.Modules.Sales.csproj" />
     <Project Path="src/Modules/PcImpressz.Modules.Partners/PcImpressz.Modules.Partners.csproj" />
     <Project Path="src/Modules/PcImpressz.Modules.Catalog/PcImpressz.Modules.Catalog.csproj" />
     <Project Path="src/Modules/PcImpressz.Modules.Receiving/PcImpressz.Modules.Receiving.csproj" />
   </Folder>
-  <Folder Name="/tools/"><Project Path="tools/PcImpressz.DevelopmentIssuer/PcImpressz.DevelopmentIssuer.csproj" /></Folder>
+  <Folder Name="/tools/"><Project Path="tools/PcImpressz.Maintenance/PcImpressz.Maintenance.csproj" /><Project Path="tools/PcImpressz.DevelopmentIssuer/PcImpressz.DevelopmentIssuer.csproj" /></Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PcImpressz.Shell.UiTests/PcImpressz.Shell.UiTests.csproj" />
     <Project Path="tests/PcImpressz.Core.Tests/PcImpressz.Core.Tests.csproj" />
     <Project Path="tests/PcImpressz.Shell.WheelTests/PcImpressz.Shell.WheelTests.csproj" />
     <Project Path="tests/PcImpressz.TestModule/PcImpressz.TestModule.csproj" />

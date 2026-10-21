@@ -1,5 +1,7 @@
 # Partnertörzs és üres cégek – 0.3
 
+**v0.4 frissítés:** a lenti v0.3 leírás a korábbi működés dokumentuma. A Host most cégenként SQLite-adatbázist használ; a régi JSON-fájlok migrációs források. A bevételezés már készletet mozgat, az eladás és a cégmentés elkészült. Az aktuális használat és korlátok: [Készlet, eladás és cégmentés](KESZLET-ELADAS-ES-MENTES.md).
+
 ## Használat
 
 1. Indítás: a projekt gyökerében a Start.cmd.
@@ -35,17 +37,9 @@ Ha a cég bevételezésében van számla ehhez a szállítóhoz, a dosszié onna
 
 A következő fejlesztési lépés a kimenő számla ugyanezzel a partnerkapoccsal, a forgalom kártyához. Amíg az a modul nincs, a szakasz állapota `waiting` marad.
 
-## InvenTree-import
+## Korábbi külső kapcsolat
 
-Az Import InvenTree-ből ablak alapértelmezett címe https://raktar.bukacsalad.hu. A helyi címhez http://192.168.110.71 adható meg; HTTP esetén külön be kell kapcsolni a nem titkosított helyi kapcsolatot.
-
-Az API-kulcsot kizárólag a program importablakában add meg. A kulcsot nem mentjük konfigurációba, partneradatba vagy naplóba. A lekérések GET műveletek; az InvenTree adatait nem módosítjuk. A szerver TLS-ellenőrzését nem kapcsoljuk ki, és idegen címre mutató átirányítást/lapozást nem követünk a kulccsal.
-
-Az előnézet megmutatja az új, már meglévőnek felismert és hibás rekordok számát, valamint néhány mintaadatot. Helyi adat csak az Új partnerek importálása gomb után keletkezik. A már meglévő partnereket nem írjuk felül: külső azonosító, adószám, illetve azonos név/e-mail alapján felismerjük az egyezést. A forrást érdemes mindig ugyanazzal a címmel megadni.
-
-A partner alapadatai, szerepei és elsődleges címe kerülnek átvételre; külön kapcsolattartói és többcímes nyilvántartás ebben a változatban nincs. Az előnézet 10 percig, az adott céghez és Windows-felhasználóhoz kötve használható fel egyszer. Ha közben a helyi partneradatok változnak, új előnézet kell. A felületen megjelenő hibás/kimaradt rekordokat ellenőrizni kell.
-
-A valódi szerverrel való importot API-kulcs hiányában még nem hajtottuk végre; a lekérési, lapozási, előnézeti és mentési folyamatokat tesztválaszokkal ellenőriztük. [InvenTree vállalati API](https://docs.inventree.org/en/latest/api/schema/company/)
+Az InvenTree-kapcsolat 2026-10-21-én kivezetve. Nincs importgomb, API-kliens vagy tokenkezelés. A meglévő rekordok eredetadatai megmaradnak.
 
 ## Adattárolás és mentés
 
@@ -55,7 +49,7 @@ Ez az első változat egygépes, egy Windows-felhasználóhoz tartozó adattára
 
 Teljes mentéshez állítsd le az alkalmazást, és másold a teljes .local könyvtárat biztonságos helyre. Az előző mentésből történő kézi helyreállítást szintén leállított alkalmazással kell végezni, a sérült eredeti megőrzése mellett.
 
-Jelenlegi keretek: legfeljebb 50 000 partner és 200 000 módosítási naplóbejegyzés cégenként; legfeljebb 64 MB partnerfájl; importálásnál legfeljebb 5000 InvenTree-partner és 10 000 cím egy előnézetben. Több Windows-felhasználó közös hálózati adatkezelése és finom cégenkénti szerepkörök későbbi fejlesztés.
+Jelenlegi keretek: legfeljebb 50 000 partner és 200 000 módosítási naplóbejegyzés cégenként; legfeljebb 64 MB partnerfájl;  Több Windows-felhasználó közös hálózati adatkezelése és finom cégenkénti szerepkörök későbbi fejlesztés.
 
 ## Modul, jogosultság és fejlesztői licenc
 

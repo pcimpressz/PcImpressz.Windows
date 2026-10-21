@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
@@ -9,6 +9,8 @@ namespace PcImpressz.Modules.Receiving;
 public static class ReceivingImport
 {
     private const int MaximumBytes = 1_500_000;
+    private const int ExpandedLimit = 8 * 1024 * 1024;
+    private static XmlReaderSettings XmlSettings() => new() { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = ExpandedLimit };
     public static ImportedDocument Read(string? fileName, string? contentBase64)
     {
         var name = (fileName ?? "").Trim();
@@ -17,6 +19,7 @@ public static class ReceivingImport
             throw new ArgumentException("A PDF-ből a tételsorok kiolvasása a következő kör. Most Excel (xlsx), CSV vagy NAV-számla XML olvasható.");
         if (extension == ".xls")
             throw new ArgumentException("A régi .xls helyett mentsd a fájlt xlsx vagy csv formátumba.");
+        if ((contentBase64?.Length ?? 0) > 2_000_004) throw new ArgumentException("A fájl nagyobb 1,5 MB-nál.");
         byte[] bytes;
         try { bytes = Convert.FromBase64String(contentBase64 ?? ""); }
         catch (FormatException) { throw new ArgumentException("A fájl tartalma nem olvasható."); }
@@ -31,7 +34,7 @@ public static class ReceivingImport
     }
     public static ImportedDocument FromTable(string[][] rows)
     {
-        if (rows.Length < 2) throw new ArgumentException("A táblában fejléc és legalább egy tétel kell.");
+        if (rows.Length is < 2 or > 401 || rows.Any(row => row.Length > 64 || row.Any(cell => cell.Length > 10000))) throw new ArgumentException("A táblában fejléc és legalább egy tétel kell.");
         var header = rows[0].Select(cell => ReceivingText.Compact(cell)).ToArray();
         int Column(params string[] names)
         {
@@ -44,6 +47,10 @@ public static class ReceivingImport
         var price = Column("nettó egységár", "netto egysegar", "nettó ár", "netto ar");
         if (name < 0 || quantity < 0 || price < 0)
             throw new ArgumentException("Hiányzó oszlop. Kell: termék neve, mennyiség, nettó egységár. Talált fejléc: " + string.Join(", ", rows[0]));
+        var vat = Column("áfa", "áfa %", "afakulcs", "vat");
+        if (vat < 0) throw new ArgumentException("Az importhoz explicit áfa oszlop kell (0, 5, 18, 27). Hiányzó értéket nem találunk ki.");
+        var unit = Column("mértékegység", "egység", "unit");
+        var service = Column("szolgáltatás", "service");
         var sku = Column("saját cikkszám (belső id)", "sajat cikkszam", "cikkszám", "cikkszam");
         var mpn = Column("gyártói cikkszám", "gyartoi cikkszam");
         var barcode = Column("vonalkód / ean", "vonalkod", "ean");
@@ -55,7 +62,8 @@ public static class ReceivingImport
             if (title.Length == 0) continue;
             var own = Cell(row, sku);
             var maker = Cell(row, mpn);
-            lines.Add(new(title, own.Length > 0 ? own : maker, ReceivingText.Digits(Cell(row, barcode)), Number(Cell(row, quantity), "Mennyiség"), Number(Cell(row, price), "Nettó egységár")));
+            lines.Add(new(title, own.Length > 0 ? own : maker, ReceivingText.Digits(Cell(row, barcode)), Number(Cell(row, quantity), "Mennyiség"), Number(Cell(row, price), "Nettó egységár"), Number(Cell(row, vat), "Áfa"),
+                unit < 0 ? "DB" : Cell(row, unit), service >= 0 && Service(Cell(row, service))));
         }
         if (lines.Count == 0) throw new ArgumentException("A fájlban nincs tételsor.");
         return new(null, null, null, null, null, lines.ToArray());
@@ -65,16 +73,23 @@ public static class ReceivingImport
         XDocument document;
         try
         {
-            using var reader = XmlReader.Create(new StringReader(xml), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+            using var reader = XmlReader.Create(new StringReader(xml), XmlSettings());
             document = XDocument.Load(reader);
         }
         catch (Exception ex) when (ex is XmlException or IOException) { throw new ArgumentException("A NAV-számla XML nem olvasható."); }
+        if (Header(document, "currencyCode") != "HUF") throw new ArgumentException("Csak explicit HUF pénznemű NAV XML támogatott.");
         var lines = document.Descendants().Where(element => element.Name.LocalName.Equals("line", StringComparison.OrdinalIgnoreCase))
             .Select(ParseLine).Where(line => line is not null).Cast<ImportedLine>().ToArray();
         if (lines.Length == 0)
             throw new ArgumentException("Az XML-ben nincs NAV-tételsor (<line>). Katalógusfájl vagy más nagyker formátuma nem számla.");
         return new(Header(document, "invoiceNumber"), Date(Header(document, "invoiceIssueDate")), Date(Header(document, "paymentDate")),
-            Header(document, "supplierName"), Header(document, "supplierTaxNumber"), lines);
+            Header(document, "supplierName"), Header(document, "supplierTaxNumber"), lines, "HUF",
+            Summary(document,"invoiceNetAmount"),Summary(document,"invoiceVatAmount"),Summary(document,"invoiceGrossAmount"));
+    }
+    private static decimal? Summary(XDocument document,string name)
+    {
+        var text=Header(document,name);
+        return text.Length==0?null:Number(text,"Számlaösszesítő");
     }
     private static ImportedLine? ParseLine(XElement line)
     {
@@ -90,7 +105,13 @@ public static class ReceivingImport
         }
         var barcode = codes.TryGetValue("EAN", out var ean) ? ean : codes.TryGetValue("GTIN", out var gtin) ? gtin : "";
         var sku = codes.TryGetValue("OWN", out var own) ? own : codes.TryGetValue("OTHER", out var other) ? other : "";
-        return new(name, sku, ReceivingText.Digits(barcode), Number(Text(line, "quantity"), "Mennyiség"), Number(Text(line, "unitPrice"), "Nettó egységár"));
+        var vatText = Text(line, "vatPercentage");
+        if (vatText.Length == 0 || line.Descendants().Any(e => e.Name.LocalName is "vatExemption" or "vatOutOfScope" or "vatDomesticReverseCharge"))
+            throw new ArgumentException("A NAV-tétel áfakezelése hiányzik vagy még nem támogatott.");
+        var unit = Text(line, "unitOfMeasure");
+        unit = unit switch { "" or "PIECE" => "DB", "OWN" => Text(line, "unitOfMeasureOwn"), _ => unit };
+        return new(name, sku, ReceivingText.Digits(barcode), Number(Text(line, "quantity"), "Mennyiség"), Number(Text(line, "unitPrice"), "Nettó egységár"),
+            Number(vatText, "Áfa") * 100m, unit);
     }
     private static string Header(XDocument document, string name) =>
         document.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase)
@@ -109,60 +130,60 @@ public static class ReceivingImport
     private static decimal Number(string text, string label)
     {
         var value = text.Trim().Replace(" ", "").Replace("\u00a0", "");
-        if (value.Contains(',') && value.Contains('.')) value = value.Replace(".", "").Replace(',', '.');
+        if (value.Contains(',') && value.Contains('.')) throw new ArgumentException(label + ": használj tizedespontot vagy tizedesvesszőt, ezreselválasztó nélkül.");
         else if (value.Contains(',')) value = value.Replace(',', '.');
         if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
             throw new ArgumentException(label + ": számot adj meg.");
         return parsed;
     }
+    private static bool Service(string value) => ReceivingText.Fold(value) switch
+    {
+        "igen" or "true" or "1" => true, "" or "nem" or "false" or "0" => false,
+        _ => throw new ArgumentException("A szolgáltatás oszlop igen/nem értéket kér.")
+    };
     private static string[][] ParseCsv(string text)
     {
-        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (lines.Length == 0) throw new ArgumentException("A CSV üres.");
-        var separator = lines[0].Contains(';') ? ';' : lines[0].Contains('\t') ? '\t' : ',';
-        return lines.Select(line => Split(line, separator)).ToArray();
-    }
-    private static string[] Split(string line, char separator)
-    {
-        var cells = new List<string>();
-        var current = new StringBuilder();
-        var quoted = false;
-        for (var index = 0; index < line.Length; index++)
+        var first = text.Split('\n')[0];
+        var separator = first.Contains(';') ? ";" : first.Contains('\t') ? "\t" : ",";
+        using var parser = new Microsoft.VisualBasic.FileIO.TextFieldParser(new StringReader(text.TrimStart('\uFEFF')))
+        { HasFieldsEnclosedInQuotes = true, TrimWhiteSpace = true };
+        parser.SetDelimiters(separator);
+        var rows = new List<string[]>();
+        try
         {
-            var character = line[index];
-            if (quoted)
+            while (!parser.EndOfData)
             {
-                if (character == '"')
-                {
-                    if (index + 1 < line.Length && line[index + 1] == '"') { current.Append('"'); index++; }
-                    else quoted = false;
-                }
-                else current.Append(character);
+                var fields = parser.ReadFields() ?? [];
+                if (rows.Count >= 401 || fields.Length > 64 || fields.Any(v => v.Length > 10000))
+                    throw new ArgumentException("A táblázat legfeljebb 400 tételt és 64 oszlopot tartalmazhat.");
+                rows.Add(fields);
             }
-            else if (character == '"') quoted = true;
-            else if (character == separator) { cells.Add(current.ToString()); current.Clear(); }
-            else current.Append(character);
         }
-        cells.Add(current.ToString());
-        return cells.ToArray();
+        catch (Microsoft.VisualBasic.FileIO.MalformedLineException) { throw new ArgumentException("Hibás CSV-idézőjelezés."); }
+        return rows.ToArray();
     }
     private static string[][] ParseXlsx(byte[] bytes)
     {
         using var stream = new MemoryStream(bytes);
         using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
+        if (zip.Entries.Count > 128 || zip.Entries.Any(e => e.Length > ExpandedLimit)
+            || zip.Entries.Sum(e => e.Length) > ExpandedLimit)
+            throw new ArgumentException("Az Excel kibontott mérete túl nagy.");
         var shared = ReadShared(zip.GetEntry("xl/sharedStrings.xml"));
         var sheet = zip.Entries.FirstOrDefault(entry => entry.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase)
             && entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException("Az Excel-fájlban nincs munkalap.");
-        using var reader = XmlReader.Create(sheet.Open(), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+        using var reader = XmlReader.Create(sheet.Open(), XmlSettings());
         var document = XDocument.Load(reader);
         var rows = new List<string[]>();
         foreach (var row in document.Descendants().Where(element => element.Name.LocalName == "row"))
         {
+            if (rows.Count >= 401) throw new ArgumentException("Az Excel legfeljebb 400 tételt tartalmazhat.");
             var cells = new List<string>();
             foreach (var cell in row.Elements().Where(element => element.Name.LocalName == "c"))
             {
                 var column = ColumnIndex(cell.Attribute("r")?.Value);
+                if (column >= 64 || cells.Count >= 64) throw new ArgumentException("Az Excel legfeljebb 64 oszlopot tartalmazhat.");
                 while (cells.Count < column) cells.Add("");
                 cells.Add(CellValue(cell, shared));
             }
@@ -173,7 +194,7 @@ public static class ReceivingImport
     private static string[] ReadShared(ZipArchiveEntry? entry)
     {
         if (entry is null) return [];
-        using var reader = XmlReader.Create(entry.Open(), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+        using var reader = XmlReader.Create(entry.Open(), XmlSettings());
         var document = XDocument.Load(reader);
         return document.Descendants().Where(element => element.Name.LocalName == "si")
             .Select(item => string.Concat(item.Descendants().Where(element => element.Name.LocalName == "t").Select(element => element.Value))).ToArray();
@@ -195,6 +216,7 @@ public static class ReceivingImport
         foreach (var character in reference ?? "")
         {
             if (!char.IsLetter(character)) break;
+            if (index > 64) throw new ArgumentException("Túl nagy oszlopazonosító.");
             index = index * 26 + char.ToUpperInvariant(character) - 'A' + 1;
         }
         return Math.Max(0, index - 1);

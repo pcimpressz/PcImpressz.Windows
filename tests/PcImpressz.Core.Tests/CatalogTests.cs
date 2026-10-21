@@ -106,75 +106,6 @@ internal static class CatalogTests
             var csv = CatalogRepository.ExportCsv("Név;Kód", [unit], u => [u.Data.Name, u.Data.Code]);
             Check.True(csv.Contains("\"'=HYPERLINK(bad)\"", StringComparison.Ordinal));
         });
-        yield return Case("import preview does not write and commit imports once", async f =>
-        {
-            var importer = f.Importer();
-            var preview = await importer.Preview(f.Options(), "operator", default);
-            Check.Equal(3, preview.NewCount);
-            Check.Equal(0, (await f.Repository.Snapshot(f.First.Id)).Products.Length);
-            Check.Equal(3, await importer.Commit(new(f.First.Id, preview.PreviewId), "operator", default));
-            var state = await f.Repository.Snapshot(f.First.Id);
-            Check.Equal("CSV-M6", state.Products.Single().Data.Sku);
-            Check.Equal("IT-10", state.Products.Single().Data.CategoryCode);
-            Check.Equal("DB", state.Products.Single().Data.UnitCode);
-            await Check.ThrowsAsync<ArgumentException>(async () => await importer.Commit(new(f.First.Id, preview.PreviewId), "operator", default));
-            Check.Equal(1, (await f.Repository.Snapshot(f.First.Id)).Products.Length);
-        });
-        yield return Case("repeated catalog import skips existing records", async f =>
-        {
-            var importer = f.Importer();
-            await importer.Commit(new(f.First.Id, (await importer.Preview(f.Options(), "operator", default)).PreviewId), "operator", default);
-            var repeated = await importer.Preview(f.Options(), "operator", default);
-            Check.Equal(0, repeated.NewCount);
-            Check.Equal(2, repeated.SkippedCount);
-        });
-        yield return Case("catalog import preview is bound to company and actor", async f =>
-        {
-            var importer = f.Importer();
-            var preview = await importer.Preview(f.Options(), "operator", default);
-            await Check.ThrowsAsync<ArgumentException>(async () => await importer.Commit(new(f.Second.Id, preview.PreviewId), "operator", default));
-            await Check.ThrowsAsync<ArgumentException>(async () => await importer.Commit(new(f.First.Id, preview.PreviewId), "other", default));
-            Check.Equal(0, (await f.Repository.Snapshot(f.First.Id)).Products.Length);
-        });
-        yield return Case("expired catalog import preview cannot commit", async f =>
-        {
-            var importer = f.Importer();
-            var preview = await importer.Preview(f.Options(), "operator", default);
-            f.Clock.Now = f.Clock.Now.AddMinutes(11);
-            await Check.ThrowsAsync<ArgumentException>(async () => await importer.Commit(new(f.First.Id, preview.PreviewId), "operator", default));
-        });
-        yield return Case("catalog import does not overwrite edits after preview", async f =>
-        {
-            var importer = f.Importer();
-            var preview = await importer.Preview(f.Options(), "operator", default);
-            await f.Unit(f.First.Id, "Darab", "DB");
-            await Check.ThrowsAsync<CatalogConflictException>(async () => await importer.Commit(new(f.First.Id, preview.PreviewId), "operator", default));
-            Check.Equal(0, (await f.Repository.Snapshot(f.First.Id)).Products.Length);
-        });
-        yield return Case("catalog import token is never persisted", async f =>
-        {
-            var importer = f.Importer();
-            var preview = await importer.Preview(f.Options(), "operator", default);
-            await importer.Commit(new(f.First.Id, preview.PreviewId), "operator", default);
-            foreach (var file in Directory.EnumerateFiles(f.Directory.Path, "*", SearchOption.AllDirectories))
-                Check.True(!File.ReadAllText(file).Contains("TEST-API-TOKEN", StringComparison.Ordinal));
-        });
-        yield return Case("catalog import does not follow a foreign next link", async f =>
-        {
-            var calls = 0;
-            var importer = new InvenTreeCatalogImport(f.Repository, f.Clock, () => new FakeHandler(_ =>
-            { calls++; return "{\"results\":[],\"next\":\"https://other.invalid/api/part/category/\"}"; }));
-            await Check.ThrowsAsync<HttpRequestException>(async () => await importer.Preview(f.Options(), "operator", default));
-            Check.Equal(1, calls);
-        });
-        yield return ("catalog HTTP import requires explicit LAN permission", () =>
-        {
-            Check.Throws<ArgumentException>(() => InvenTreeCatalogImport.ValidateServer("http://192.168.110.71", false));
-            Check.Equal("http://192.168.110.71/api/", InvenTreeCatalogImport.ValidateServer("http://192.168.110.71", true).AbsoluteUri);
-            Check.Throws<ArgumentException>(() => InvenTreeCatalogImport.ValidateServer("http://public.invalid", true));
-            Check.Throws<ArgumentException>(() => InvenTreeCatalogImport.ValidateServer("https://user:secret@host.invalid", false));
-            return Task.CompletedTask;
-        });
         yield return Case("signed catalog module exposes category, unit and product pages", async f =>
         {
             using var crypto = new CryptoFixture();
@@ -254,11 +185,6 @@ internal static class CatalogTests
             Repository.SaveCategory(new(company, null, 0, CatalogTests.Category(name, code)), "operator");
         public Task<ProductRecord> Product(Guid company, string name, string sku) =>
             Repository.SaveProduct(new(company, null, 0, CatalogTests.Product(name, sku)), "operator");
-        public CatalogImportOptions Options() => new(First.Id, "https://inventree.test", "TEST-API-TOKEN");
-        public InvenTreeCatalogImport Importer() => new(Repository, Clock, () => new FakeHandler(request =>
-            request.RequestUri!.AbsolutePath.Contains("/part/category/", StringComparison.Ordinal)
-            ? "{\"results\":[{\"pk\":10,\"name\":\"Csavarok\",\"description\":\"Kötőelem\",\"parent\":null}],\"next\":null}"
-            : "{\"results\":[{\"pk\":1,\"name\":\"Hatlapfejű csavar\",\"description\":\"M6\",\"IPN\":\"CSV-M6\",\"category\":10,\"units\":\"db\",\"active\":true,\"purchaseable\":true,\"salable\":false,\"revision\":\"A\"}],\"next\":null}"));
         public void Dispose() => Directory.Dispose();
     }
     private sealed class PageProbe(string moduleId) : IModuleContext
@@ -269,13 +195,5 @@ internal static class CatalogTests
         public void RegisterCommand(ICommandHandler handler) { }
         public void RegisterPage(EntityPageDescriptor page) => Pages.Add(page);
         public string GetCompanyDataDirectory(Guid companyId) => throw new NotSupportedException();
-    }
-    private sealed class FakeHandler(Func<HttpRequestMessage, string> response) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Check.Equal(HttpMethod.Get, request.Method);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(response(request), Encoding.UTF8, "application/json") });
-        }
     }
 }

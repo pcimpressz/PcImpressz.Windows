@@ -1,0 +1,1 @@
+﻿<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><ProjectReference Include="../PcImpressz.Contracts/PcImpressz.Contracts.csproj" /></ItemGroup></Project>

@@ -1,10 +1,10 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace PcImpressz.Contracts;
 
 public static class PlatformContract
 {
-    public const string ApiVersion = "1.0";
+    public const string ApiVersion = "1.1";
     public const string ProductId = "pc-impressz.windows";
 }
 
@@ -16,6 +16,7 @@ public interface IModule
 
 public interface IModuleContext
 {
+    ICompanyDatabase? Database => null;
     string ModuleId { get; }
     TimeProvider TimeProvider { get; }
     void RegisterCommand(ICommandHandler handler);

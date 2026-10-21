@@ -1,3 +1,4 @@
+﻿using PcImpressz.Core.Storage;
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text.Json;
@@ -14,7 +15,7 @@ namespace PcImpressz.ApplicationHost;
 // Initial desktop mode: the Host's Windows user owns all local companies.
 // There is no client-supplied identity, permission list or network listener.
 internal sealed class LocalCommandService(HostOptions options, CompanyStore companies, CommandDispatcher commands,
-    ModuleEnablementStore modulesEnabled, ILogger<LocalCommandService> logger) : BackgroundService
+    ModuleEnablementStore modulesEnabled, CompanyBackupService backups, ILogger<LocalCommandService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -63,6 +64,12 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
             case "companies.create":
                 var company = request.Payload.Deserialize<CreateCompanyRequest>() ?? throw new ArgumentException("Hiányzó cégnév.");
                 return new(true, JsonSerializer.SerializeToElement(companies.Create(company.Name, company.IsDemo)));
+            case "companies.backup":
+                var backup = request.Payload.Deserialize<CompanyBackupRequest>() ?? throw new ArgumentException("Hiányzó mentési kérés.");
+                return new(true, JsonSerializer.SerializeToElement(new { fileName = backups.Create(backup.CompanyId, backup.FileName) }));
+            case "companies.restore":
+                var restore = request.Payload.Deserialize<CompanyRestoreRequest>() ?? throw new ArgumentException("Hiányzó visszaállítási kérés.");
+                return new(true, JsonSerializer.SerializeToElement(backups.Restore(restore.FileName, restore.Name, restore.IsDemo)));
             case "companies.clear-demo":
                 return new(true, JsonSerializer.SerializeToElement(companies.ClearDemoData()));
             case "modules.set-enabled":
@@ -74,6 +81,8 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
                 if (!companies.List().Any(c => c.Id == command.CompanyId)) throw new ArgumentException("Ismeretlen cég.");
                 if (!modulesEnabled.IsEnabled(command.ModuleId))
                     throw new InvalidOperationException("Ez a modul ki van kapcsolva.");
+                foreach (var dependency in commands.RequiredEnabledModules(command.ModuleId, command.Command))
+                    if (!modulesEnabled.IsEnabled(dependency)) throw new InvalidOperationException("A szükséges modul ki van kapcsolva: " + dependency);
                 if (command.Input.ValueKind != JsonValueKind.Object) throw new ArgumentException("Érvénytelen parancsadat.");
                 var payload = JsonNode.Parse(command.Input.GetRawText()) as JsonObject
                     ?? throw new ArgumentException("Érvénytelen parancsadat.");

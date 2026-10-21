@@ -1,3 +1,4 @@
+using PcImpressz.Contracts;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
@@ -5,27 +6,37 @@ using System.Text.Json;
 namespace PcImpressz.Modules.Partners;
 
 // A small-company, single-Host transactional document store. No external database server is required.
-public sealed class PartnerRepository(Func<Guid, string> companyDirectory, TimeProvider time)
+public sealed class PartnerRepository(Func<Guid, string> companyDirectory, TimeProvider time, ICompanyDatabase? database = null)
 {
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
-    private async Task<T> Locked<T>(Guid company, Func<string, PartnerState, T> action, CancellationToken ct)
+    private async Task<T> Locked<T>(Guid company, Func<ModuleStorageScope, PartnerState, T> action, CancellationToken ct)
     {
         var directory = companyDirectory(company); // Also verifies that the company exists.
         var gate = _locks.GetOrAdd(company, _ => new(1, 1));
         await gate.WaitAsync(ct);
-        try { return action(directory, Read(directory)); }
+        try
+        {
+            if (database is not null) return database.Execute(company, tx =>
+            {
+                var scope = new ModuleStorageScope(directory, tx);
+                return action(scope, Read(scope));
+            });
+            var legacy = new ModuleStorageScope(directory, null);
+            return action(legacy, Read(legacy));
+        }
         finally { gate.Release(); }
     }
     public Task<PartnerState> Snapshot(Guid company, CancellationToken ct = default) =>
         Locked(company, (_, state) => state, ct);
-    private static PartnerState Read(string directory)
+    private static PartnerState Read(ModuleStorageScope scope)
     {
+        var directory = scope.Directory;
+        var body = scope.Read("partners", "partners.json");
         var file = Path.Combine(directory, "partners.json");
-        if (!File.Exists(file)) return new(1, 0, [], []);
+        if (body is null) return new(1, 0, [], []);
         try
         {
-            if (new FileInfo(file).Length > 64 * 1024 * 1024) throw new IOException("Az adattár túl nagy.");
-            var state = JsonSerializer.Deserialize<PartnerState>(File.ReadAllText(file), PartnerJson.Options)
+            var state = JsonSerializer.Deserialize<PartnerState>(body, PartnerJson.Options)
                 ?? throw new IOException("Üres adattár.");
             if (state.SchemaVersion != 1 || state.Revision < 0 || state.Partners is null || state.Audit is null
                 || state.Partners.Any(p => p.Id == Guid.Empty || p.Version < 1 || p.Data is null)
@@ -64,21 +75,12 @@ public sealed class PartnerRepository(Func<Guid, string> companyDirectory, TimeP
             ?? throw new PartnerConflictException("A partner nem található.");
         return await Save(new(request.CompanyId, request.Id, request.Version, partner.Data with { IsActive = false }), actor, ct);
     }
-    public Task<int> Import(Guid company, PartnerRecord[] additions, long expectedRevision, string actor, CancellationToken ct) =>
-        Locked(company, (directory, state) =>
-        {
-            if (state.Revision != expectedRevision)
-                throw new PartnerConflictException("Az adatok az előnézet óta változtak. Készíts új importelőnézetet.");
-            if (additions.Length == 0) return 0;
-            var now = time.GetUtcNow();
-            Write(directory, state with { Revision = state.Revision + 1, Partners = state.Partners.Concat(additions).ToArray(),
-                Audit = state.Audit.Concat(additions.Select(p => new PartnerAudit(p.Id, "import", 1, now, actor))).ToArray() });
-            return additions.Length;
-        }, ct);
-    private static void Write(string directory, PartnerState state)
+    private static void Write(ModuleStorageScope scope, PartnerState state)
     {
+        var directory = scope.Directory;
         if (state.Partners.Length > 50000 || state.Audit.Length > 200000)
             throw new IOException("Az első változat adattárkorlátja elérve; archiválási vagy adatbázis-bővítési lépés szükséges.");
+        if (scope.Write("partners", JsonSerializer.Serialize(state, PartnerJson.Options))) return;
         Directory.CreateDirectory(directory);
         var file = Path.Combine(directory, "partners.json");
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";

@@ -1,3 +1,4 @@
+﻿using PcImpressz.Contracts;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -31,6 +32,10 @@ public sealed record ReceiptData
     public string Status { get; init; } = "uj";
     public string Notes { get; init; } = "";
     public string Warehouse { get; init; } = "Bolt";
+    public decimal? SourceNet { get; init; }
+    public decimal? SourceVat { get; init; }
+    public decimal? SourceGross { get; init; }
+    public bool StockPosted { get; init; }
     public decimal Net { get; init; }
     public decimal Vat { get; init; }
     public decimal Gross { get; init; }
@@ -43,7 +48,7 @@ public sealed record ReceiptRecord(Guid Id, long Version, ReceiptData Data, Date
 public sealed record ReceiptAudit(Guid ReceiptId, string Action, long Version, DateTimeOffset At, string Actor);
 public sealed record ReceiptState(int SchemaVersion, long Revision, ReceiptRecord[] Receipts, ReceiptAudit[] Audit);
 public sealed record ReceiptLineDraft(Guid? Id, Guid? ProductId, string? Name, string? Sku, string? Barcode,
-    string? UnitCode, decimal Quantity, decimal NetUnitPrice, decimal VatRate);
+    string? UnitCode, decimal Quantity, decimal NetUnitPrice, decimal VatRate, bool IsService = false);
 public sealed record ReceiptDraft(string? Number, Guid SupplierId, string? IssuedOn, string? DueOn, string? Notes,
     string? Warehouse, ReceiptLineDraft[]? Lines);
 public sealed record ReceiptSave(Guid CompanyId, Guid? Id, long Version, ReceiptDraft? Draft);
@@ -53,9 +58,9 @@ public sealed record ReceiptGet(Guid CompanyId, Guid Id);
 public sealed record ReceiptClassify(Guid CompanyId, Guid Id, long Version, string? Status);
 public sealed record ReceiptImport(Guid CompanyId, Guid? SupplierId, string? Number, string? IssuedOn, string? DueOn,
     string? Source, string? FileName, string? ContentBase64);
-public sealed record ImportedLine(string Name, string Sku, string Barcode, decimal Quantity, decimal NetUnitPrice);
+public sealed record ImportedLine(string Name, string Sku, string Barcode, decimal Quantity, decimal NetUnitPrice, decimal? VatRate = null, string UnitCode = "DB", bool IsService = false);
 public sealed record ImportedDocument(string? Number, string? IssuedOn, string? DueOn, string? SupplierName,
-    string? SupplierTaxId, ImportedLine[] Lines);
+    string? SupplierTaxId, ImportedLine[] Lines, string Currency = "HUF", decimal? ExpectedNet = null, decimal? ExpectedVat = null, decimal? ExpectedGross = null);
 public sealed class ReceivingConflictException(string message) : Exception(message);
 
 public static class ReceivingJson
@@ -116,7 +121,11 @@ public static class ReceivingText
         }
         return new string(buffer, 0, space && count > 0 ? count - 1 : count);
     }
-    public static string TaxKey(string? value) => string.Concat((value ?? "").Where(char.IsAsciiLetterOrDigit)).ToUpperInvariant();
+    public static string TaxKey(string? value)
+    {
+        var key=string.Concat((value??"").Where(char.IsAsciiLetterOrDigit)).ToUpperInvariant();
+        return key.Length is 8 or 11 && key.All(char.IsAsciiDigit) ? key[..8] : key;
+    }
     public static string Digits(string? value) => string.Concat((value ?? "").Where(char.IsAsciiDigit));
     public static string Date(string? value, string label, bool required)
     {
@@ -140,11 +149,17 @@ internal sealed class MasterIndex
 {
     public SupplierCard[] Suppliers { get; private set; } = [];
     public ProductCard[] Products { get; private set; } = [];
-    public static MasterIndex Load(string receivingDirectory)
+    public static MasterIndex Load(string receivingDirectory, ICompanyTransaction? transaction = null)
     {
         var modules = Directory.GetParent(receivingDirectory)?.FullName
             ?? throw new IOException("A céges modulmappa nem olvasható.");
         var index = new MasterIndex();
+        if (transaction is not null)
+        {
+            index.Suppliers = CompanyReferenceQueries.Partners(transaction).Select(p => new SupplierCard(p.Id,p.Name,p.TaxId,p.IsSupplier,p.IsActive)).ToArray();
+            index.Products = CompanyReferenceQueries.Products(transaction).Select(p => new ProductCard(p.Id,p.Name,p.Sku,p.Barcode,p.UnitCode,p.IsActive)).ToArray();
+            return index;
+        }
         index.Suppliers = Read(Path.Combine(modules, "partners", "partners.json"), "partnertörzs", static (JsonElement root) =>
         {
             if (!root.TryGetProperty("partners", out var rows) || rows.ValueKind != JsonValueKind.Array) return [];
@@ -191,7 +206,6 @@ internal sealed class MasterIndex
 
 public static class ReceivingMatching
 {
-    private static readonly string[] ServiceWords = ["dij", "szallitas", "futar", "logisztik", "csomagol", "kezeles", "szolgaltatas", "postakoltseg", "utanvet"];
     private static readonly decimal[] VatRates = [0, 5, 18, 27];
 
     internal static ReceiptLine[] Build(ReceiptLineDraft[] drafts, ProductCard[] products)
@@ -225,16 +239,21 @@ public static class ReceivingMatching
         var sku = CleanCode(draft.Sku);
         var barcode = ReceivingText.Digits(draft.Barcode);
         var unit = CleanCode(draft.UnitCode);
-        var quantity = ReceivingText.Round(draft.Quantity, 4);
+        if (ReceivingText.Round(draft.Quantity,4) != draft.Quantity || ReceivingText.Round(draft.NetUnitPrice,4) != draft.NetUnitPrice)
+            throw new ArgumentException("A mennyiség és az egységár legfeljebb négy tizedes lehet; nem kerekítjük át automatikusan.");
+        var quantity = draft.Quantity;
         var price = ReceivingText.Round(draft.NetUnitPrice, 4);
-        var vat = ReceivingText.Round(draft.VatRate, 0);
+        var vat = draft.VatRate;
         if (quantity is <= 0 or > 1_000_000) throw new ArgumentException(name + ": a mennyiség legyen nagyobb nullánál.");
         if (price is < 0 or > 1_000_000_000) throw new ArgumentException(name + ": érvénytelen nettó egységár.");
         if (!VatRates.Contains(vat)) throw new ArgumentException(name + ": az áfakulcs 0, 5, 18 vagy 27 százalék lehet.");
+        if (draft.IsService && draft.ProductId is not null) throw new ArgumentException("A sor vagy szolgáltatás, vagy készletes termék lehet.");
         if (draft.ProductId is Guid selected)
         {
             var product = products.SingleOrDefault(card => card.Id == selected && card.IsActive)
                 ?? throw new ArgumentException("A kiválasztott termék nem található az aktív terméktörzsben.");
+            if (unit.Length > 0 && !unit.Equals(product.UnitCode,StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("A számlatétel mértékegysége eltér a terméktörzstől; az egységátváltást előbb tisztázni kell.");
             return new ReceiptLine
             {
                 Id = draft.Id is null || draft.Id == Guid.Empty ? Guid.NewGuid() : draft.Id.Value,
@@ -247,7 +266,7 @@ public static class ReceivingMatching
             };
         }
         if (name.Length < 2) throw new ArgumentException("A tétel neve legalább 2 karakter legyen.");
-        if (IsService(name, barcode))
+        if (draft.IsService)
             return Line(draft, null, name, sku, barcode, unit, quantity, price, vat, "szolgaltatas", "SZOLGALTATAS");
         var byBarcode = barcode.Length == 0 ? [] : products.Where(card => card.IsActive && ReceivingText.Digits(card.Barcode) == barcode).ToArray();
         if (byBarcode.Length == 1) return FromProduct(draft, byBarcode[0], name, quantity, price, vat, "EAN");
@@ -261,8 +280,12 @@ public static class ReceivingMatching
             return Line(draft, null, name, sku, barcode, unit, quantity, price, vat, "fuggo", "TOBB");
         return Line(draft, null, name, sku, barcode, unit, quantity, price, vat, "uj", "");
     }
-    private static ReceiptLine FromProduct(ReceiptLineDraft draft, ProductCard product, string name, decimal quantity, decimal price, decimal vat, string how) =>
-        Line(draft, product.Id, name.Length > 0 ? name : product.Name, product.Sku, ReceivingText.Digits(product.Barcode), product.UnitCode, quantity, price, vat, "megvan", how);
+    private static ReceiptLine FromProduct(ReceiptLineDraft draft, ProductCard product, string name, decimal quantity, decimal price, decimal vat, string how)
+    {
+        if (!string.IsNullOrWhiteSpace(draft.UnitCode) && !draft.UnitCode.Equals(product.UnitCode,StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Az importált mértékegység eltér a terméktörzstől; automatikus egységátváltás nincs.");
+        return Line(draft, product.Id, name.Length > 0 ? name : product.Name, product.Sku, ReceivingText.Digits(product.Barcode), product.UnitCode, quantity, price, vat, "megvan", how);
+    }
     private static ReceiptLine Line(ReceiptLineDraft draft, Guid? productId, string name, string sku, string barcode, string unit,
         decimal quantity, decimal price, decimal vat, string match, string how) => new()
     {
@@ -270,8 +293,6 @@ public static class ReceivingMatching
         ProductId = productId, Name = name, Sku = sku, Barcode = barcode, UnitCode = unit,
         Quantity = quantity, NetUnitPrice = price, VatRate = vat, Match = match, MatchBy = how
     };
-    private static bool IsService(string name, string barcode) =>
-        barcode.Length == 0 && ServiceWords.Any(word => ReceivingText.Compact(name).Contains(word, StringComparison.Ordinal));
     private static string Clean(string? value)
     {
         var text = (value ?? "").Replace('<', ' ').Replace('>', ' ').Trim();

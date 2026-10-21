@@ -13,6 +13,8 @@ internal sealed class JsonFileLoggerProvider(string directory) : ILoggerProvider
     {
         lock (_gate)
         {
+            try
+            {
             Directory.CreateDirectory(directory);
             var current = Path.Combine(directory, "core.jsonl");
             if (File.Exists(current) && new FileInfo(current).Length > 5 * 1024 * 1024)
@@ -29,6 +31,12 @@ internal sealed class JsonFileLoggerProvider(string directory) : ILoggerProvider
                 errorType = exception?.GetType().Name
             });
             File.AppendAllText(current, line + Environment.NewLine);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Technical logging must not change a completed business operation.
+                System.Diagnostics.Trace.WriteLine("PC-Impressz log unavailable: " + ex.GetType().Name);
+            }
         }
     }
 

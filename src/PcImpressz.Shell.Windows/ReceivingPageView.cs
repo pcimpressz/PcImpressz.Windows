@@ -1,4 +1,4 @@
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -217,6 +217,10 @@ public sealed class ReceivingPageView : UserControl
             SetResourceReference(BorderBrushProperty, "StrokeBrush"); SetResourceReference(BackgroundProperty, "SurfaceBrush");
             var panel = new StackPanel();
             panel.Children.Add(Field("Termék neve", "Name"));
+            var service = new CheckBox { Content = "Szolgáltatás (nem készletes tétel)", Margin = new(0, 0, 0, 10) };
+            service.SetBinding(CheckBox.IsCheckedProperty, new Binding("IsService"));
+            service.SetBinding(IsEnabledProperty, new Binding("DataContext.IsEditable") { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(ReceivingPageView), 1) });
+            panel.Children.Add(service);
             var codes = new Grid();
             codes.ColumnDefinitions.Add(new()); codes.ColumnDefinitions.Add(new()); codes.ColumnDefinitions.Add(new());
             codes.Children.Add(Field("Cikkszám", "Sku"));

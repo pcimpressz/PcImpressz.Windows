@@ -79,6 +79,51 @@ internal static class LicenseTests
             f.Lease = f.Lease with { Exp = f.Lease.Iat + 7 * 86400 + 1 }; f.Refresh();
             Check.Equal(LicenseStatus.Invalid, f.Evaluator().Evaluate("probe", "probe.write").Status);
         });
+        yield return Case("signed development master accepts long offline lease", f =>
+        {
+            var now = f.Clock.Now.ToUnixTimeSeconds();
+            f.License = f.License with
+            {
+                Iss = "pcimpressz-development", OrganizationId = "development",
+                LicenseId = "development-installation", Exp = 4102444800,
+                Modules = [f.License.Modules[0] with { ExpiresAt = 4102444800 }]
+            };
+            f.Lease = f.Lease with
+            {
+                Iss = "pcimpressz-development", OrganizationId = "development",
+                LicenseId = f.License.LicenseId, Exp = 4102444800
+            };
+            f.Refresh();
+            var policy = f.Policy with { Issuer = "pcimpressz-development", OrganizationId = "development" };
+            var evaluator = new LicenseEvaluator(f.Verifier, policy, f.Clock, f.Store, () => f.Tokens);
+            Check.True(evaluator.Evaluate("probe", "probe.write").Allowed);
+            f.Clock.Now = f.Clock.Now.AddDays(90);
+            Check.True(evaluator.Evaluate("probe", "probe.write").Allowed);
+        });
+        yield return Case("production issuer cannot use long developer lease", f =>
+        {
+            f.Lease = f.Lease with { Exp = f.Lease.Iat + 8 * 86400 };
+            f.Refresh();
+            Check.Equal(LicenseStatus.Invalid, f.Evaluator().Inspect().Status);
+        });
+        yield return Case("development master requires matching developer license id", f =>
+        {
+            f.License = f.License with { Iss = "pcimpressz-development", OrganizationId = "development", Exp = 4102444800 };
+            f.Lease = f.Lease with { Iss = "pcimpressz-development", OrganizationId = "development", Exp = 4102444800 };
+            f.Refresh();
+            var policy = f.Policy with { Issuer = "pcimpressz-development", OrganizationId = "development" };
+            var evaluator = new LicenseEvaluator(f.Verifier, policy, f.Clock, f.Store, () => f.Tokens);
+            Check.Equal(LicenseStatus.Invalid, evaluator.Inspect().Status);
+        });
+        yield return Case("development master remains bound to installation", f =>
+        {
+            f.License = f.License with { Iss = "pcimpressz-development", OrganizationId = "development", LicenseId = "development-installation", Exp = 4102444800 };
+            f.Lease = f.Lease with { Iss = "pcimpressz-development", OrganizationId = "development", LicenseId = "development-installation", InstallationId = "other-installation", Exp = 4102444800 };
+            f.Refresh();
+            var policy = f.Policy with { Issuer = "pcimpressz-development", OrganizationId = "development" };
+            var evaluator = new LicenseEvaluator(f.Verifier, policy, f.Clock, f.Store, () => f.Tokens);
+            Check.Equal(LicenseStatus.WrongInstallation, evaluator.Inspect().Status);
+        });
         yield return Case("old entitlement revision cannot replay", f =>
         {
             var old = f.Tokens;

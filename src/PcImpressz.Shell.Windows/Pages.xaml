@@ -1,5 +1,6 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:PcImpressz.Shell.Windows">
+ <DataTemplate DataType="{x:Type local:OperationsPageViewModel}"><local:OperationsPageView /></DataTemplate>
  <DataTemplate DataType="{x:Type local:EntityPageViewModel}"><local:EntityPageView /></DataTemplate>
  <DataTemplate DataType="{x:Type local:ReceivingPageViewModel}"><local:ReceivingPageView /></DataTemplate>
  <DataTemplate DataType="{x:Type local:DashboardPage}">
@@ -185,7 +186,7 @@
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
     <TextBlock Text="Listák" Style="{StaticResource SectionTitle}" />
-    <TextBlock Text="Minden törzs- és listaoldalon a kereső névrészletre szűkít, a találatok darabszáma mellette látszik. A fejléc kattintása rendezi az egész listát. Az oszlopokat itt, vagy az oldalon a kis fogaskerékkel kapcsolhatod. A terméktörzs Darabszám oszlopa a készlet helye: amíg nincs készletmozgás, gondolatjel áll benne." Style="{StaticResource Muted}" />
+    <TextBlock Text="Minden törzs- és listaoldalon a kereső névrészletre szűkít, a találatok darabszáma mellette látszik. A fejléc kattintása rendezi az egész listát. Az oszlopokat itt, vagy az oldalon a kis fogaskerékkel kapcsolhatod. A terméktörzs Darabszám oszlopa az összes raktár készletét mutatja. Raktárankénti bontás a Készlet oldalon." Style="{StaticResource Muted}" />
     <ComboBox ItemsSource="{Binding ListPages}" SelectedItem="{Binding SelectedListPage}" DisplayMemberPath="Title" Margin="0,16,0,12" MinHeight="36" />
     <ItemsControl ItemsSource="{Binding ColumnChoices}">
      <ItemsControl.ItemTemplate><DataTemplate>
@@ -195,6 +196,12 @@
     <TextBlock Text="{Binding ListSortLabel}" Style="{StaticResource Muted}" Margin="0,12,0,0" />
     <TextBlock Text="{Binding ListNotice}" Style="{StaticResource Muted}" Margin="0,8,0,0" />
     <Button Content="Oszlopok alaphelyzete" Command="{Binding ResetListLayoutCommand}" Margin="0,14,0,0" HorizontalAlignment="Left" />
+   </StackPanel></Border>
+   <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
+    <TextBlock Text="Cégmentés és visszaállítás" Style="{StaticResource SectionTitle}" />
+    <TextBlock Text="Az aktuális cég ellenőrzött mentése és visszaállítása új cégként. A meglévő cégek adatai megmaradnak." Style="{StaticResource Muted}" />
+    <WrapPanel Margin="0,16,0,0" IsEnabled="{Binding WorkspaceIsIdle}"><Button Content="Kiválasztott cég mentése" Command="{Binding BackupCompanyCommand}" Margin="0,0,12,8" /><Button Content="Visszaállítás új cégként" Command="{Binding RestoreCompanyCommand}" Margin="0,0,0,8" /></WrapPanel>
+    <TextBlock Text="{Binding BackupMessage}" Style="{StaticResource Muted}" Margin="0,12,0,0" />
    </StackPanel></Border>
    <local:NavConnectionCard Margin="0,20,0,0" />
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>

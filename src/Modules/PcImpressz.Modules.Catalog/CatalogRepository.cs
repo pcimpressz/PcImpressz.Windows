@@ -1,3 +1,4 @@
+using PcImpressz.Contracts;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
@@ -5,26 +6,36 @@ using System.Text.Json;
 namespace PcImpressz.Modules.Catalog;
 
 // One company, one Host, one file for categories, units and products so a reference check stays atomic.
-public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeProvider time)
+public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeProvider time, ICompanyDatabase? database = null)
 {
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
-    private async Task<T> Locked<T>(Guid company, Func<string, CatalogState, T> action, CancellationToken ct)
+    private async Task<T> Locked<T>(Guid company, Func<ModuleStorageScope, CatalogState, T> action, CancellationToken ct)
     {
         var directory = companyDirectory(company);
         var gate = _locks.GetOrAdd(company, _ => new(1, 1));
         await gate.WaitAsync(ct);
-        try { return action(directory, Read(directory)); }
+        try
+        {
+            if (database is not null) return database.Execute(company, tx =>
+            {
+                var scope = new ModuleStorageScope(directory, tx);
+                return action(scope, Read(scope));
+            });
+            var legacy = new ModuleStorageScope(directory, null);
+            return action(legacy, Read(legacy));
+        }
         finally { gate.Release(); }
     }
     public Task<CatalogState> Snapshot(Guid company, CancellationToken ct = default) => Locked(company, (_, state) => state, ct);
-    private static CatalogState Read(string directory)
+    private static CatalogState Read(ModuleStorageScope scope)
     {
+        var directory = scope.Directory;
+        var body = scope.Read("catalog", "catalog.json");
         var file = Path.Combine(directory, "catalog.json");
-        if (!File.Exists(file)) return new(1, 0, [], [], [], []);
+        if (body is null) return new(1, 0, [], [], [], []);
         try
         {
-            if (new FileInfo(file).Length > 64 * 1024 * 1024) throw new IOException("Az adattár túl nagy.");
-            var state = JsonSerializer.Deserialize<CatalogState>(File.ReadAllText(file), CatalogJson.Options)
+            var state = JsonSerializer.Deserialize<CatalogState>(body, CatalogJson.Options)
                 ?? throw new IOException("Üres adattár.");
             if (state.SchemaVersion != 1 || state.Revision < 0 || state.Categories is null || state.Units is null
                 || state.Products is null || state.Audit is null
@@ -78,28 +89,7 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
         if (product.Version != request.Version) throw new CatalogConflictException("A termék közben módosult. Frissítsd a listát, majd nyisd meg újra.");
         return await SaveProduct(new(request.CompanyId, request.Id, request.Version, product.Data with { IsActive = false }), actor, ct);
     }
-    public Task<int> Import(Guid company, CatalogAdditions additions, long expectedRevision, string actor, CancellationToken ct) =>
-        Locked(company, (directory, state) =>
-        {
-            if (state.Revision != expectedRevision)
-                throw new CatalogConflictException("Az adatok az előnézet óta változtak. Készíts új importelőnézetet.");
-            var count = additions.Categories.Length + additions.Units.Length + additions.Products.Length;
-            if (count == 0) return 0;
-            var now = time.GetUtcNow();
-            var audit = state.Audit.Concat(additions.Categories.Select(c => new CatalogAudit("category", c.Id, "import", 1, now, actor)))
-                .Concat(additions.Units.Select(u => new CatalogAudit("unit", u.Id, "import", 1, now, actor)))
-                .Concat(additions.Products.Select(p => new CatalogAudit("product", p.Id, "import", 1, now, actor))).ToArray();
-            Write(directory, state with
-            {
-                Revision = state.Revision + 1,
-                Categories = state.Categories.Concat(additions.Categories).ToArray(),
-                Units = state.Units.Concat(additions.Units).ToArray(),
-                Products = state.Products.Concat(additions.Products).ToArray(),
-                Audit = audit
-            });
-            return count;
-        }, ct);
-    private CategoryRecord WriteCategory(string directory, CatalogState state, CategorySave request, string actor)
+    private CategoryRecord WriteCategory(ModuleStorageScope scope, CatalogState state, CategorySave request, string actor)
     {
         var data = CatalogValidation.NormalizeCategory(request.Data ?? throw new ArgumentException("Hiányzó kategóriaadat."));
         var existing = Find(state.Categories, request.Id, request.Version, c => c.Id, c => c.Version);
@@ -112,7 +102,7 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
         var now = time.GetUtcNow();
         var record = new CategoryRecord(existing?.Id ?? Guid.NewGuid(), (existing?.Version ?? 0) + 1, data,
             existing?.CreatedAt ?? now, existing?.CreatedBy ?? actor, now, actor, existing?.Source, existing?.ExternalId);
-        Write(directory, state with
+        Write(scope, state with
         {
             Revision = state.Revision + 1,
             Categories = Upsert(state.Categories, record, r => r.Id),
@@ -120,7 +110,7 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
         });
         return record;
     }
-    private UnitRecord WriteUnit(string directory, CatalogState state, UnitSave request, string actor)
+    private UnitRecord WriteUnit(ModuleStorageScope scope, CatalogState state, UnitSave request, string actor)
     {
         var data = CatalogValidation.NormalizeUnit(request.Data ?? throw new ArgumentException("Hiányzó mértékegység."));
         var existing = Find(state.Units, request.Id, request.Version, u => u.Id, u => u.Version);
@@ -130,7 +120,7 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
         var now = time.GetUtcNow();
         var record = new UnitRecord(existing?.Id ?? Guid.NewGuid(), (existing?.Version ?? 0) + 1, data,
             existing?.CreatedAt ?? now, existing?.CreatedBy ?? actor, now, actor, existing?.Source, existing?.ExternalId);
-        Write(directory, state with
+        Write(scope, state with
         {
             Revision = state.Revision + 1,
             Units = Upsert(state.Units, record, r => r.Id),
@@ -138,17 +128,20 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
         });
         return record;
     }
-    private ProductRecord WriteProduct(string directory, CatalogState state, ProductSave request, string actor)
+    private ProductRecord WriteProduct(ModuleStorageScope scope, CatalogState state, ProductSave request, string actor)
     {
         var data = CatalogValidation.NormalizeProduct(request.Data ?? throw new ArgumentException("Hiányzó termékadat."));
         var existing = Find(state.Products, request.Id, request.Version, p => p.Id, p => p.Version);
         EnsureProductLinks(state, data);
+        if (existing is not null && existing.Data.UnitCode != data.UnitCode && scope.Transaction is { } transaction
+            && CompanyReferenceQueries.HasStockHistory(transaction, existing.Id))
+            throw new ArgumentException("Készletmozgással rendelkező termék mértékegysége nem módosítható; külön terméket vagy egységátváltást használj.");
         if (ActiveCodeTaken(state.Products, existing?.Id, p => p.Id, p => p.Data.IsActive, p => p.Data.Sku, data.Sku, data.IsActive))
             throw new ArgumentException("Ezzel a cikkszámmal már létezik aktív termék.");
         var now = time.GetUtcNow();
         var record = new ProductRecord(existing?.Id ?? Guid.NewGuid(), (existing?.Version ?? 0) + 1, data,
             existing?.CreatedAt ?? now, existing?.CreatedBy ?? actor, now, actor, existing?.Source, existing?.ExternalId);
-        Write(directory, state with
+        Write(scope, state with
         {
             Revision = state.Revision + 1,
             Products = Upsert(state.Products, record, r => r.Id),
@@ -210,10 +203,12 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
         rows.Any(r => id(r) == id(record)) ? rows.Select(r => id(r) == id(record) ? record : r).ToArray() : rows.Append(record).ToArray();
     private static CatalogAudit[] Append(CatalogAudit[] audit, string entity, Guid id, string action, long version, DateTimeOffset at, string actor) =>
         audit.Append(new(entity, id, action, version, at, actor)).ToArray();
-    private static void Write(string directory, CatalogState state)
+    private static void Write(ModuleStorageScope scope, CatalogState state)
     {
+        var directory = scope.Directory;
         if (state.Products.Length > 50_000 || state.Categories.Length > 10_000 || state.Units.Length > 500 || state.Audit.Length > 200_000)
             throw new IOException("Az első változat adattárkorlátja elérve; archiválási vagy adatbázis-bővítési lépés szükséges.");
+        if (scope.Write("catalog", JsonSerializer.Serialize(state, CatalogJson.Options))) return;
         Directory.CreateDirectory(directory);
         var file = Path.Combine(directory, "catalog.json");
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";

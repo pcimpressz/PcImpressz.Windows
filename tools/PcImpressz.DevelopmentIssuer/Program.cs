@@ -31,10 +31,16 @@ using var moduleKey = ReadKey("module-signing.pem");
 using var licenseKey = ReadKey("license-signing.pem");
 InstallModule(moduleKey, "partners", "PcImpressz.Modules.Partners", "PcImpressz.Modules.Partners.PartnersModule");
 InstallModule(moduleKey, "catalog", "PcImpressz.Modules.Catalog", "PcImpressz.Modules.Catalog.CatalogModule");
+InstallModule(moduleKey, "inventory", "PcImpressz.Modules.Inventory", "PcImpressz.Modules.Inventory.InventoryModule",
+[new() { ModuleId = "catalog", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" }]);
+InstallModule(moduleKey, "sales", "PcImpressz.Modules.Sales", "PcImpressz.Modules.Sales.SalesModule",
+[new() { ModuleId = "inventory", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" },
+ new() { ModuleId = "partners", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" }]);
 InstallModule(moduleKey, "receiving", "PcImpressz.Modules.Receiving", "PcImpressz.Modules.Receiving.ReceivingModule",
 [
     new() { ModuleId = "partners", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" },
-    new() { ModuleId = "catalog", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" }
+    new() { ModuleId = "catalog", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" },
+    new() { ModuleId = "inventory", MinimumVersion = "0.3.0", MaximumVersionExclusive = "1.0.0" }
 ]);
 AddPublicKey("module-public-keys.json", "dev-module-key", moduleKey);
 AddPublicKey("license-public-keys.json", "dev-license-key", licenseKey);
@@ -51,23 +57,26 @@ var revision = Math.Max(previous + 1, DateTimeOffset.UtcNow.ToUnixTimeSeconds())
 AtomicText(revisionPath, revision.ToString(System.Globalization.CultureInfo.InvariantCulture));
 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 var licenseId = "development-" + installation.Replace("-", "");
+var masterExpiry = new DateTimeOffset(2099, 12, 31, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
 var license = new EntitlementDocument
 {
     SchemaVersion = 1, Iss = "pcimpressz-development", Aud = PlatformContract.ProductId, LicenseId = licenseId,
-    OrganizationId = "development", Revision = revision, Iat = now, Nbf = now - 30, Exp = now + 30 * 86400,
+    OrganizationId = "development", Revision = revision, Iat = now, Nbf = now - 30, Exp = masterExpiry,
     Modules = [
-        new() { ModuleId = "partners", Capabilities = ["partners.write", "partners.import", "partners.read", "partners.export"], ExpiresAt = now + 30 * 86400 },
-        new() { ModuleId = "catalog", Capabilities = ["catalog.write", "catalog.import", "catalog.read", "catalog.export"], ExpiresAt = now + 30 * 86400 },
-        new() { ModuleId = "receiving", Capabilities = ["receiving.write", "receiving.read", "receiving.export"], ExpiresAt = now + 30 * 86400 }]
+        new() { ModuleId = "partners", Capabilities = ["partners.write", "partners.read", "partners.export"], ExpiresAt = masterExpiry },
+        new() { ModuleId = "catalog", Capabilities = ["catalog.write", "catalog.read", "catalog.export"], ExpiresAt = masterExpiry },
+        new() { ModuleId = "inventory", Capabilities = ["inventory.write", "inventory.read", "inventory.export"], ExpiresAt = masterExpiry },
+        new() { ModuleId = "sales", Capabilities = ["sales.write", "sales.read", "sales.export"], ExpiresAt = masterExpiry },
+        new() { ModuleId = "receiving", Capabilities = ["receiving.write", "receiving.read", "receiving.export"], ExpiresAt = masterExpiry }]
 };
 var lease = new LeaseDocument
 {
     SchemaVersion = 1, Iss = license.Iss, Aud = license.Aud, LicenseId = licenseId, OrganizationId = license.OrganizationId,
-    InstallationId = installation, Revision = revision, Iat = now, Nbf = now - 30, Exp = now + 7 * 86400
+    InstallationId = installation, Revision = revision, Iat = now, Nbf = now - 30, Exp = masterExpiry
 };
 AtomicText(Path.Combine(data, "license.jws"), Sign(licenseKey, "dev-license-key", LicenseDocumentTypes.Entitlement, license));
 AtomicText(Path.Combine(data, "lease.jws"), Sign(licenseKey, "dev-license-key", LicenseDocumentTypes.Lease, lease));
-Console.WriteLine("Aláírt partner-, termék- és bevételezésmodul telepítve. Fejlesztői jogosultság: 30 nap, működési engedély: 7 nap.");
+Console.WriteLine("Aláírt partner-, termék-, bevételezés-, készlet- és eladásmodul telepítve. Géphez kötött, aláírt fejlesztői jogosultság és működési engedély: 2099-12-31-ig.");
 Console.WriteLine("Kiadói kulcsok kizárólag a .issuer mappában; ügyfélkiadásba nem kerülnek.");
 
 void InstallModule(ECDsa key, string id, string assemblyName, string entryType, ModuleDependency[]? dependencies = null)
@@ -76,14 +85,17 @@ void InstallModule(ECDsa key, string id, string assemblyName, string entryType, 
     var moduleBytes = File.ReadAllBytes(dll);
     var manifest = new ModuleManifest
     {
-        SchemaVersion = 1, Id = id, Version = "0.3.0", ApiVersion = PlatformContract.ApiVersion,
+        SchemaVersion = 1, Id = id, Version = "0.4.0", ApiVersion = PlatformContract.ApiVersion,
         EntryAssembly = assemblyName + ".dll", EntryType = entryType,
         Files = new() { [assemblyName + ".dll"] = Convert.ToHexString(SHA256.HashData(moduleBytes)) },
         Dependencies = dependencies ?? []
     };
+    var domain = Path.Combine(Path.GetDirectoryName(dll)!, "PcImpressz.Business.dll");
+    if (File.Exists(domain)) manifest.Files["PcImpressz.Business.dll"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(domain)));
     var package = Path.Combine(data, "modules", id);
     Directory.CreateDirectory(package);
     Atomic(Path.Combine(package, manifest.EntryAssembly), moduleBytes);
+    if (File.Exists(domain)) Atomic(Path.Combine(package, "PcImpressz.Business.dll"), File.ReadAllBytes(domain));
     AtomicText(Path.Combine(package, "manifest.jws"), Sign(key, "dev-module-key", ModuleManifest.DocumentType, manifest));
 }
 ECDsa ReadKey(string name)

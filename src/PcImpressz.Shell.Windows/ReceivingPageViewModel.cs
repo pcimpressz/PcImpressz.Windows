@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -52,7 +52,7 @@ public sealed class ReceiptRow
 internal sealed class LineEditor : Observable
 {
     private readonly ReceivingPageViewModel _page;
-    private bool _filling;
+    private bool _filling, _isService;
     private string _name = "", _sku = "", _barcode = "", _unit = "DB", _quantity = "1", _price = "", _vat = "27", _search = "";
     private ProductOption? _match;
     public LineEditor(ReceivingPageViewModel page)
@@ -64,6 +64,7 @@ internal sealed class LineEditor : Observable
     }
     public Guid Id { get; set; }
     public Guid? ProductId { get; set; }
+    public bool IsService { get => _isService; set { _isService = value; if (value) ProductId = null; Changed(); Touch(); } }
     public string Name { get => _name; set { _name = value; Changed(); Touch(); } }
     public string Sku { get => _sku; set { _sku = value; Changed(); Touch(); } }
     public string Barcode { get => _barcode; set { _barcode = value; Changed(); Touch(); } }
@@ -84,7 +85,7 @@ internal sealed class LineEditor : Observable
             _match = value; Changed();
             if (value is null || _filling) return;
             _filling = true;
-            ProductId = value.Id; Name = value.Name; Sku = value.Sku; Barcode = value.Barcode; UnitCode = value.UnitCode;
+            IsService = false; ProductId = value.Id; Name = value.Name; Sku = value.Sku; Barcode = value.Barcode; UnitCode = value.UnitCode;
             _filling = false;
             _page.MarkDirty();
         }
@@ -244,7 +245,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
         try
         {
             await EnsurePieceAsync();
-            var saved = await ModuleAsync("catalog", "products-save", new { id = (Guid?)null, version = 0, data = new { name, sku, unitCode = "DB", isPurchaseable = true, isActive = true } });
+            var saved = await ModuleAsync("catalog", "products-save", new { id = (Guid?)null, version = 0, data = new { name, sku, unitCode = "DB", isPurchaseable = true, isSalable = true, isActive = true } });
             line.FillQuiet(() =>
             {
                 line.ProductId = saved.GetProperty("id").GetGuid();
@@ -376,6 +377,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
         IsBusy = true;
         try
         {
+            if (new FileInfo(dialog.FileName).Length > 1_500_000) throw new IOException("A fájl nagyobb 1,5 MB-nál.");
             var bytes = await File.ReadAllBytesAsync(dialog.FileName, _shutdown);
             var saved = await ModuleAsync("receiving", "import", new
             {
@@ -472,6 +474,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
             {
                 line.Id = row.GetProperty("id").GetGuid();
                 line.ProductId = row.TryGetProperty("productId", out var product) && product.ValueKind == JsonValueKind.String ? product.GetGuid() : null;
+                line.IsService = row.GetProperty("match").GetString() == "szolgaltatas";
                 line.Name = row.GetProperty("name").GetString() ?? "";
                 line.Sku = row.GetProperty("sku").GetString() ?? "";
                 line.Barcode = row.GetProperty("barcode").GetString() ?? "";
@@ -537,7 +540,7 @@ internal sealed class ReceivingPageViewModel : Observable, IWorkspacePage, IColu
     {
         id = line.Id == Guid.Empty ? (Guid?)null : line.Id, productId = line.ProductId, name = line.Name, sku = line.Sku,
         barcode = line.Barcode, unitCode = line.UnitCode, quantity = Money(line.QuantityText, "Mennyiség"),
-        netUnitPrice = Money(line.PriceText, "Nettó egységár"), vatRate = Money(line.VatText, "Áfakulcs")
+        netUnitPrice = Money(line.PriceText, "Nettó egységár"), vatRate = Money(line.VatText, "Áfakulcs"), isService = line.IsService
     };
     private Guid CompanyId => _company() ?? throw new InvalidOperationException("Először válassz céget.");
     private async Task<JsonElement> ModuleAsync(string module, string command, object input) =>

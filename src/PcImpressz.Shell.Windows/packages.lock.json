@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "pcimpressz.contracts": {
+        "type": "Project"
+      },
+      "pcimpressz.shell.customization": {
+        "type": "Project",
+        "dependencies": {
+          "PcImpressz.Contracts": "[0.4.0, )"
+        }
+      }
+    }
+  }
+}

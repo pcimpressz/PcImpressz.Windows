@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using PcImpressz.Contracts;
 
 namespace PcImpressz.Modules.Receiving;
@@ -7,7 +7,7 @@ public sealed class ReceivingModule : IModule
 {
     public ValueTask StartAsync(IModuleContext context, CancellationToken cancellationToken)
     {
-        var repository = new ReceivingRepository(context.GetCompanyDataDirectory, context.TimeProvider);
+        var repository = new ReceivingRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
         Register(context, "list", "receiving.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = ReadQuery(input);
@@ -81,7 +81,7 @@ public sealed class ReceivingModule : IModule
                 ExportedMessage = "A szűrt számlalista exportálva.",
                 SearchHint = "Keresés számlaszám vagy szállító alapján"
             },
-            [new("uj", "Új, besorolásra vár"), new("bevetelezve", "Bevételezve"), new("koltseg", "Költség"), new("fuggo", "Függő"), new("mind", "Minden számla")]));
+            [new("uj", "Új, besorolásra vár"), new("bevetelezve", "Bevételezve"), new("koltseg", "Költség"), new("fuggo", "Függő"), new("mind", "Minden számla")]) { ViewKind = "receiving" });
         return ValueTask.CompletedTask;
     }
     public ValueTask StopAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
@@ -104,7 +104,7 @@ public sealed class ReceivingModule : IModule
         {
             receipt.Data.Number, receipt.Data.SupplierId, receipt.Data.SupplierName, receipt.Data.SupplierTaxId,
             receipt.Data.IssuedOn, receipt.Data.DueOn, receipt.Data.Source, receipt.Data.Status, receipt.Data.Net,
-            receipt.Data.Vat, receipt.Data.Gross, receipt.Data.Warehouse, lineCount = receipt.Data.Lines.Length,
+            receipt.Data.Vat, receipt.Data.Gross, receipt.Data.StockPosted, receipt.Data.Warehouse, lineCount = receipt.Data.Lines.Length,
             statusLabel = ReceivingText.StatusLabel(receipt.Data.Status), sourceLabel = ReceivingText.SourceLabel(receipt.Data.Source)
         }, ReceivingJson.Options)!;
         node["id"] = receipt.Id; node["version"] = receipt.Version;

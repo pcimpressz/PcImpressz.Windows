@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PcImpressz.Contracts;
 using PcImpressz.Core.Licensing;
@@ -42,6 +42,12 @@ public sealed class CommandDispatcher(ILicenseEvaluator licenses, ILogger<Comman
         }
     }
 
+    public IReadOnlyList<string> RequiredEnabledModules(string moduleId, string commandName)
+    {
+        lock (_gate)
+            return _handlers.TryGetValue((moduleId, commandName), out var command) && command.Descriptor.Access == CommandAccess.Licensed
+                ? command.RequiredModules.ToArray() : [];
+    }
     public IReadOnlySet<string> RegisteredPermissions
     {
         get { lock (_gate) return _handlers.Values.Select(c => c.Descriptor.Permission).ToHashSet(StringComparer.Ordinal); }

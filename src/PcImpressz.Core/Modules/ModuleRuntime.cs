@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PcImpressz.Contracts;
 using PcImpressz.Core.Commands;
 using PcImpressz.Core.Security;
@@ -10,7 +10,7 @@ public sealed class ModuleRuntime(
     CommandDispatcher dispatcher,
     TimeProvider timeProvider,
     ILogger<ModuleRuntime> logger,
-    Func<Guid, string, string>? companyDataDirectory = null) : IAsyncDisposable
+    Func<Guid, string, string>? companyDataDirectory = null, ICompanyDatabase? database = null) : IAsyncDisposable
 {
     private readonly List<(string Id, IModule Module, ModuleLoadContext Context)> _running = [];
     private readonly List<ModuleReport> _reports = [];
@@ -71,7 +71,7 @@ public sealed class ModuleRuntime(
     {
         var context = new ModuleLoadContext(package.Assemblies);
         IModule? module = null;
-        var staging = new StagingContext(package.Manifest.Id, timeProvider, companyDataDirectory);
+        var staging = new StagingContext(package.Manifest.Id, timeProvider, companyDataDirectory, database);
         try
         {
             var assembly = context.LoadFromStream(new MemoryStream(package.Assemblies[package.Manifest.EntryAssembly], false));
@@ -137,6 +137,8 @@ public sealed class ModuleRuntime(
         foreach (var page in pages)
         {
             if (page.ModuleId != moduleId || !Identifiers.IsValid(page.Id) || !ids.Add(page.Id)
+                || page.ViewKind is not ("entity" or "receiving" or "inventory" or "sales")
+                || (page.DossierCommand is not null && !Identifiers.IsValid(page.DossierCommand))
                 || page.Fields.Length is < 1 or > 40 || page.Columns.Length is < 1 or > 15
                 || page.Fields.Select(f => f.Id).Distinct().Count() != page.Fields.Length
                 || page.Fields.Any(f => (string.IsNullOrEmpty(f.Id) || f.Id.Length > 80 || f.Id.Any(c => !char.IsAsciiLetterOrDigit(c))) || f.Kind is not ("text" or "multiline" or "boolean")))
@@ -145,7 +147,7 @@ public sealed class ModuleRuntime(
     }
 
     private sealed class StagingContext(string moduleId, TimeProvider time,
-        Func<Guid, string, string>? companyDirectory) : IModuleContext
+        Func<Guid, string, string>? companyDirectory, ICompanyDatabase? database) : IModuleContext
     {
         private readonly List<ICommandHandler> _handlers = [];
         private readonly List<EntityPageDescriptor> _pages = [];
@@ -162,6 +164,7 @@ public sealed class ModuleRuntime(
         }
         private readonly object _gate = new();
         private bool _closed;
+        public ICompanyDatabase? Database => database;
         public string ModuleId => moduleId;
         public TimeProvider TimeProvider => time;
         public IReadOnlyList<ICommandHandler> Handlers { get { lock (_gate) return _handlers.ToArray(); } }
