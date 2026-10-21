@@ -84,7 +84,8 @@ public sealed partial class ShellViewModel
         }
     }
 
-    public bool CanClose()
+    public bool CanClose()=>CanClose(()=>UnsavedChanges.Confirm("Biztosan kilépsz mentés nélkül? A Nem válasszal a program és a szerkesztett adatok megmaradnak.","Kilépés mentés nélkül"));
+    internal bool CanClose(Func<bool> confirmExit)
     {
         if(_entityPages.Values.Any(p=>p.HasUnresolvedOperation)){MessageBox.Show("Az eladás eredménye még bizonytalan. Az eladási képernyő véglegesítés gombjával ellenőrizd vagy próbáld újra ugyanazt a műveletet.","Eladás lezárása");return false;}
         if (!WorkspaceIsIdle)
@@ -93,9 +94,7 @@ public sealed partial class ShellViewModel
                 "Folyamatban lévő művelet", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
-        return !_entityPages.Values.Any(p => p.IsDirty) || MessageBox.Show(
-            "Elveted a nem mentett adatlapváltozásokat?", "Kilépés", MessageBoxButton.YesNo,
-            MessageBoxImage.Question) == MessageBoxResult.Yes;
+        return !_entityPages.Values.Any(p => p.IsDirty) || confirmExit();
     }
     private void SyncNavigation()
     {

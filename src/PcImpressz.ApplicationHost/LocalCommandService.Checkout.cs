@@ -4,6 +4,19 @@ using PcImpressz.Core.Commands;
 namespace PcImpressz.ApplicationHost;
 internal sealed partial class LocalCommandService
 {
+    private async Task<LocalResponse> LookupPartnerTaxpayer(LocalRequest request,string sid,CancellationToken ct)
+    {
+        var input=request.Payload.Deserialize<TaxpayerLookup>()??throw new ArgumentException("Hiányzó adószám.");
+        var session=administration.Authenticate(input.CompanyId,request.SessionToken,sid);
+        if(!CompanyRoles.Allows(session.Role,"partners.write"))throw new CommandDeniedException("A partner lekérdezéséhez partnerszerkesztési jog kell.");
+        CustomerWriteLicense();
+        foreach(var required in commands.RequiredEnabledModules("receiving","taxpayer").Prepend("receiving"))if(!modulesEnabled.IsEnabled(required))throw new CommandDeniedException("A szükséges modul ki van kapcsolva: "+required);
+        var caller=new CallerIdentity(sid+"/"+session.UserName,new HashSet<string>(StringComparer.Ordinal){"receiving.read"});
+        var result=await commands.ExecuteAsync(new("receiving","taxpayer",JsonSerializer.SerializeToElement(input)),caller,ct);
+        var current=administration.Authenticate(input.CompanyId,request.SessionToken,sid);
+        if(!CompanyRoles.Allows(current.Role,"partners.write"))throw new CommandDeniedException("A partner szerkesztési joga megváltozott.");
+        return new(true,result);
+    }
     private void CustomerWriteLicense()
     {
         if(!modulesEnabled.IsEnabled("partners"))throw new CommandDeniedException("A partnermodul ki van kapcsolva.");

@@ -103,7 +103,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public bool CanWrite => !IsBusy && _connection.Allows(Definition.ModuleId+".write");
     public bool CanExport => !IsBusy && _connection.Allows(Definition.ModuleId+".export");
     public bool CanAdmin => !IsBusy && _connection.Session?.Role=="admin";
-    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanAdmin));Changed(nameof(CanOpenDossier));}
+    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanAdmin));Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));}
     public bool HasDossier => !string.IsNullOrWhiteSpace(Definition.DossierCommand);
     public bool CanOpenDossier => CanAdmin && HasDossier && _editId is not null && !IsBusy;
     public bool IsDossierOpen { get => _dossierOpen; private set { _dossierOpen = value; Changed(); Changed(nameof(ShowPartnerList)); } }
@@ -204,8 +204,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
         ResetAppearance(); _ = LoadAppearanceAsync();
         _applied = null; Changed(nameof(AppliedSearchLabel)); Rows.Clear(); _page = 0; _total = 0; _selected = null; Populate(null); _ = LoadAsync();
     }
-    private bool CanDiscard() => !IsDirty || MessageBox.Show("Elveted a nem mentett változtatásokat?",
-        "Nem mentett adatlap", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+    private bool CanDiscard() => !IsDirty || (ConfirmDiscardOverride?.Invoke() ?? UnsavedChanges.Confirm("Elveted a nem mentett változtatásokat? A Nem válasszal az adatlap és a beírt adatok megmaradnak.","Nem mentett adatlap"));
     private void Populate(EntityRow? row)
     {
         _populating = true;
@@ -217,7 +216,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
                 field.Checked = row?[field.Definition.Id] is bool b ? b : field.Definition.DefaultChecked;
             else field.Text = row?[field.Definition.Id]?.ToString() ?? field.Definition.DefaultText ?? "";
         }
-        _populating = false; IsDirty = false; Changed(nameof(EditorTitle)); Changed(nameof(CanOpenDossier));
+        _populating = false; IsDirty = false; Changed(nameof(EditorTitle)); Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));
         if (IsDossierOpen && row is not null) _ = LoadDossierAsync();
         else IsDossierOpen = false;
     }

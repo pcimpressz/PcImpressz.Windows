@@ -101,6 +101,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
         void Admin(Guid? company=null) => administration.RequireAdmin(company ?? request.AuthCompanyId ?? throw new UnauthorizedAccessException("Adminbejelentkezés szükséges."),request.SessionToken,actor);
         switch (request.Operation)
         {
+            case "partners.taxpayer": return await LookupPartnerTaxpayer(request,actor,ct);
             case "sales.customer-nav": return await LookupCheckoutCustomer(request,actor,ct);
             case "companies.list": return new(true, JsonSerializer.SerializeToElement(companies.List()));
             case "companies.create":

@@ -54,6 +54,7 @@ internal static class Program
             var output=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../artifacts/ui-checks"));Directory.CreateDirectory(output);
             var bindingErrors=new StringWriter();PresentationTraceSources.DataBindingSource.Listeners.Add(new TextWriterTraceListener(bindingErrors));PresentationTraceSources.DataBindingSource.Switch.Level=SourceLevels.Error;
             CheckoutUiChecks.VerifyAsync(output).GetAwaiter().GetResult();
+            PartnerEditorChecks.VerifyAsync(output).GetAwaiter().GetResult();
             VerifyBusyEditor();
             UiProductChecks.VerifyAppliedQuery();
             foreach(var skin in BuiltInSkins.All)
@@ -65,6 +66,7 @@ internal static class Program
                 RoleUiChecks.Render(output,skin.Id);
                 DemoUiChecks.Render(output,skin.Id);
                 CheckoutUiChecks.Render(output,skin.Id);
+                PartnerEditorChecks.Render(output,skin.Id);
                 foreach(var kind in new[]{"inventory","sales"})
                 {
                     var definition=new EntityPageDescriptor(kind,kind,kind,"","",[new("name","Név")],
@@ -89,7 +91,7 @@ internal static class Program
             }
             PresentationTraceSources.DataBindingSource.Flush();
             if(bindingErrors.ToString().Length>0)throw new InvalidOperationException(bindingErrors.ToString());
-            Console.WriteLine("39/39 WPF renders passed; no binding errors.");return 0;
+            Console.WriteLine("45/45 WPF renders passed; no binding errors.");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }

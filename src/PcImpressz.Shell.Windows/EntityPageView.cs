@@ -81,9 +81,12 @@ public sealed class EntityPageView : UserControl
         var fields = new Grid(); fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new());
         fields.SetBinding(IsEnabledProperty, new Binding("CanWrite"));
         editor.Children.Add(fields);
+        var nav=ActionButton("NAV-adószámlekérdezés – név és székhely kitöltése","LookupPartnerNavCommand");nav.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});nav.SetBinding(IsEnabledProperty,new Binding("CanLookupPartnerNav"));editor.Children.Insert(1,nav);
+        var advancedFields=new Grid();advancedFields.ColumnDefinitions.Add(new());advancedFields.ColumnDefinitions.Add(new());advancedFields.SetBinding(IsEnabledProperty,new Binding("CanWrite"));
+        var advanced=new Expander{Header="Bővített adatok kitöltése",Content=advancedFields,Margin=new(0,16,0,0),IsExpanded=false};advanced.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});editor.Children.Add(advanced);
         var save = new WrapPanel { Margin = new(0,20,0,0) };
         var saveButton = ActionButton("Mentés", "SaveCommand"); saveButton.SetResourceReference(StyleProperty, "PrimaryButton");
-        save.Children.Add(saveButton); save.Children.Add(ActionButton("Archiválás", "ArchiveCommand"));
+        save.Children.Add(saveButton);save.Children.Add(ActionButton("Módosítások elvetése","DiscardChangesCommand")); save.Children.Add(ActionButton("Archiválás", "ArchiveCommand"));
         save.Children.Add(ActionButton("Feliratok és elrendezés – admin", "EditLayoutCommand"));
         var dossier = ActionButton("Dosszié", "DossierCommand");
         dossier.SetBinding(VisibilityProperty, new Binding("HasDossier") { Converter = new BooleanToVisibilityConverter() });
@@ -98,13 +101,19 @@ public sealed class EntityPageView : UserControl
         grid.MouseDoubleClick += (_, args) => { if (ViewMode == "list" && DataContext is EntityPageViewModel page && args.OriginalSource is DependencyObject source && ItemsControl.ContainerFromElement(grid, source) is DataGridRow) page.RequestEditSelected(); };
         void RenderFields(EntityPageViewModel vm)
         {
-            fields.Children.Clear(); fields.RowDefinitions.Clear();
+            var basic=new HashSet<string>(StringComparer.Ordinal){"name","taxId","country","postalCode","city","address","email","phone","isCustomer","isSupplier","isActive","notes"};
+            RenderGroup(fields,vm.Fields.Where(f=>f.Visible&&(!vm.IsPartnerMaster||f.Definition.Required||basic.Contains(f.Definition.Id))));
+            RenderGroup(advancedFields,vm.Fields.Where(f=>f.Visible&&vm.IsPartnerMaster&&!f.Definition.Required&&!basic.Contains(f.Definition.Id)));
+        }
+        void RenderGroup(Grid target,IEnumerable<EntityFieldViewModel> group)
+        {
+            target.Children.Clear(); target.RowDefinitions.Clear();
             var fieldRow = 0; var fieldColumn = 0;
-            foreach (var field in vm.Fields.Where(f => f.Visible))
+            foreach (var field in group)
             {
                 var wide = field.Span == 2;
                 if (wide && fieldColumn > 0) { fieldRow++; fieldColumn = 0; }
-                while (fields.RowDefinitions.Count <= fieldRow) fields.RowDefinitions.Add(new() { Height = GridLength.Auto });
+                while (target.RowDefinitions.Count <= fieldRow) target.RowDefinitions.Add(new() { Height = GridLength.Auto });
                 var panel = new StackPanel { Margin = new(fieldColumn == 0 ? 0 : 10,0,wide || fieldColumn == 1 ? 0 : 10,16), DataContext = field };
                 if (field.Definition.Kind == "boolean")
                 {
@@ -118,7 +127,7 @@ public sealed class EntityPageView : UserControl
                     if (field.Definition.Kind == "multiline") { input.AcceptsReturn = true; input.TextWrapping = TextWrapping.Wrap; input.MinHeight = 85; }
                     panel.Children.Add(input);
                 }
-                Grid.SetRow(panel,fieldRow); Grid.SetColumn(panel,fieldColumn); Grid.SetColumnSpan(panel,wide ? 2 : 1); fields.Children.Add(panel);
+                Grid.SetRow(panel,fieldRow); Grid.SetColumn(panel,fieldColumn); Grid.SetColumnSpan(panel,wide ? 2 : 1); target.Children.Add(panel);
                 if (wide || fieldColumn == 1) { fieldRow++; fieldColumn = 0; } else fieldColumn = 1;
             }
         }
@@ -159,7 +168,8 @@ public sealed class EntityPageView : UserControl
             searchHelp.Visibility = !editorOnly && DataContext is EntityPageViewModel page && page.Definition.ModuleId == "catalog" && page.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
             listPanel.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
             editorBorder.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
-            var narrow = separate || ActualWidth < 980;
+            var partner=DataContext is EntityPageViewModel {IsPartnerMaster:true};
+            var narrow = separate || partner || ActualWidth < 980;
             Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,editorOnly ? 0 : narrow ? 1 : 0);
             Grid.SetColumnSpan(listPanel,narrow ? 2 : 1); Grid.SetColumnSpan(editorBorder,narrow ? 2 : 1);
             editorBorder.Margin = separate ? new Thickness(0) : narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);

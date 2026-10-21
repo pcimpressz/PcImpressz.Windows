@@ -9,6 +9,7 @@ namespace PcImpressz.Shell.Windows;
 public partial class MainWindow : Window
 {
     private readonly ShellViewModel _viewModel;
+    private bool _checkingClose;
     public MainWindow(ShellViewModel viewModel)
     {
         _viewModel = viewModel;
@@ -56,7 +57,11 @@ public partial class MainWindow : Window
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
     private void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (!_viewModel.CanClose()) { e.Cancel = true; return; }
+        e.Cancel=true;
+        if(_checkingClose)return;
+        _checkingClose=true;
+        try{if(!_viewModel.CanClose())return;}finally{_checkingClose=false;}
+        e.Cancel=false;
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
         _viewModel.SaveWindow(bounds.Width, bounds.Height);
         _viewModel.Stop();
