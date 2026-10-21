@@ -31,7 +31,7 @@ internal static class WorkflowUiChecks
         var sale=new OperationsPageViewModel(saleDef,new HostConnection(output,null),()=>null,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"basket-check")));
         var product=new OperationProduct(Guid.NewGuid(),"Egér","MOUSE-1","DB",5);sale.Products.Add(product);sale.SelectedProduct=product;
         Set(sale,"_stockWarehouse","Bolt");sale.QuantityText="2";sale.PriceText="100";sale.VatText="5";sale.AddLineCommand.Execute(null);
-        if(sale.Basket.Count!=1||sale.BasketTotal!="210,00 Ft")throw new InvalidOperationException("Hibás kosárösszeg.");
+        if(sale.Basket.Count!=1||sale.BasketTotal!="210 Ft")throw new InvalidOperationException("Hibás kosárösszeg.");
         sale.SelectedBasketLine=sale.Basket[0];sale.EditLineCommand.Execute(null);sale.QuantityText="3";sale.PriceText="200";sale.UpdateLineCommand.Execute(null);
         if(sale.Basket.Count!=1||sale.Basket[0].Quantity!=3||sale.Basket[0].NetUnitPrice!=200)throw new InvalidOperationException("Nem frissült a kosártétel.");
         sale.QuantityText="3";sale.AddLineCommand.Execute(null);if(sale.Basket.Count!=1)throw new InvalidOperationException("Az összesített kosár túllépte a jelzett készletet.");

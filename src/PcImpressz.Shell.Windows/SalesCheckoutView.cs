@@ -33,15 +33,17 @@ internal sealed class SalesCheckoutView:UserControl
         basket.SetResourceReference(Control.BackgroundProperty,"SurfaceBrush");basket.SetResourceReference(Control.ForegroundProperty,"TextBrush");
         basket.Columns.Add(new DataGridTextColumn{Header="Termék",Binding=new Binding("Name"),IsReadOnly=true,Width=new DataGridLength(1,DataGridLengthUnitType.Star),MinWidth=170});
         basket.Columns.Add(EditColumn("Mennyiség","QuantityText",110));basket.Columns.Add(new DataGridTextColumn{Header="Egység",Binding=new Binding("UnitCode"),IsReadOnly=true,Width=75});
-        basket.Columns.Add(EditColumn("Bruttó egységár (Ft)","GrossPriceText",170));
+        var priceDisplay=new DataTemplate();var priceText=new FrameworkElementFactory(typeof(TextBlock));priceText.SetBinding(TextBlock.TextProperty,new Binding("GrossPriceDisplay"));priceDisplay.VisualTree=priceText;
+        var priceEditing=new DataTemplate();var priceBox=new FrameworkElementFactory(typeof(TextBox));priceBox.SetValue(FrameworkElement.StyleProperty,EditingStyle());priceBox.SetBinding(TextBox.TextProperty,new Binding("GrossPriceText"){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged,ValidatesOnDataErrors=true});priceEditing.VisualTree=priceBox;
+        basket.Columns.Add(new DataGridTemplateColumn{Header="Bruttó egységár (Ft)",CellTemplate=priceDisplay,CellEditingTemplate=priceEditing,Width=170});
         basket.Columns.Add(new DataGridComboBoxColumn{Header="Áfa %",ItemsSource=new decimal[]{0,5,18,27},SelectedItemBinding=new Binding("VatRate"){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged,ValidatesOnDataErrors=true},Width=85});
-        basket.Columns.Add(new DataGridTextColumn{Header="Bruttó (Ft)",Binding=new Binding("Gross"){StringFormat="N2",ConverterCulture=System.Globalization.CultureInfo.GetCultureInfo("hu-HU")},IsReadOnly=true,Width=135});
+        basket.Columns.Add(new DataGridTextColumn{Header="Bruttó (Ft)",Binding=new Binding("GrossDisplay"),IsReadOnly=true,Width=135});
         var removeTemplate=new DataTemplate();var remove=new FrameworkElementFactory(typeof(Button));remove.SetValue(ContentControl.ContentProperty,"Törlés");remove.SetValue(Control.PaddingProperty,new Thickness(8,4,8,4));remove.SetBinding(Button.CommandProperty,new Binding("RemoveCommand"));removeTemplate.VisualTree=remove;
         basket.Columns.Add(new DataGridTemplateColumn{Header="",CellTemplate=removeTemplate,Width=85});        basket.SizeChanged+=(_,_)=>{var width=Math.Max(210,basket.ActualWidth-665);if(Math.Abs(basket.Columns[0].ActualWidth-width)>1)basket.Columns[0].Width=new DataGridLength(width);};
         basket.PreviewMouseLeftButtonDown+=(_,e)=>
         {
             DependencyObject? node=e.OriginalSource as DependencyObject;while(node is not null&&node is not DataGridCell)node=VisualTreeHelper.GetParent(node);
-            if(node is DataGridCell cell&&!cell.IsReadOnly&&cell.Column is DataGridTextColumn&&!cell.IsEditing){cell.Focus();basket.CurrentCell=new DataGridCellInfo(cell.DataContext,cell.Column);basket.BeginEdit();}
+            if(node is DataGridCell cell&&!cell.IsReadOnly&&cell.Column is DataGridTextColumn or DataGridTemplateColumn&&!cell.IsEditing){cell.Focus();basket.CurrentCell=new DataGridCellInfo(cell.DataContext,cell.Column);basket.BeginEdit();}
         };
         editor.Children.Add(basket);
         var hint=new TextBlock{Text="Az ár és a mennyiség közvetlenül a kosárban szerkeszthető. A Törlés csak az adott sort távolítja el.",Margin=new(0,0,0,10)};hint.SetResourceReference(StyleProperty,"Muted");editor.Children.Add(hint);root.Children.Add(editor);
@@ -54,7 +56,7 @@ internal sealed class SalesCheckoutView:UserControl
         var history=new Expander{Header="Korábbi eladások",IsExpanded=false};var historyPanel=new StackPanel{Margin=new(0,12,0,0)};
         var search=Input("RecordSearch");search.ToolTip="Bizonylatszám vagy vevő";historyPanel.Children.Add(search);historyPanel.Children.Add(Action("Keresés / frissítés","RefreshCommand"));
         var records=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MaxHeight=300,MinHeight=100,Margin=new(0,8,0,8)};records.SetBinding(ItemsControl.ItemsSourceProperty,"Rows");records.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedRow"){Mode=BindingMode.TwoWay});
-        foreach(var (label,path) in new[]{("Bizonylat","number"),("Vevő","customerName"),("Bruttó","gross"),("Állapot","statusLabel")})records.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding("["+path+"]"),Width=new DataGridLength(1,DataGridLengthUnitType.Star)});
+        foreach(var (label,path) in new[]{("Bizonylat","number"),("Vevő","customerName"),("Bruttó","gross"),("Fizetendő","payable"),("Állapot","statusLabel")})records.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding("["+path+"]"),Width=new DataGridLength(1,DataGridLengthUnitType.Star)});
         historyPanel.Children.Add(records);var buttons=new WrapPanel();buttons.Children.Add(Action("Tételek","DetailsCommand"));buttons.Children.Add(Action("Visszafordítás","ReverseCommand"));buttons.Children.Add(Action("CSV export","ExportCommand"));historyPanel.Children.Add(buttons);var details=new TextBlock{TextWrapping=TextWrapping.Wrap};details.SetBinding(TextBlock.TextProperty,"Details");historyPanel.Children.Add(details);history.Content=historyPanel;root.Children.Add(history);Content=root;
     }
     private static DataGridTextColumn EditColumn(string heading,string path,int width)=>new(){Header=heading,Width=width,Binding=new Binding(path){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged,ValidatesOnDataErrors=true},EditingElementStyle=EditingStyle()};

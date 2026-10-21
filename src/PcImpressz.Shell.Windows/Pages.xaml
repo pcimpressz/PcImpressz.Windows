@@ -228,6 +228,11 @@
     <WrapPanel Margin="0,16,0,0" IsEnabled="{Binding WorkspaceIsIdle}"><Button Content="Kiválasztott cég mentése" Command="{Binding BackupCompanyCommand}" IsEnabled="{Binding IsCompanyAdmin}" Margin="0,0,12,8" /><Button Content="Visszaállítás új cégként" Command="{Binding RestoreCompanyCommand}" IsEnabled="{Binding IsCompanyAdmin}" Margin="0,0,0,8" /></WrapPanel>
     <TextBlock Text="{Binding BackupMessage}" Style="{StaticResource Muted}" Margin="0,12,0,0" />
    </StackPanel></Border>
+   <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
+    <TextBlock Text="Pénzösszegek megjelenítése" Style="{StaticResource SectionTitle}" />
+    <TextBlock Text="Tizedesjegyek száma (alapérték: 0). Csak a megjelenítést módosítja; a számítás és a mentett ár pontos marad. Készpénzes végösszeg: 5 Ft-os kerekítés." Style="{StaticResource Muted}" />
+    <ComboBox ItemsSource="{Binding MoneyDecimalChoices}" SelectedItem="{Binding MoneyDecimals, Mode=TwoWay}" Width="130" HorizontalAlignment="Left" Margin="0,12,0,0" />
+   </StackPanel></Border>
    <local:NavConnectionCard Margin="0,20,0,0" IsEnabled="{Binding IsCompanyAdmin}" />
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
     <TextBlock Text="Demócég és mintaadatok" Style="{StaticResource SectionTitle}" />

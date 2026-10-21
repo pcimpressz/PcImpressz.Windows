@@ -129,6 +129,7 @@ public sealed partial class ShellViewModel : Observable
         };
         _connection = new(directory, hostPath);
         _preferences = store.Load();
+        MoneyDisplay.Decimals=_preferences.MoneyDecimals;
         Skins = new(store.ReadSkins());
         _selectedSkin = Skins.FirstOrDefault(s => s.Id == _preferences.SkinId) ?? Skins[0];
         _preferences = _preferences with { SkinId = _selectedSkin.Id };
@@ -181,6 +182,8 @@ public sealed partial class ShellViewModel : Observable
     public string LicenseReason => _status?.LicenseReason ?? "A licencállapot a maghoz kapcsolódás után jelenik meg.";
     public string LicenseUntil => _status?.LicenseValidUntil?.ToLocalTime().ToString("yyyy. MM. dd. HH:mm") ?? "Nincs aktív időszak";
     public string LastUpdated => _status?.ObservedAt.ToLocalTime().ToString("HH:mm:ss") ?? "—";
+    public int[] MoneyDecimalChoices {get;}=[0,1,2,3,4];
+    public int MoneyDecimals {get=>_preferences.MoneyDecimals;set{if(value is <0 or >4)return;_preferences=_preferences with{MoneyDecimals=value};MoneyDisplay.Decimals=value;ApplyAndSave();Changed();}}
     public double InitialWidth => _preferences.WindowWidth;
     public double InitialHeight => _preferences.WindowHeight;
 
@@ -358,6 +361,7 @@ public sealed partial class ShellViewModel : Observable
 
     private void ApplyAndSave()
     {
+        MoneyDisplay.Decimals=_preferences.MoneyDecimals;
         ThemeManager.Apply(SelectedSkin, _preferences);
         try { _store.Save(_preferences); _notice = "A megjelenési beállítások mentve."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

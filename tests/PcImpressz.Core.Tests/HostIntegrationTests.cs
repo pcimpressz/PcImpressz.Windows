@@ -140,6 +140,10 @@ internal static class HostIntegrationTests
             Check.Equal(0,(await Catalog(b,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
             var productId=product.Data!.Value.GetProperty("id").GetGuid();
             var partnerId=saved.Data!.Value.GetProperty("id").GetGuid();
+            var navSaved=await Business(a,"receiving","nav-save",new{taxNumber="12345678",userName="test-user",password="Test-only-password",signKey="Test-sign-key",exchangeKey="Test-exchange-key",testMode=true});
+            Check.True(navSaved.Success,navSaved.Error??"Signed module NAV save failed");
+            var navStatus=await Business(a,"receiving","nav-status",new{});Check.True(navStatus.Success);Check.True(navStatus.Data!.Value.GetProperty("configured").GetBoolean());
+            var navKept=await Business(a,"receiving","nav-save",new{taxNumber="12345678",userName="test-user",password="",signKey="",exchangeKey="",testMode=true});Check.True(navKept.Success,navKept.Error??"NAV update failed");
             var opening=await Business(a,"inventory","save",new{operationId=Guid.NewGuid(),productId,warehouse="Bolt",quantity=10m,reason="Nyitókészlet"});
             Check.True(opening.Success,opening.Error??"Opening failed");
             var saleId=Guid.NewGuid();

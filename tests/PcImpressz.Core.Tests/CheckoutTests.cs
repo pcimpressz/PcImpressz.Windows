@@ -16,6 +16,16 @@ internal static class CheckoutTests
 {
     public static IEnumerable<(string,Func<Task>)> Cases()
     {
+        yield return ("cash rounding boundaries and card exact amount",()=>
+        {
+            foreach(var item in new (decimal Input,decimal Expected)[]{(0,0),(1,0),(2.49m,0),(2.5m,5),(4.99m,5),(5,5),(7.49m,5),(7.5m,10),(9.99m,10),(127,125),(128,130)})
+            {Check.Equal(item.Expected,PaymentRounding.Payable(item.Input,"cash"));Check.Equal(item.Input,PaymentRounding.Payable(item.Input,"card"));}
+            using var f=new Fixture();var product=f.Product();
+            var sale=f.Database.Execute(f.Company,tx=>SalesModule.Post(tx,new(f.Company,Guid.NewGuid(),null,"Bolt",[new(product.Id,1,100,27)],"cash"),"test",DateTimeOffset.UtcNow));
+            Check.Equal(127m,sale.Gross);Check.Equal(-2m,sale.Rounding);Check.Equal(125m,sale.Payable!.Value);
+            var reversed=f.Database.Execute(f.Company,tx=>SalesModule.Reverse(tx,new(f.Company,sale.Id,1),"test",DateTimeOffset.UtcNow));Check.Equal(sale.Payable,reversed.Payable);Check.Equal(sale.Rounding,reversed.Rounding);
+            return Task.CompletedTask;
+        });
         yield return ("checkout stores payment invoice request and immutable billing snapshot and rejects changed retry",()=>
         {
             using var f=new Fixture();var customer=f.Database.Execute(f.Company,tx=>CompanyReferenceQueries.Partners(tx).First(p=>p.IsCustomer));var product=f.Product();

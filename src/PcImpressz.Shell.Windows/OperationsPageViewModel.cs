@@ -11,7 +11,7 @@ using PcImpressz.Shell.Customization;
 namespace PcImpressz.Shell.Windows;
 
 internal sealed record OperationProduct(Guid Id,string Name,string Sku,string UnitCode,decimal? AvailableQuantity=null,string Barcode="",string ManufacturerPartNumber="",decimal? NetUnitPrice=null,decimal VatRate=27,string PriceSource="")
-{ public string Label => Name+(Sku.Length>0 ? " · "+Sku : ""); public string StockLabel=>AvailableQuantity?.ToString("0.####",CultureInfo.GetCultureInfo("hu-HU"))+" "+UnitCode; public string PriceLabel=>NetUnitPrice is {} p?decimal.Round(p*(1+VatRate/100m),2,MidpointRounding.AwayFromZero).ToString("N2",CultureInfo.GetCultureInfo("hu-HU"))+" Ft":"Ár megadása a kosárban"; }
+{ public string Label => Name+(Sku.Length>0 ? " · "+Sku : ""); public string StockLabel=>AvailableQuantity?.ToString("0.####",CultureInfo.GetCultureInfo("hu-HU"))+" "+UnitCode; public string PriceLabel=>NetUnitPrice is {} p?MoneyDisplay.Format(decimal.Round(p*(1+VatRate/100m),2,MidpointRounding.AwayFromZero))+" Ft":"Ár megadása a kosárban"; }
 internal sealed record OperationCustomer(Guid? Id,string Name,string TaxId="",string Country="HU",string PostalCode="",string City="",string Address="",bool IsCustomer=true) {public string Label=>Name+(TaxId.Length>0?" · "+TaxId:"")+" · "+PostalCode+" "+City+" "+Address;}
 internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,IColumnList
 {
@@ -81,7 +81,7 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     public EntityRow? SelectedRow {get;set;}
     public EntityRow? SelectedMovement {get;set;}
     public SaleBasketLine? SelectedBasketLine {get;set;}
-    public string BasketTotal=>Basket.Sum(l=>l.Gross).ToString("N2",CultureInfo.GetCultureInfo("hu-HU"))+" Ft";
+    public string BasketTotal=>MoneyDisplay.Format(Basket.Sum(l=>l.Gross))+" Ft";
     public ICommand DetailsCommand {get;}
     public ICommand RefreshCommand {get;}
     public ICommand AddLineCommand {get;}
@@ -174,7 +174,8 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     private static EntityRow DisplayRow(JsonElement json)
     {
         var row=new EntityRow(json);
-        if(json.TryGetProperty("gross",out var gross))row.Values["gross"]=gross.GetDecimal().ToString("N2",CultureInfo.GetCultureInfo("hu-HU"));
+        if(json.TryGetProperty("payable",out var payable)&&payable.ValueKind==JsonValueKind.Number)row.Values["payable"]=MoneyDisplay.Format(payable.GetDecimal());
+        if(json.TryGetProperty("gross",out var gross))row.Values["gross"]=MoneyDisplay.Format(gross.GetDecimal());
         if(json.TryGetProperty("quantity",out var quantity))row.Values["quantity"]=quantity.GetDecimal().ToString("0.####",CultureInfo.GetCultureInfo("hu-HU"));
         if(json.TryGetProperty("at",out var at)&&at.TryGetDateTimeOffset(out var date))row.Values["at"]=date.ToLocalTime().ToString("yyyy.MM.dd HH:mm");
         return row;
@@ -254,8 +255,9 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
         {
             var sale=SelectedRow?.Json??throw new ArgumentException("Válassz egy eladást.");IsBusy=true;
             var response=await Send("get",new{id=sale.GetProperty("id").GetGuid()});
-            Details=Text(response,"number")+" · "+Text(response,"customerName")+" · "+Text(response,"warehouse")+"\n"+
-                string.Join("\n",response.GetProperty("lines").EnumerateArray().Select(l=>Text(l,"name")+" · "+l.GetProperty("quantity").GetDecimal().ToString("0.####",CultureInfo.GetCultureInfo("hu-HU"))+" "+Text(l,"unitCode")+" · nettó egységár "+l.GetProperty("netUnitPrice").GetDecimal().ToString("N2",CultureInfo.GetCultureInfo("hu-HU"))+" Ft · áfa "+l.GetProperty("vatRate").GetDecimal()+"%"));
+                        var gross=response.GetProperty("gross").GetDecimal();var payable=response.TryGetProperty("payable",out var p)&&p.ValueKind==JsonValueKind.Number?p.GetDecimal():gross;var rounding=response.TryGetProperty("rounding",out var r)?r.GetDecimal():0;
+            Details="Fizetendő: "+MoneyDisplay.Format(payable)+" Ft · Kerekítés: "+rounding.ToString("+0.00;-0.00;0.00",CultureInfo.GetCultureInfo("hu-HU"))+" Ft\n"+Text(response,"number")+" · "+Text(response,"customerName")+" · "+Text(response,"warehouse")+"\n"+
+                string.Join("\n",response.GetProperty("lines").EnumerateArray().Select(l=>Text(l,"name")+" · "+l.GetProperty("quantity").GetDecimal().ToString("0.####",CultureInfo.GetCultureInfo("hu-HU"))+" "+Text(l,"unitCode")+" · nettó egységár "+MoneyDisplay.Format(l.GetProperty("netUnitPrice").GetDecimal())+" Ft · áfa "+l.GetProperty("vatRate").GetDecimal()+"%"));
         }
         catch(Exception ex){Message=ex.Message;}
         finally{IsBusy=false;}

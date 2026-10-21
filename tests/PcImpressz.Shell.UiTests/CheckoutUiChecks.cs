@@ -13,6 +13,9 @@ internal static class CheckoutUiChecks
     private static EntityPageDescriptor Definition=>new("sales","sales","Eladás","","",[new("name","Név")],[new("number","Bizonylat")],new("list","save","reverse","export")){ViewKind="sales"};
     public static async Task VerifyAsync(string output)
     {
+        var moneyStore=new AppearanceStore(Path.Combine(output,"money-preferences"));moneyStore.Save(new AppearancePreferences{MoneyDecimals=3});if(moneyStore.Load().MoneyDecimals!=3)throw new InvalidOperationException("A tizedesbeállítás nem maradt meg.");
+        MoneyDisplay.Decimals=0;var precise=new SaleBasketLine(Guid.NewGuid(),"Pontos ár","DB",1,100.1234m,27);var exact=precise.NetUnitPrice;
+        if(precise.GrossPriceDisplay.Contains(','))throw new InvalidOperationException("Az alap megjelenítés nem 0 tizedes.");MoneyDisplay.Decimals=2;if(!precise.GrossPriceDisplay.Contains(',')||precise.NetUnitPrice!=exact)throw new InvalidOperationException("A formázás megváltoztatta az árat.");MoneyDisplay.Decimals=0;
         var company=Guid.NewGuid();var product=Guid.NewGuid();var saved=new List<JsonElement>();var fail=true;
         async Task<JsonElement> Send(string operation,object payload,CancellationToken ct)
         {

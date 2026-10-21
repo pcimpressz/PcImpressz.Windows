@@ -8,6 +8,6 @@
     <Deterministic>true</Deterministic>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <DefaultItemExcludes>$(DefaultItemExcludes);**/obj/**;**/bin/**</DefaultItemExcludes>
-    <Version>0.4.7</Version>
+    <Version>0.4.8</Version>
   </PropertyGroup>
 </Project>

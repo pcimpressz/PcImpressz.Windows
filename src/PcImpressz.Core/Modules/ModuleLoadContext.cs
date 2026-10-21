@@ -22,6 +22,10 @@ internal sealed class ModuleLoadContext(Dictionary<string, byte[]> assemblies)
         throw new FileNotFoundException("Dependency is not in the signed module package.", name.Name);
     }
 
-    protected override nint LoadUnmanagedDll(string unmanagedDllName) =>
+    protected override nint LoadUnmanagedDll(string unmanagedDllName)
+    {
+        if(OperatingSystem.IsWindows() && unmanagedDllName is "crypt32.dll" or "kernel32.dll")
+            return LoadUnmanagedDllFromPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),unmanagedDllName));
         throw new NotSupportedException("Native module dependencies are not supported in Core v1.");
+    }
 }

@@ -13,11 +13,13 @@ internal sealed class SaleBasketLine:Observable,IDataErrorInfo
     public decimal Quantity=>Parse(_quantityText,out var q)?q:0;
     public decimal NetUnitPrice=>_net;
     public decimal VatRate{get=>_vat;set{_vat=value;if(Parse(_grossText,out var amount)&&new decimal[]{0,5,18,27}.Contains(value))_net=decimal.Round(amount/(1+value/100m),4,MidpointRounding.AwayFromZero);NotifyValues();}}
+    public string GrossDisplay=>MoneyDisplay.Format(Gross);
+    public string GrossPriceDisplay=>MoneyDisplay.Format(decimal.Round(_net*(1+_vat/100m),2,MidpointRounding.AwayFromZero));
     public decimal Gross=>Error.Length>0?0:decimal.Round(Quantity*_net,2,MidpointRounding.AwayFromZero)+decimal.Round(decimal.Round(Quantity*_net,2,MidpointRounding.AwayFromZero)*_vat/100m,2,MidpointRounding.AwayFromZero);
     public ICommand RemoveCommand{get;set;}=new RelayCommand(()=>{});
     public void RequirePrice(){_missingPrice=true;NotifyValues();}
     public string Error=>!Parse(_quantityText,out var q)||q<=0||q>1_000_000||decimal.Round(q,4)!=q?"A mennyiség pozitív szám legyen, legfeljebb 4 tizedessel.":_missingPrice?"Adj meg eladási árat.":!Parse(_grossText,out var p)||p<0||p>1_270_000_000||decimal.Round(p,2)!=p?"A bruttó egységár 0 vagy pozitív szám legyen, legfeljebb 2 tizedessel.":!new decimal[]{0,5,18,27}.Contains(_vat)?"Érvénytelen áfakulcs.":"";
     public string this[string columnName]=>columnName is nameof(QuantityText) or nameof(GrossPriceText) or nameof(VatRate)?Error:"";
     private static bool Parse(string text,out decimal value)=>decimal.TryParse(text.Replace(" ","").Replace(',','.'),NumberStyles.AllowDecimalPoint|NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture,out value);
-    private void NotifyValues(){foreach(var p in new[]{nameof(QuantityText),nameof(GrossPriceText),nameof(Quantity),nameof(NetUnitPrice),nameof(VatRate),nameof(Gross),nameof(Error)})Changed(p);}
+    private void NotifyValues(){foreach(var p in new[]{nameof(QuantityText),nameof(GrossPriceText),nameof(Quantity),nameof(NetUnitPrice),nameof(VatRate),nameof(Gross),nameof(GrossDisplay),nameof(GrossPriceDisplay),nameof(Error)})Changed(p);}
 }

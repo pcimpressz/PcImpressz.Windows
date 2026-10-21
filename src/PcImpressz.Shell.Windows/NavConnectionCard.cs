@@ -36,7 +36,7 @@ public sealed class NavConnectionCard : Border
         {
             if (DataContext is not ShellViewModel shell) return;
             await shell.SaveNavAsync(_password.Password, _sign.Password, _exchange.Password);
-            if (shell.NavConfigured) { _password.Clear(); _sign.Clear(); _exchange.Clear(); }
+            // Successful save increments NavGeneration; a failed save retains typed values.
         };
         panel.Children.Add(save);
         panel.Children.Add(BoundMuted("NavMessage"));

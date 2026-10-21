@@ -31,7 +31,7 @@ public sealed class ReceiptRow
         SourceLabel = json.GetProperty("sourceLabel").GetString() ?? "";
         Status = json.GetProperty("status").GetString() ?? "";
         StatusLabel = json.GetProperty("statusLabel").GetString() ?? "";
-        Net = json.GetProperty("net").GetDecimal().ToString("N2", CultureInfo.GetCultureInfo("hu-HU"));
+        Net = MoneyDisplay.Format(json.GetProperty("net").GetDecimal());
     }
     public Guid Id { get; }
     public long Version { get; }
@@ -466,8 +466,8 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         _due = detail.GetProperty("dueOn").GetString() ?? "";
         _notes = detail.TryGetProperty("notes", out var notes) ? notes.GetString() ?? "" : "";
         _warehouse = detail.GetProperty("warehouse").GetString() ?? "Bolt";
-        _net = detail.GetProperty("net").GetDecimal().ToString("N2", CultureInfo.GetCultureInfo("hu-HU"));
-        _gross = detail.GetProperty("gross").GetDecimal().ToString("N2", CultureInfo.GetCultureInfo("hu-HU"));
+        _net = MoneyDisplay.Format(detail.GetProperty("net").GetDecimal());
+        _gross = MoneyDisplay.Format(detail.GetProperty("gross").GetDecimal());
         var supplierId = detail.GetProperty("supplierId").GetGuid();
         if (Suppliers.All(item => item.Id != supplierId))
             Suppliers.Add(new(supplierId, detail.GetProperty("supplierName").GetString() ?? "", detail.GetProperty("supplierTaxId").GetString() ?? ""));
@@ -538,8 +538,8 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
             var row = decimal.Round(quantity * price, 2, MidpointRounding.AwayFromZero);
             net += row; gross += row + decimal.Round(row * vat / 100m, 2, MidpointRounding.AwayFromZero);
         }
-        _net = net.ToString("N2", CultureInfo.GetCultureInfo("hu-HU"));
-        _gross = gross.ToString("N2", CultureInfo.GetCultureInfo("hu-HU"));
+        _net = MoneyDisplay.Format(net);
+        _gross = MoneyDisplay.Format(gross);
         Changed(nameof(NetLabel)); Changed(nameof(GrossLabel));
     }
     private object LinePayload(LineEditor line) => new
