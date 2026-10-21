@@ -87,3 +87,12 @@ Az adatlap első sora az adószám; mellette a kis Lekérés gomb indítja az ú
 A Beállítások / Partnertörzs / Név formázás kapcsoló alapból bekapcsolt. Az új partnerhez NAV-ból betöltött, kizárólag nagybetűs cégnév, település és cím magyar kezdőbetűs formára alakul (például PC-IMPRESSZ KFT. → PC-Impressz Kft.). A Kft./Bt./Zrt. alakok, néhány ismert rövidítés (PC, IT, NAV stb.) és római számok megmaradnak. A vegyes írásmódot nem alakítjuk át, a meglévő partnereket nem módosítjuk utólag. Az országkódot, adószámot, irányítószámot nem formázzuk. A kapcsoló helyi munkaállomás-beállítás, újraindításkor megmarad. A NAV-ból betöltött adatlapot mentés előtt továbbra is ellenőrizni kell; a formázás nem tud minden márkanevet felismerni.
 
 A Beállítások lenyitható csoportjai: Általános és listák; Partnertörzs; Eladás és készlet; NAV-kapcsolat; Cégadatok és mentések. A korábbi adminjog-védelem megmaradt. A módosításokhoz nem használtunk éles NAV-kulcsokat vagy céges tesztírásokat.
+## 0.4.12 – kompakt szerkesztő és partneráttekintés
+
+A teljes szélességű lista alatt két külön kártya jelenik meg: balra a legfeljebb 680 képernyőegység széles szerkesztő, jobbra az aktuálisan kiválasztott partner mentett adatai. Új partnernél az áttekintő rövid útmutatást ad. A név, cím és elérhetőségek nem keverednek a szerkesztett, még nem mentett mezőkkel.
+
+Adminisztrátorként az áttekintő automatikusan betölti a dosszié első négy összesítő kártyáját, és innen nyitható meg a részletes dosszié. A dossziéhoz tartozó meglévő adminjog-védelem megmaradt; más szerepkörnek nem töltjük be ezeket az összesítőket. Gyors partnerváltásnál vagy cég-/jogosultságváltásnál a régi válasz nem írhatja felül az aktuális áttekintést. Az összesítés olvasása nem ment vagy módosít partneradatot.
+
+1000 képernyőegység alatti rendelkezésre álló szélességnél az áttekintő a szerkesztő alá kerül. A Mentés és Módosítások elvetése elsődleges művelet marad; az Archiválás, admin felületszerkesztés és további műveletek külön lenyithatók. A bővített mezők továbbra is külön nyithatók. A többi általános adatlap is kompakt szélességet kapott, a terméktörzs hosszú mezőihez nagyobb hely marad; a listák/tételtáblák nem szűkültek be. A NAV-beállítási kártya legfeljebb 760 egység széles.
+
+173 üzleti teszt és 54 WPF-render ellenőrzi a változatot, beleértve a széles/keskeny elrendezést, kiválasztott partner megjelenítését, késői dossziéválasz elvetését és az adminjog elvesztése utáni összesítőtörlést. A felhasználói adatbázisok helyett elkülönített tesztadatokkal dolgoztunk.

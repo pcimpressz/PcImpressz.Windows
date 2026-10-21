@@ -14,6 +14,7 @@ public sealed class NavConnectionCard : Border
     public NavConnectionCard()
     {
         SetResourceReference(StyleProperty, "Card");
+        MaxWidth=760;HorizontalAlignment=HorizontalAlignment.Left;
         var panel = new StackPanel();
         panel.Children.Add(BoundTitle());
         panel.Children.Add(Muted("A bevételezés élő NAV-lekérdezéséhez technikai felhasználó kell. A jelszó, az aláírókulcs és a cserekulcs a Windows-felhasználódhoz kötve, titkosítva kerül a cég mappájába. Másik gépen vagy másik felhasználónál a fájl nem nyitható meg."));

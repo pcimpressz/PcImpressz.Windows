@@ -103,7 +103,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public bool CanWrite => !IsBusy && _connection.Allows(Definition.ModuleId+".write");
     public bool CanExport => !IsBusy && _connection.Allows(Definition.ModuleId+".export");
     public bool CanAdmin => !IsBusy && _connection.Session?.Role=="admin";
-    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanAdmin));Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));}
+    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanAdmin));Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));if(_connection.Session?.Role!="admin")ClearPartnerOverviewCards();}
     public bool HasDossier => !string.IsNullOrWhiteSpace(Definition.DossierCommand);
     public bool CanOpenDossier => CanAdmin && HasDossier && _editId is not null && !IsBusy;
     public bool IsDossierOpen { get => _dossierOpen; private set { _dossierOpen = value; Changed(); Changed(nameof(ShowPartnerList)); } }
@@ -217,6 +217,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
             else field.Text = row?[field.Definition.Id]?.ToString() ?? field.Definition.DefaultText ?? "";
         }
         _populating = false; IsDirty = false; Changed(nameof(EditorTitle)); Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));
+        RefreshPartnerOverview();
         if (IsDossierOpen && row is not null) _ = LoadDossierAsync();
         else IsDossierOpen = false;
     }

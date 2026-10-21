@@ -33,6 +33,17 @@ internal static class PartnerEditorChecks
         var shell=new ShellViewModel(new AppearanceStore(Path.Combine(output,"partner-close")),output,null);
         var pages=(Dictionary<string,IWorkspacePage>)typeof(ShellViewModel).GetField("_entityPages",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(shell)!;pages.Add("partners.partners",page);
         if(shell.CanClose(()=>false)||shell.CanClose(()=>false)||!page.IsDirty)throw new InvalidOperationException("A Nem válasz engedte a kilépést.");shell.Stop();
+        var oldPartner=Guid.NewGuid();var newPartner=Guid.NewGuid();
+        async Task<JsonElement> ReadOverview(string operation,object input,CancellationToken ct)
+        {
+            var request=(ModuleCommandRequest)input;var id=request.Input.GetProperty("id").GetGuid();await Task.Delay(id==oldPartner?120:5,ct);
+            return JsonSerializer.SerializeToElement(new{cards=new[]{new{label="Bizonylatok",value=id==oldPartner?"Régi":"Aktuális"}},notice=""});
+        }
+        var overviewConnection=new HostConnection(output,null,ReadOverview);overviewConnection.SetSession(company,new("test","admin","admin",DateTimeOffset.UtcNow.AddMinutes(30)));
+        var overviewPage=new EntityPageViewModel(Definition with{DossierCommand="dossier"},overviewConnection,()=>company,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"overview-check")));
+        overviewPage.SelectedRow=new EntityRow(JsonSerializer.SerializeToElement(new{id=oldPartner,version=1,name="Régi partner"}));overviewPage.SelectedRow=new EntityRow(JsonSerializer.SerializeToElement(new{id=newPartner,version=1,name="Aktuális partner"}));await Task.Delay(180);
+        if(overviewPage.PartnerOverviewTitle!="Aktuális partner"||overviewPage.PartnerOverviewCards.Single().Value!="Aktuális")throw new InvalidOperationException("Késői partnerdosszié felülírta az aktuális partnert.");
+        overviewConnection.SetSession(company,new("test","seller","sales",DateTimeOffset.UtcNow.AddMinutes(30)));overviewPage.PermissionsChanged();if(overviewPage.PartnerOverviewCards.Count!=0)throw new InvalidOperationException("Admin dossziéösszesítő maradt a jogosultság elvesztése után.");
         page.ConfirmDiscardOverride=()=>true;page.DiscardChangesCommand.Execute(null);if(page.IsDirty||page.Fields[0].Text.Length!=0)throw new InvalidOperationException("Az explicit elvetés nem állította vissza az adatlapot.");
         Console.WriteLine("ui-ok partner NAV fills draft only, preserves extended fields and No cancels discard and exit");
     }
@@ -46,6 +57,13 @@ internal static class PartnerEditorChecks
         if(tax.TransformToAncestor(view).Transform(new Point()).Y>=input.TransformToAncestor(view).Transform(new Point()).Y||lookup.TransformToAncestor(view).Transform(new Point()).X<=tax.TransformToAncestor(view).Transform(new Point()).X||Math.Abs(lookup.TransformToAncestor(view).Transform(new Point()).Y-tax.TransformToAncestor(view).Transform(new Point()).Y)>5)throw new InvalidOperationException("Hibás adószámos lekérősor.");
         var advanced=Descendants(view).OfType<Expander>().Single(e=>e.Header?.ToString()=="Bővített adatok kitöltése");if(advanced.IsExpanded)throw new InvalidOperationException("A bővített mezők alapból nyitva vannak.");Snapshot("partner-basic-");advanced.IsExpanded=true;Arrange();Snapshot("partner-extended-");
         if(!Descendants(view).OfType<TextBox>().Any(t=>t.DataContext is EntityFieldViewModel f&&f.Definition.Id=="industry"&&t.ActualHeight>0))throw new InvalidOperationException("A bővített adat nem nyitható meg.");
+        advanced.IsExpanded=false;
+        page.SelectedRow=new EntityRow(JsonSerializer.SerializeToElement(new{id=Guid.NewGuid(),version=1,name="Minta Partner Kft.",taxId="12345678-2-42",city="Budapest",postalCode="1111",address="Minta utca 1.",email="proba@example.invalid",phone="Teszt telefonszám"}));Arrange();Snapshot("partner-selected-");
+        var overviewTitle=Descendants(view).OfType<TextBlock>().Single(t=>System.Windows.Data.BindingOperations.GetBinding(t,TextBlock.TextProperty)?.Path?.Path=="PartnerOverviewTitle");
+        var editorCard=FindParent<Border>(input);if(editorCard.ActualWidth>680||overviewTitle.TransformToAncestor(view).Transform(new Point()).X<=input.TransformToAncestor(view).Transform(new Point()).X+input.ActualWidth)throw new InvalidOperationException("A kompakt szerkesztő és áttekintő nem egymás mellett van.");
+        surface.Measure(new Size(800,2400));surface.Arrange(new Rect(0,0,800,2400));surface.UpdateLayout();
+        if(overviewTitle.TransformToAncestor(view).Transform(new Point()).Y<=input.TransformToAncestor(view).Transform(new Point()).Y+input.ActualHeight)throw new InvalidOperationException("Keskeny ablakban az áttekintő nem került a szerkesztő alá.");
+        var narrowBitmap=new RenderTargetBitmap(800,2400,96,96,PixelFormats.Pbgra32);narrowBitmap.Render(surface);var narrowEncoder=new PngBitmapEncoder();narrowEncoder.Frames.Add(BitmapFrame.Create(narrowBitmap));using(var narrowFile=File.Create(Path.Combine(output,"partner-narrow-"+skin+".png")))narrowEncoder.Save(narrowFile);
         var directory=Path.Combine(output,"grouped-settings-"+skin);var shell=new ShellViewModel(new AppearanceStore(directory),directory,null);
         var template=(DataTemplate)Application.Current.FindResource(new DataTemplateKey(typeof(SettingsPage)));var settings=(FrameworkElement)template.LoadContent();settings.DataContext=shell;var settingsSurface=new Border{Child=settings,Padding=new(20),Background=(Brush)Application.Current.Resources["BackgroundBrush"]};settingsSurface.Measure(new Size(1100,3400));settingsSurface.Arrange(new Rect(0,0,1100,3400));settingsSurface.UpdateLayout();
         if(Descendants(settings).OfType<Expander>().Count()!=5)throw new InvalidOperationException("A beállítások modulcsoportjai hiányoznak.");
@@ -55,5 +73,6 @@ internal static class PartnerEditorChecks
         void Arrange(){surface.Measure(new Size(1100,1900));surface.Arrange(new Rect(0,0,1100,1900));surface.UpdateLayout();}
         void Snapshot(string name){var bitmap=new RenderTargetBitmap(1100,1900,96,96,PixelFormats.Pbgra32);bitmap.Render(surface);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using var file=File.Create(Path.Combine(output,name+skin+".png"));encoder.Save(file);}
     }
+    private static T FindParent<T>(DependencyObject child) where T:DependencyObject{var parent=VisualTreeHelper.GetParent(child);while(parent is not null){if(parent is T match)return match;parent=VisualTreeHelper.GetParent(parent);}throw new InvalidOperationException("Hiányzó szülőelem.");}
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root){for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var child=VisualTreeHelper.GetChild(root,i);yield return child;foreach(var nested in Descendants(child))yield return nested;}}
 }

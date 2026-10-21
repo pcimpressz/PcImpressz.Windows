@@ -36,6 +36,7 @@ public sealed class EntityPageView : UserControl
         var body = new Grid(); body.ColumnDefinitions.Add(new() { Width = new(3, GridUnitType.Star) });
         body.ColumnDefinitions.Add(new() { Width = new(2, GridUnitType.Star) });
         body.RowDefinitions.Add(new() { Height = GridLength.Auto }); body.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        body.RowDefinitions.Add(new(){Height=GridLength.Auto});
         var listPanel = new StackPanel();
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false,
             CanUserDeleteRows = false, SelectionMode = DataGridSelectionMode.Single,
@@ -86,13 +87,23 @@ public sealed class EntityPageView : UserControl
         var advanced=new Expander{Header="Bővített adatok kitöltése",Content=advancedFields,Margin=new(0,16,0,0),IsExpanded=false};advanced.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});editor.Children.Add(advanced);
         var save = new WrapPanel { Margin = new(0,20,0,0) };
         var saveButton = ActionButton("Mentés", "SaveCommand"); saveButton.SetResourceReference(StyleProperty, "PrimaryButton");
-        save.Children.Add(saveButton);save.Children.Add(ActionButton("Módosítások elvetése","DiscardChangesCommand")); save.Children.Add(ActionButton("Archiválás", "ArchiveCommand"));
-        save.Children.Add(ActionButton("Feliratok és elrendezés – admin", "EditLayoutCommand"));
+        save.Children.Add(saveButton);save.Children.Add(ActionButton("Módosítások elvetése","DiscardChangesCommand"));
+        var secondaryActions=new WrapPanel();secondaryActions.Children.Add(ActionButton("Archiválás", "ArchiveCommand"));
+        secondaryActions.Children.Add(ActionButton("Feliratok és elrendezés – admin", "EditLayoutCommand"));
         var dossier = ActionButton("Dosszié", "DossierCommand");
         dossier.SetBinding(VisibilityProperty, new Binding("HasDossier") { Converter = new BooleanToVisibilityConverter() });
         dossier.SetBinding(IsEnabledProperty, new Binding("CanOpenDossier"));
-        save.Children.Add(dossier); editor.Children.Add(save);
+        secondaryActions.Children.Add(dossier); editor.Children.Add(save);editor.Children.Add(new Expander{Header="További műveletek",Content=secondaryActions,Margin=new(0,16,0,0)});
         editorBorder.Child = editor; Grid.SetColumn(editorBorder,1); body.Children.Add(editorBorder);
+        var overviewBorder=new Border{Padding=new(22),CornerRadius=new(14),BorderThickness=new(1),VerticalAlignment=VerticalAlignment.Top,MaxWidth=540};overviewBorder.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush");overviewBorder.SetResourceReference(Border.BorderBrushProperty,"StrokeBrush");overviewBorder.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});
+        var overview=new StackPanel();overviewBorder.Child=overview;
+        var overviewEyebrow=new TextBlock{Text="PARTNER ÁTTEKINTÉS",Margin=new(0,0,0,12)};overviewEyebrow.SetResourceReference(StyleProperty,"Eyebrow");overview.Children.Add(overviewEyebrow);
+        var overviewName=new TextBlock{FontSize=23,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,10)};overviewName.SetBinding(TextBlock.TextProperty,"PartnerOverviewTitle");overview.Children.Add(overviewName);
+        var overviewSubtitle=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,18)};overviewSubtitle.SetResourceReference(StyleProperty,"Muted");overviewSubtitle.SetBinding(TextBlock.TextProperty,"PartnerOverviewSubtitle");overview.Children.Add(overviewSubtitle);
+        var overviewContact=new TextBlock{TextWrapping=TextWrapping.Wrap,LineHeight=24,Margin=new(0,0,0,20)};overviewContact.SetBinding(TextBlock.TextProperty,"PartnerOverviewContact");overview.Children.Add(overviewContact);
+        var cards=new ItemsControl();cards.SetBinding(ItemsControl.ItemsSourceProperty,"PartnerOverviewCards");var cardTemplate=new DataTemplate();var cardPanel=new FrameworkElementFactory(typeof(StackPanel));cardPanel.SetValue(MarginProperty,new Thickness(0,0,0,18));var cardLabel=new FrameworkElementFactory(typeof(TextBlock));cardLabel.SetBinding(TextBlock.TextProperty,new Binding("Label"));cardLabel.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);cardPanel.AppendChild(cardLabel);var cardValue=new FrameworkElementFactory(typeof(TextBlock));cardValue.SetBinding(TextBlock.TextProperty,new Binding("Value"));cardValue.SetValue(TextBlock.FontSizeProperty,21d);cardValue.SetValue(TextBlock.FontWeightProperty,FontWeights.SemiBold);cardValue.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);cardPanel.AppendChild(cardValue);cardTemplate.VisualTree=cardPanel;cards.ItemTemplate=cardTemplate;overview.Children.Add(cards);
+        var overviewNotice=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)};overviewNotice.SetResourceReference(StyleProperty,"Muted");overviewNotice.SetBinding(TextBlock.TextProperty,"PartnerOverviewNotice");overview.Children.Add(overviewNotice);
+        var fullDossier=ActionButton("Részletes dosszié megnyitása","DossierCommand");fullDossier.SetBinding(IsEnabledProperty,"CanOpenDossier");fullDossier.SetBinding(VisibilityProperty,new Binding("HasDossier"){Converter=new BooleanToVisibilityConverter()});overview.Children.Add(fullDossier);overviewBorder.SizeChanged+=(_,_)=>{var width=Math.Max(0,overviewBorder.ActualWidth-46);foreach(var text in overview.Children.OfType<TextBlock>())text.MaxWidth=width;cards.MaxWidth=width;};body.Children.Add(overviewBorder);
         body.SetBinding(VisibilityProperty, new Binding("ShowPartnerList") { Converter = new BooleanToVisibilityConverter() });
         root.Children.Add(body);
         root.Children.Add(DossierPage());
@@ -178,10 +189,21 @@ public sealed class EntityPageView : UserControl
             editorBorder.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
             var partner=DataContext is EntityPageViewModel {IsPartnerMaster:true};
             var narrow = separate || partner || ActualWidth < 980;
+            editorBorder.MaxWidth=partner?680:DataContext is EntityPageViewModel pageVm&&pageVm.Definition.ModuleId=="catalog"&&pageVm.Definition.Id=="products"?900:680;
+            editorBorder.HorizontalAlignment=HorizontalAlignment.Stretch;editorBorder.VerticalAlignment=VerticalAlignment.Top;
             Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,editorOnly ? 0 : narrow ? 1 : 0);
             Grid.SetColumnSpan(listPanel,narrow ? 2 : 1); Grid.SetColumnSpan(editorBorder,narrow ? 2 : 1);
             editorBorder.Margin = separate ? new Thickness(0) : narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);
             grid.MinHeight = ViewMode == "list" ? 480 : 360; grid.MaxHeight = ViewMode == "list" ? 680 : 480;
+            if(partner)
+            {
+                var sideBySide=ActualWidth>=1000&&ViewMode!="list";
+                body.ColumnDefinitions[0].Width=new(1.35,GridUnitType.Star);body.ColumnDefinitions[1].Width=new(1,GridUnitType.Star);
+                Grid.SetColumn(listPanel,0);Grid.SetRow(listPanel,0);Grid.SetColumnSpan(listPanel,2);
+                Grid.SetRow(editorBorder,1);Grid.SetColumn(editorBorder,0);Grid.SetColumnSpan(editorBorder,sideBySide?1:2);editorBorder.Margin=new(0,20,sideBySide?20:0,0);
+                Grid.SetRow(overviewBorder,sideBySide?1:2);Grid.SetColumn(overviewBorder,sideBySide?1:0);Grid.SetColumnSpan(overviewBorder,sideBySide?1:2);overviewBorder.Margin=new(0,20,0,0);overviewBorder.HorizontalAlignment=HorizontalAlignment.Stretch;
+            }
+            else{body.ColumnDefinitions[0].Width=new(3,GridUnitType.Star);body.ColumnDefinitions[1].Width=new(2,GridUnitType.Star);}
             search.Width = ViewMode == "list" ? 360 : 230;
         };
         SizeChanged += (_, _) => _applyLayout();
