@@ -1,4 +1,8 @@
-﻿using System.Text;
+﻿using System.IO.Compression;
+using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using PcImpressz.Contracts;
@@ -171,8 +175,99 @@ internal static class ReceivingTests
             Check.Equal(5m, byNet[^1].Data.Net);
             return Task.CompletedTask;
         });
+        yield return Case("nav digest request is signed and a stub pull imports a new inbound invoice", async f =>
+        {
+            var secrets = new NavConnectionSecrets("87654321", "technikai", "jelszo", "alairas", "csere", true);
+            var at = new DateTimeOffset(2026, 10, 21, 8, 15, 30, TimeSpan.Zero);
+            var signed = NavInvoiceClient.DigestRequest(secrets, new DateOnly(2026, 9, 21), new DateOnly(2026, 10, 21), 1, at, "REQNAV1").ToString();
+            Check.True(signed.Contains("INBOUND", StringComparison.Ordinal) && signed.Contains("2026-09-21", StringComparison.Ordinal) && signed.Contains("2026-10-21", StringComparison.Ordinal));
+            Check.True(signed.Contains("SHA3-512", StringComparison.Ordinal) && signed.Contains("SHA-512", StringComparison.Ordinal));
+            Check.True(signed.Contains(Convert.ToHexString(SHA512.HashData(Encoding.UTF8.GetBytes("jelszo"))), StringComparison.Ordinal));
+            Check.True(signed.Contains(Convert.ToHexString(NavSha3.Hash(Encoding.UTF8.GetBytes("REQNAV1" + "20261021081530" + "alairas"))), StringComparison.Ordinal));
+            var digest = NavInvoiceClient.ParseDigest(DigestBody("NAV-1"));
+            Check.Equal("NAV-1", digest.Invoices.Single().Number);
+            Check.Equal("CREATE", digest.Invoices.Single().Operation);
+            var gzipped = ReceivingImport.FromNav(NavInvoiceClient.InvoiceXml(DataBody(InvoiceBody("GZIP-1", "5990000000001"), gzip: true)));
+            Check.Equal("GZIP-1", gzipped.Number);
+            Check.Equal("5990000000001", gzipped.Lines.Single().Barcode);
+            var merged = SupplierXmlLinks.MergeMissing(ReceivingImport.FromNav(InvoiceBody("M-1", "")), ReceivingImport.FromNav(InvoiceBody("M-1", "5991234567890")));
+            Check.Equal("5991234567890", merged.Lines.Single().Barcode);
+            Check.Equal(1m, merged.Lines.Single().Quantity);
+            Check.Equal("https://nagyker.example/szamla", SupplierXmlLinks.Parse("xml-szamla=https://nagyker.example/szamla")!.Endpoint);
+            Check.True(SupplierXmlLinks.Find("""{"partners":[{"data":{"taxId":"12345678-2-42","isActive":true,"customFields":"xml-szamla=igen"}}]}""", "12345678") is { HasEndpoint: false });
+            var blocked = 0;
+            using (var idle = new HttpClient(new ScriptedHandler(_ => { blocked++; return Xml("nem"); })))
+                await Check.ThrowsAsync<ArgumentException>(async () => await NavIntake.PullAsync(f.Receipts, secrets, f.First.Id, "2020-01-01", "2026-01-01", new DateOnly(2026, 10, 21), "operator", CancellationToken.None, idle));
+            Check.Equal(0, blocked);
+            await f.Supplier("Nagyker Kft.", "12345678-2-42");
+            using var http = new HttpClient(new ScriptedHandler(request =>
+                request.RequestUri!.AbsolutePath.EndsWith("queryInvoiceDigest", StringComparison.Ordinal)
+                    ? Xml(DigestBody("NAV-PULL-1"))
+                    : request.RequestUri.AbsolutePath.EndsWith("queryInvoiceData", StringComparison.Ordinal)
+                        ? Xml(DataBody(InvoiceBody("NAV-PULL-1", "")))
+                        : throw new InvalidOperationException(request.RequestUri.ToString())));
+            var pulled = await NavIntake.PullAsync(f.Receipts, secrets, f.First.Id, "2026-09-21", "2026-10-21", new DateOnly(2026, 10, 21), "operator", CancellationToken.None, http);
+            Check.Equal(1, pulled.Imported.Length);
+            Check.Equal(0, pulled.Errors.Length);
+            Check.Equal(0, pulled.UnknownSuppliers.Length);
+            var saved = (await f.Receipts.Snapshot(f.First.Id)).Receipts.Single();
+            Check.Equal("uj", saved.Data.Status);
+            Check.Equal("nav", saved.Data.Source);
+            Check.Equal("NAV-PULL-1", saved.Data.Number);
+        });
+        yield return Case("supplier xml feed and a separate file fill only the missing invoice identifiers", async f =>
+        {
+            var supplier = await f.Supplier("Nagyker Kft.", "12345678-2-42");
+            await f.Partners.Save(new(f.First.Id, supplier.Id, supplier.Version, supplier.Data with { CustomFields = "xml-szamla=https://nagyker.example/szamla" }), "operator");
+            await f.Unit();
+            await f.Product("Egér", "EGR-1", "5991234567890");
+            var secrets = new NavConnectionSecrets("87654321", "technikai", "jelszo", "alairas", "csere", true);
+            using var http = new HttpClient(new ScriptedHandler(request =>
+            {
+                if (request.RequestUri!.AbsolutePath.EndsWith("queryInvoiceDigest", StringComparison.Ordinal)) return Xml(DigestBody("NAV-PULL-2"));
+                if (request.RequestUri.AbsolutePath.EndsWith("queryInvoiceData", StringComparison.Ordinal)) return Xml(DataBody(InvoiceBody("NAV-PULL-2", "")));
+                Check.Equal("nagyker.example", request.RequestUri.Host);
+                Check.True(request.RequestUri.Query.Contains("invoiceNumber=NAV-PULL-2", StringComparison.Ordinal));
+                return Xml(InvoiceBody("NAV-PULL-2", "5991234567890"));
+            }));
+            var pulled = await NavIntake.PullAsync(f.Receipts, secrets, f.First.Id, "2026-09-21", "2026-10-21", new DateOnly(2026, 10, 21), "operator", CancellationToken.None, http);
+            Check.Equal(1, pulled.XmlFeeds.Length);
+            var saved = (await f.Receipts.Snapshot(f.First.Id)).Receipts.Single();
+            Check.Equal("5991234567890", saved.Data.Lines.Single().Barcode);
+            Check.Equal("megvan", saved.Data.Lines.Single().Match);
+            var bare = InvoiceBody("NAV-SUP-1", "");
+            var imported = await f.Receipts.Import(new(f.First.Id, null, null, null, null, "nav", "nav.xml", Convert.ToBase64String(Encoding.UTF8.GetBytes(bare))),
+                ReceivingImport.Read("nav.xml", Convert.ToBase64String(Encoding.UTF8.GetBytes(bare))), "operator");
+            Check.Equal("fuggo", imported.Data.Lines.Single().Match);
+            var filled = InvoiceBody("NAV-SUP-1", "5991234567890");
+            var body = Convert.ToBase64String(Encoding.UTF8.GetBytes(filled));
+            var supplemented = await f.Receipts.Supplement(new(f.First.Id, imported.Id, imported.Version, "potlas.xml", body), ReceivingImport.ReadSupplement("potlas.xml", body), "operator");
+            Check.Equal("megvan", supplemented.Data.Lines.Single().Match);
+            var pdf = Encoding.Latin1.GetBytes("%PDF-1.4\n" + InvoiceBody("NAV-PDF-1", "5991234567890") + "\n%%EOF");
+            Check.Equal("NAV-PDF-1", ReceivingImport.ReadSupplement("szamla.pdf", Convert.ToBase64String(pdf)).Number);
+            Check.Throws<ArgumentException>(() => ReceivingImport.Read("szamla.pdf", Convert.ToBase64String(pdf)));
+        });
     }
 
+    private static string InvoiceBody(string number, string barcode)
+    {
+        var code = barcode.Length == 0 ? "" : "<productCode><productCodeCategory>EAN</productCodeCategory><productCodeValue>" + barcode + "</productCodeValue></productCode>";
+        return "<InvoiceData><invoiceNumber>" + number + "</invoiceNumber><currencyCode>HUF</currencyCode><invoiceIssueDate>2026-10-01</invoiceIssueDate><supplierName>Nagyker Kft.</supplierName><supplierTaxNumber>12345678-2-42</supplierTaxNumber><invoiceNetAmount>1000</invoiceNetAmount><invoiceVatAmount>270</invoiceVatAmount><invoiceGrossAmount>1270</invoiceGrossAmount><line><lineDescription>Egér</lineDescription><quantity>1</quantity><unitPrice>1000</unitPrice><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate>" + code + "</line></InvoiceData>";
+    }
+    private static string DigestBody(string number) =>
+        "<QueryInvoiceDigestResponse xmlns=\"http://schemas.nav.gov.hu/OSA/3.0/api\" xmlns:common=\"http://schemas.nav.gov.hu/NTCA/1.0/common\"><common:result><common:funcCode>OK</common:funcCode></common:result><invoiceDigestResult><currentPage>1</currentPage><availablePage>1</availablePage><invoiceDigest><invoiceNumber>" + number + "</invoiceNumber><supplierTaxNumber>12345678</supplierTaxNumber><supplierName>Nagyker Kft.</supplierName><invoiceIssueDate>2026-10-01</invoiceIssueDate><invoiceOperation>CREATE</invoiceOperation></invoiceDigest></invoiceDigestResult></QueryInvoiceDigestResponse>";
+    private static string DataBody(string invoice, bool gzip = false)
+    {
+        var raw = Encoding.UTF8.GetBytes(invoice);
+        if (gzip)
+        {
+            using var output = new MemoryStream();
+            using (var stream = new GZipStream(output, CompressionLevel.SmallestSize, true)) stream.Write(raw);
+            raw = output.ToArray();
+        }
+        return "<QueryInvoiceDataResponse xmlns=\"http://schemas.nav.gov.hu/OSA/3.0/api\"><result><funcCode>OK</funcCode></result><invoiceData>" + Convert.ToBase64String(raw) + "</invoiceData><compressedContentIndicator>" + (gzip ? "true" : "false") + "</compressedContentIndicator></QueryInvoiceDataResponse>";
+    }
+    private static HttpResponseMessage Xml(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/xml") };
     private static ReceiptLineDraft Line(string name, decimal quantity, decimal price) => new(null, null, name, "", "", "DB", quantity, price, 27, name == "Szállítási díj");
     private static ReceiptDraft Draft(Guid supplier, string number, params ReceiptLineDraft[] lines) =>
         new(number, supplier, "2026-10-20", "", "", "Bolt", lines);
@@ -191,6 +286,11 @@ internal static class ReceivingTests
             Dependencies = dependencies ?? []
         };
         File.WriteAllText(Path.Combine(package, "manifest.jws"), crypto.Sign(manifest, ModuleManifest.DocumentType));
+    }
+    private sealed class ScriptedHandler(Func<HttpRequestMessage, HttpResponseMessage> next) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(next(request));
     }
     private sealed class Fixture : IDisposable
     {

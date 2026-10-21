@@ -61,11 +61,15 @@ public sealed record ReceiptGet(Guid CompanyId, Guid Id);
 public sealed record ReceiptReverse(Guid CompanyId, Guid Id, long Version, string Reason);
 public sealed record ReceiptClassify(Guid CompanyId, Guid Id, long Version, string? Status);
 public sealed record ReceiptImport(Guid CompanyId, Guid? SupplierId, string? Number, string? IssuedOn, string? DueOn,
-    string? Source, string? FileName, string? ContentBase64);
+    string? Source, string? FileName, string? ContentBase64, string? Notes = null);
+public sealed record ReceiptSupplement(Guid CompanyId, Guid Id, long Version, string? FileName, string? ContentBase64);
+public sealed record NavPullRequest(Guid CompanyId, string? From, string? To);
 public sealed record ImportedLine(string Name, string Sku, string Barcode, decimal Quantity, decimal NetUnitPrice, decimal? VatRate = null, string UnitCode = "DB", bool IsService = false);
 public sealed record ImportedDocument(string? Number, string? IssuedOn, string? DueOn, string? SupplierName,
     string? SupplierTaxId, ImportedLine[] Lines, string Currency = "HUF", decimal? ExpectedNet = null, decimal? ExpectedVat = null, decimal? ExpectedGross = null);
 public sealed class ReceivingConflictException(string message) : Exception(message);
+public sealed class ReceivingUnknownSupplierException(string message) : ArgumentException(message);
+public sealed class ReceivingDuplicateException(string message) : ArgumentException(message);
 
 public static class ReceivingJson
 {

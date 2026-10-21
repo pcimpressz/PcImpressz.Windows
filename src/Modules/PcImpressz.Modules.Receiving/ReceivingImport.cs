@@ -32,6 +32,24 @@ public static class ReceivingImport
             _ => throw new ArgumentException("Excel (xlsx), CSV vagy NAV-számla XML tölthető be.")
         };
     }
+    public static ImportedDocument ReadSupplement(string? fileName, string? contentBase64)
+    {
+        var extension = Path.GetExtension((fileName ?? "").Trim()).ToLowerInvariant();
+        var maximum = extension == ".pdf" ? 8 * 1024 * 1024 : MaximumBytes;
+        if ((contentBase64?.Length ?? 0) > 12_000_000) throw new ArgumentException("A fájl nagyobb a megengedett méretnél.");
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(contentBase64 ?? ""); }
+        catch (FormatException) { throw new ArgumentException("A fájl tartalma nem olvasható."); }
+        if (bytes.Length < 1 || bytes.Length > maximum)
+            throw new ArgumentException(extension == ".pdf" ? "A fájl üres vagy nagyobb 8 MB-nál." : "A fájl üres vagy nagyobb 1,5 MB-nál.");
+        var xml = extension switch
+        {
+            ".xml" => NavInvoiceClient.InvoiceXml(Encoding.UTF8.GetString(bytes)),
+            ".pdf" => EmbeddedInvoice(bytes),
+            _ => throw new ArgumentException("A hiányzó adat XML-ből vagy PDF-ből tölthető be.")
+        };
+        return FromNav(xml);
+    }
     public static ImportedDocument FromTable(string[][] rows)
     {
         if (rows.Length is < 2 or > 401 || rows.Any(row => row.Length > 64 || row.Any(cell => cell.Length > 10000))) throw new ArgumentException("A táblában fejléc és legalább egy tétel kell.");
@@ -141,6 +159,69 @@ public static class ReceivingImport
         "igen" or "true" or "1" => true, "" or "nem" or "false" or "0" => false,
         _ => throw new ArgumentException("A szolgáltatás oszlop igen/nem értéket kér.")
     };
+    private static string EmbeddedInvoice(byte[] bytes)
+    {
+        foreach (var encoding in new Encoding[] { Encoding.UTF8, Encoding.Latin1 })
+        {
+            var slice = InvoiceSlice(encoding.GetString(bytes));
+            if (slice is not null) return slice;
+        }
+        throw new ArgumentException("A PDF-ben nincs olvasható számla-XML. A képi tételsorok olvasása még nincs kész; XML-ből töltsd be a hiányzó adatot.");
+    }
+    private static string? InvoiceSlice(string text)
+    {
+        foreach (var name in new[] { "InvoiceData", "Invoice" })
+        {
+            var start = OpenTag(text, name);
+            if (start < 0) continue;
+            var end = CloseTag(text, name, start);
+            if (end < 0) continue;
+            var length = end - start;
+            if (length is < 1 or > 2 * 1024 * 1024) throw new ArgumentException("A PDF-be ágyazott számla-XML nagyobb 2 MB-nál.");
+            var slice = text.Substring(start, length);
+            if (slice.Contains("invoiceNumber", StringComparison.OrdinalIgnoreCase) || slice.Contains("<line", StringComparison.OrdinalIgnoreCase))
+                return slice;
+        }
+        return null;
+    }
+    private static int OpenTag(string text, string localName)
+    {
+        var cursor = 0;
+        while (cursor < text.Length)
+        {
+            var at = text.IndexOf(localName, cursor, StringComparison.OrdinalIgnoreCase);
+            if (at < 0) return -1;
+            var start = text.LastIndexOf('<', at);
+            if (start >= 0 && TagBoundary(text, start, at, localName)) return start;
+            cursor = at + localName.Length;
+        }
+        return -1;
+    }
+    private static int CloseTag(string text, string localName, int from)
+    {
+        var cursor = from + 1;
+        while (cursor < text.Length)
+        {
+            var at = text.IndexOf(localName, cursor, StringComparison.OrdinalIgnoreCase);
+            if (at < 0) return -1;
+            var start = text.LastIndexOf('<', at);
+            if (start > from && start + 1 < text.Length && text[start + 1] == '/' && TagBoundary(text, start, at, localName))
+            {
+                var close = text.IndexOf('>', at + localName.Length);
+                return close < 0 ? -1 : close + 1;
+            }
+            cursor = at + localName.Length;
+        }
+        return -1;
+    }
+    private static bool TagBoundary(string text, int start, int nameAt, string localName)
+    {
+        if (nameAt + localName.Length > text.Length) return false;
+        var after = nameAt + localName.Length;
+        if (after < text.Length && char.IsLetterOrDigit(text[after])) return false;
+        var prefix = text[(start + 1)..nameAt].TrimStart('/');
+        return prefix.Length == 0 || prefix.EndsWith(':') && prefix[..^1].All(character => char.IsLetterOrDigit(character) || character is '_' or '-');
+    }
     private static string[][] ParseCsv(string text)
     {
         var first = text.Split('\n')[0];
