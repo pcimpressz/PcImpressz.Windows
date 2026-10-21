@@ -13,23 +13,31 @@ public sealed class ReceivingPageView : UserControl
     public ReceivingPageView()
     {
         var root = new StackPanel();
-        root.Children.Add(Home());
-        root.Children.Add(Intake());
-        root.Children.Add(Editor());
+        root.Children.Add(Text("Számlák",26,true));
+        var tabs=new WrapPanel{Margin=new(0,0,0,16)};
+        tabs.Children.Add(Tab("Bejövő számlák","IncomingCommand","IsIncoming"));
+        tabs.Children.Add(Tab("Kimenő számlák","OutgoingCommand","IsOutgoing"));
+        root.Children.Add(tabs);
+        var incoming=new StackPanel();
+        incoming.SetBinding(VisibilityProperty,new Binding("IsIncoming"){Converter=new BooleanToVisibilityConverter()});
+        incoming.Children.Add(Home());incoming.Children.Add(Editor());root.Children.Add(incoming);
+        root.Children.Add(Outgoing());
         Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         DataContextChanged += (_, _) => Hook();
     }
     private UIElement Home()
     {
         var panel = new StackPanel();
-        panel.SetBinding(VisibilityProperty, new Binding("IsHome") { Converter = new BooleanToVisibilityConverter() });
-        panel.Children.Add(Text("Bevételezés", 22, true));
+
+        panel.Children.Add(Text("Bejövő számlák", 22, true));
         panel.Children.Add(Muted("Válaszd ki, honnan jön a számla. Ami NAV-ról vagy importból érkezik, új állapotba kerül: bevételezed, költségként hagyod, vagy függőben marad."));
         var modes = new WrapPanel { Margin = new(0, 0, 0, 12) };
-        modes.Children.Add(Primary("Kézi számla", "ManualCommand"));
+        modes.Children.Add(Primary("Kézi bevételezés", "ManualCommand"));
         modes.Children.Add(Button("NAV-számlák lekérése", "NavCommand"));
+        modes.Children.Add(Button("PDF alapján rögzítés", "PdfCommand"));
         modes.Children.Add(Button("Excel / CSV / XML import", "ImportCommand"));
         panel.Children.Add(modes);
+        panel.Children.Add(Intake());
         panel.Children.Add(Bound(Muted(""), "CountsLabel"));
         var tools = new WrapPanel();
         var search = Input(); search.Width = 240; search.SetBinding(TextBox.TextProperty, new Binding("Search") { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
@@ -41,16 +49,16 @@ public sealed class ReceivingPageView : UserControl
         tools.Children.Add(filter);
         tools.Children.Add(Button("Keresés", "SearchCommand"));
         tools.Children.Add(Button("Megnyitás", "OpenCommand"));
-        tools.Children.Add(Button("Bevételezés", "ReceiveCommand"));
-        tools.Children.Add(Button("Költség", "ExpenseCommand"));
-        tools.Children.Add(Button("Függő", "PendingCommand"));
-        tools.Children.Add(Button("Visszafordítás", "ReverseReceiptCommand"));
+
+
+
+
         tools.Children.Add(Button("CSV", "ExportCommand"));
         tools.Children.Add(ListGrid.ColumnButton(() => DataContext as IColumnList));
         panel.Children.Add(tools);
         panel.Children.Add(Bound(Muted(""), "Message"));
         _receipts = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, CanUserDeleteRows = false,
-            HeadersVisibility = DataGridHeadersVisibility.Column, MinHeight = 280, MaxHeight = 460, Margin = new(0, 8, 0, 0) };
+            HeadersVisibility = DataGridHeadersVisibility.Column, MinHeight = 220, MaxHeight = 320, Margin = new(0, 8, 0, 0) };
         _receipts.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Rows"));
         _receipts.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedRow"));
         _receipts.MouseDoubleClick += (_, _) => { if (DataContext is ReceivingPageViewModel page) page.OpenCommand.Execute(null); };
@@ -61,12 +69,15 @@ public sealed class ReceivingPageView : UserControl
     private UIElement Intake()
     {
         var panel = new StackPanel();
-        panel.SetBinding(VisibilityProperty, new Binding("IsNav") { Converter = OrHome() });
+
         var nav = panel;
         var import = new StackPanel();
         import.SetBinding(VisibilityProperty, new Binding("IsImport") { Converter = new BooleanToVisibilityConverter() });
         var both = new StackPanel();
-        both.Children.Add(nav);
+        var navExpander=new Expander{Header="NAV-lekérés – bejövő számlák",Content=nav,Margin=new(0,0,0,16)};
+        navExpander.SetBinding(Expander.IsExpandedProperty,new Binding("IsNav"){Mode=BindingMode.TwoWay});
+        navExpander.SetBinding(IsEnabledProperty,"IsNotBusy");
+        both.Children.Add(navExpander);
         both.Children.Add(import);
         FillIntake(nav, true);
         FillIntake(import, false);
@@ -74,35 +85,41 @@ public sealed class ReceivingPageView : UserControl
     }
     private void FillIntake(StackPanel panel, bool nav)
     {
-        panel.SetBinding(VisibilityProperty, new Binding(nav ? "IsNav" : "IsImport") { Converter = new BooleanToVisibilityConverter() });
-        panel.Children.Add(Bound(Text("", 22, true), "IntakeTitle"));
+        if(!nav)panel.SetBinding(VisibilityProperty, new Binding("IsImport") { Converter = new BooleanToVisibilityConverter() });
+        if(!nav)panel.Children.Add(Bound(Text("", 22, true), "IntakeTitle"));
         panel.Children.Add(Bound(Muted(""), "IntakeHelp"));
         if(nav)
         {
             var dates=new WrapPanel{Margin=new(0,0,0,12)};dates.Children.Add(Text("Kezdő nap",14,false));var from=new DatePicker{Width=160,Margin=new(10,0,18,0)};from.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavFrom"){Mode=BindingMode.TwoWay});from.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(from);dates.Children.Add(Text("Záró nap",14,false));var to=new DatePicker{Width=160,Margin=new(10,0,18,0)};to.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavTo"){Mode=BindingMode.TwoWay});to.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(to);dates.Children.Add(Primary("Bejövő számlák lekérése","FetchNavCommand"));panel.Children.Add(dates);
-            var invoices=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=220,MaxHeight=400,Margin=new(0,0,0,12)};invoices.SetBinding(ItemsControl.ItemsSourceProperty,"NavInvoices");invoices.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedNavInvoice"){Mode=BindingMode.TwoWay});invoices.SetBinding(IsEnabledProperty,"IsNotBusy");foreach(var (title,path) in new[]{("Kelt","IssuedOn"),("Számlaszám","Number"),("Szállító","SupplierName"),("Adószám","SupplierTaxNumber"),("Nettó","Net"),("Pénznem","Currency"),("Művelet","Operation")})invoices.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="SupplierName"?220:path=="Number"?150:path=="Currency"?80:110,Width=path=="SupplierName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path=="Number"?160:path=="Currency"?80:120)});panel.Children.Add(invoices);
+            var invoices=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=180,MaxHeight=250,Margin=new(0,0,0,12)};invoices.SetBinding(ItemsControl.ItemsSourceProperty,"NavInvoices");invoices.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedNavInvoice"){Mode=BindingMode.TwoWay});invoices.SetBinding(IsEnabledProperty,"IsNotBusy");foreach(var (title,path) in new[]{("Kelt","IssuedOn"),("Számlaszám","Number"),("Szállító","SupplierName"),("Adószám","SupplierTaxNumber"),("Nettó","Net"),("Pénznem","Currency"),("Művelet","Operation")})invoices.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="SupplierName"?220:path=="Number"?150:path=="Currency"?80:110,Width=path=="SupplierName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path=="Number"?160:path=="Currency"?80:120)});panel.Children.Add(invoices);
             var pages=new WrapPanel();pages.Children.Add(Button("Előző oldal","PreviousNavCommand"));pages.Children.Add(Button("Következő oldal","NextNavCommand"));pages.Children.Add(Bound(Muted(""),"NavPageLabel"));panel.Children.Add(pages);
         }
         panel.Children.Add(Text("Szállító", 14, true));
-        panel.Children.Add(Suppliers());
-        panel.Children.Add(Button("Új szállító a partnertörzsbe", "NewSupplierCommand"));
+        panel.Children.Add(Suppliers(nav ? "SelectedNavSupplier" : "SelectedSupplier"));
+        panel.Children.Add(Button("Új szállító a partnertörzsbe", nav ? "NewNavSupplierCommand" : "NewSupplierCommand"));
         if(nav)
         {
             panel.Children.Add(Primary("Kijelölt NAV-számla tételeinek betöltése","DownloadNavCommand"));
             panel.Children.Add(new Expander{Header="Korábban letöltött NAV XML betöltése",Content=Button("NAV XML megnyitása","PickFileCommand"),Margin=new(0,12,0,12)});
-            panel.Children.Add(Button("Vissza a listához","BackCommand"));panel.Children.Add(Bound(Muted(""),"Message"));return;
+            panel.Children.Add(Bound(Muted(""),"Message"));return;
         }
         panel.Children.Add(Labeled("Számlaszám (XML-ből kitölthető)", "Number"));
         panel.Children.Add(Labeled("Kelt (éééé-hh-nn, üresen a fájl vagy a mai nap)", "IssuedOn"));
         panel.Children.Add(Primary(nav ? "NAV-számla XML megnyitása" : "Fájl kiválasztása és beolvasás", "PickFileCommand"));
-        panel.Children.Add(Button("Vissza a listához", "BackCommand"));
+        panel.Children.Add(Button("Import bezárása", "BackCommand"));
         panel.Children.Add(Bound(Muted(""), "Message"));
     }
     private UIElement Editor()
     {
         var panel = new StackPanel();
         panel.SetBinding(VisibilityProperty, new Binding("IsEditor") { Converter = new BooleanToVisibilityConverter() });
+        panel.Children.Add(new Separator{Margin=new(0,20,0,16)});
         panel.Children.Add(Bound(Text("", 22, true), "EditorTitle"));
+        var pdf=new StackPanel();pdf.SetBinding(VisibilityProperty,new Binding("HasPdfPreview"){Converter=new BooleanToVisibilityConverter()});
+        pdf.Children.Add(Bound(Text("",14,true),"PdfName"));
+        pdf.Children.Add(Muted("PDF-ből kiolvasott szöveg – a számlaadatokat és tételeket ellenőrizve töltsd ki. Az eredeti PDF-et őrizd meg külön."));
+        var preview=new TextBox{IsReadOnly=true,TextWrapping=TextWrapping.Wrap,AcceptsReturn=true,MinHeight=140,MaxHeight=280,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new(0,0,0,16)};
+        preview.SetBinding(TextBox.TextProperty,new Binding("PdfText"){Mode=BindingMode.OneWay});pdf.Children.Add(preview);panel.Children.Add(pdf);
         panel.Children.Add(Muted("A szállítási díj és a hasonló sor szolgáltatás: termék nélkül is bevételezhető. Készletes sornál válassz terméket, vagy vegyél fel újat."));
         panel.Children.Add(Text("Szállító", 14, true));
         panel.Children.Add(Suppliers());
@@ -129,9 +146,29 @@ public sealed class ReceivingPageView : UserControl
         actions.Children.Add(Button("Bevételezés visszafordítása", "ReverseReceiptCommand"));
         actions.Children.Add(Classify("Költség", "ExpenseCommand"));
         actions.Children.Add(Classify("Függőben", "PendingCommand"));
-        actions.Children.Add(Button("Vissza", "BackCommand"));
+        actions.Children.Add(Button("Szerkesztő bezárása", "BackCommand"));
         panel.Children.Add(actions);
         panel.Children.Add(Bound(Muted(""), "Message"));
+        return panel;
+    }
+    private UIElement Outgoing()
+    {
+        var panel=new StackPanel();panel.SetBinding(VisibilityProperty,new Binding("IsOutgoing"){Converter=new BooleanToVisibilityConverter()});
+        panel.Children.Add(Text("Kimenő számlák",22,true));
+        panel.Children.Add(Muted("A kiválasztott céged által kiállított, NAV-nál nyilvántartott számlák. A helyi eladási bizonylatok az Eladás menüben találhatók. Itt nem történik új számlakiállítás vagy készletmozgás."));
+        var dates=new WrapPanel();dates.Children.Add(Text("Időszak",14,false));
+        foreach(var path in new[]{"OutgoingFrom","OutgoingTo"})
+        {
+            var date=new DatePicker{Width=160,Margin=new(10,0,10,12)};date.SetBinding(DatePicker.SelectedDateProperty,new Binding(path){Mode=BindingMode.TwoWay});date.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(date);
+        }
+        dates.Children.Add(Primary("Kimenő számlák lekérése","FetchOutgoingCommand"));panel.Children.Add(dates);
+        panel.Children.Add(Bound(Muted(""),"OutgoingMessage"));
+        var grid=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=280,MaxHeight=560,HeadersVisibility=DataGridHeadersVisibility.Column};
+        grid.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingInvoices");
+        foreach(var (title,path) in new[]{("Kelt","IssuedOn"),("Számlaszám","Number"),("Vevő","CustomerName"),("Adószám","CustomerTaxNumber"),("Nettó","Net"),("Pénznem","Currency"),("Művelet","Operation")})
+            grid.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="CustomerName"?220:100,Width=path=="CustomerName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path=="Number"?160:120)});
+        panel.Children.Add(grid);
+        var pages=new WrapPanel{Margin=new(0,12,0,0)};pages.Children.Add(Button("Előző oldal","PreviousOutgoingCommand"));pages.Children.Add(Button("Következő oldal","NextOutgoingCommand"));pages.Children.Add(Bound(Muted(""),"OutgoingPageLabel"));panel.Children.Add(pages);
         return panel;
     }
     private void Hook()
@@ -168,12 +205,12 @@ public sealed class ReceivingPageView : UserControl
         button.SetBinding(VisibilityProperty, new Binding("CanClassify") { Converter = new BooleanToVisibilityConverter() });
         return button;
     }
-    private static ComboBox Suppliers()
+    private static ComboBox Suppliers(string selection="SelectedSupplier")
     {
         var combo = new ComboBox { MinHeight = 36, Margin = new(0, 0, 0, 10), DisplayMemberPath = "Label" };
         combo.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Suppliers"));
-        combo.SetBinding(ComboBox.SelectedItemProperty, new Binding("SelectedSupplier"));
-        combo.SetBinding(IsEnabledProperty, new Binding("CanPickSupplier"));
+        combo.SetBinding(ComboBox.SelectedItemProperty, new Binding(selection));
+        combo.SetBinding(IsEnabledProperty, new Binding(selection=="SelectedNavSupplier"?"IsNotBusy":"CanPickSupplier"));
         return combo;
     }
     private static UIElement Labeled(string label, string path)
@@ -214,13 +251,24 @@ public sealed class ReceivingPageView : UserControl
         button.SetBinding(IsEnabledProperty, new Binding("IsNotBusy"));
         return button;
     }
+    private static Button Tab(string title,string command,string selected)
+    {
+        var button=Button(title,command);
+        button.SetBinding(StyleProperty,new Binding(selected){Converter=new InvoiceTabStyle()});
+        return button;
+    }
+    private sealed class InvoiceTabStyle:IValueConverter
+    {
+        public object Convert(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>Application.Current.FindResource(value is true ? "PrimaryButton" : typeof(Button));
+        public object ConvertBack(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>throw new NotSupportedException();
+    }
     private static Button Primary(string content, string command)
     {
         var button = Button(content, command);
         button.SetResourceReference(StyleProperty, "PrimaryButton");
         return button;
     }
-    private static IValueConverter OrHome() => new BooleanToVisibilityConverter();
+
 
     private sealed class LineCard : Border
     {

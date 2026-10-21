@@ -48,6 +48,10 @@ try {
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & $dotnetPath publish '.\tools\PcImpressz.Maintenance\PcImpressz.Maintenance.csproj' `
                 --configuration Release --no-restore -p:PcImpresszIntermediate=codex --no-self-contained --output '.\artifacts\desktop\maintenance' --nologo
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $noticesOutput = Join-Path $projectRoot 'artifacts\desktop\third-party'
+            New-Item -ItemType Directory -Path $noticesOutput -Force | Out-Null
+            Get-ChildItem -LiteralPath (Join-Path $projectRoot 'docs\third-party') | Copy-Item -Destination $noticesOutput -Recurse -Force
         }
         'Status' {
             & $dotnetPath '.\src\PcImpressz.ApplicationHost\bin\Release\net10.0\PcImpressz.ApplicationHost.dll' `

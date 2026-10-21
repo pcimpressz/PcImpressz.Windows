@@ -70,7 +70,7 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var supplier = Supplier(index, draft.SupplierId, null)
             ?? throw new ArgumentException("A szállító nem található az aktív beszállítók között. Vedd fel a partnertörzsben, vagy hozd létre innen.");
         var data = Compose(draft.Number, supplier, draft.IssuedOn, draft.DueOn, draft.Notes, draft.Warehouse,
-            existing?.Data.Source ?? "manual", existing?.Data.Status ?? "uj", existing?.Data.ReceivedAt,
+            existing?.Data.Source ?? (draft.Source is null or "manual" or "pdf" ? draft.Source ?? "manual" : throw new ArgumentException("Ismeretlen kézi forrás.")), existing?.Data.Status ?? "uj", existing?.Data.ReceivedAt,
             ReceivingMatching.Build(draft.Lines ?? throw new ArgumentException("Hiányzó tételek."), index.Products));
         data = data with { SourceNet=existing?.Data.SourceNet, SourceVat=existing?.Data.SourceVat, SourceGross=existing?.Data.SourceGross };
         RejectDuplicate(state, existing?.Id, data);

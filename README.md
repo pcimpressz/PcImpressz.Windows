@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.14
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.15
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -159,3 +159,9 @@ Egy keresősor, automatikus név/cikkszám/vonalkód találatok, kattintásra va
 ## NAV bejövő számlák – 0.4.14
 
 A Bevételezés oldalról dátum szerint lekérhetők a NAV bejövő számlái, majd a kiválasztott számla betölthető a termékegyeztetéshez. A készlet csak a bevételezés véglegesítésekor változik. Részletek: [NAV-számlalekérés](docs/NAV-SZAMLALEKERES.md).
+
+## Számlák – 0.4.15
+
+A korábbi Bevételezés menü neve **Számlák**. A **Bejövő számlák** oldalon a lista, a lenyitható NAV-lekérés és a számlaszerkesztő egy munkafelületen marad. Innen indítható kézi bevételezés, PDF alapján történő ellenőrzött rögzítés és Excel/CSV/XML import. A **Kimenő számlák** nézet a kiválasztott cég saját, NAV-nál nyilvántartott kiállított számláit listázza. A helyi eladási bizonylatok nem minősülnek adóügyi számlának, továbbra is az Eladás menüben találhatók.
+
+A PDF szövege beolvasható, de általános automatikus tételfelismerés és OCR még nincs: az adatokat ellenőrizve kell kitölteni. Az eredeti PDF-et külön kell megőrizni. Használat és korlátok: [Számlák munkafelület](docs/SZAMLAK-MUNKAFELULET.md).

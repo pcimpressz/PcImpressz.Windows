@@ -7,7 +7,7 @@ using System.Xml.Linq;
 namespace PcImpressz.Modules.Receiving;
 public sealed record NavInvoiceQuery(Guid CompanyId,string From,string To,int Page=1);
 public sealed record NavInvoiceImport(Guid CompanyId,string Number,string SupplierTaxNumber,Guid? SupplierId=null,int? BatchIndex=null);
-public sealed record NavInvoiceDigest(string Number,string SupplierName,string SupplierTaxNumber,string IssuedOn,string Currency,string Operation,decimal? Net,int? BatchIndex=null);
+public sealed record NavInvoiceDigest(string Number,string SupplierName,string SupplierTaxNumber,string IssuedOn,string Currency,string Operation,decimal? Net,int? BatchIndex=null,string CustomerName="",string CustomerTaxNumber="");
 public sealed record NavInvoicePage(int CurrentPage,int AvailablePage,NavInvoiceDigest[] Rows);
 public static class NavInvoiceClient
 {
@@ -17,12 +17,14 @@ public static class NavInvoiceClient
     {
         if(!DateOnly.TryParseExact(query.From,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var from)||!DateOnly.TryParseExact(query.To,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var to)||from>to||to.DayNumber-from.DayNumber>34||query.Page is <1 or >10000)throw new ArgumentException("Válassz legfeljebb 35 napos időszakot és érvényes oldalt.");
     }
-    public static async Task<NavInvoicePage> ListAsync(NavConnectionSecrets secrets,NavInvoiceQuery query,CancellationToken ct,HttpClient? client=null)
+    public static async Task<NavInvoicePage> ListAsync(NavConnectionSecrets secrets,NavInvoiceQuery query,CancellationToken ct,HttpClient? client=null,string direction="INBOUND")
     {
-        Validate(query);var xml=await Request(secrets,"queryInvoiceDigest",new[]{new XElement(Api+"page",query.Page),new XElement(Api+"invoiceDirection","INBOUND"),new XElement(Api+"invoiceQueryParams",new XElement(Api+"mandatoryQueryParams",new XElement(Api+"invoiceIssueDate",new XElement(Api+"dateFrom",query.From),new XElement(Api+"dateTo",query.To))))},ct,client);
+        if(direction is not ("INBOUND" or "OUTBOUND"))throw new ArgumentException("Érvénytelen számlairány.");
+        Validate(query);var xml=await Request(secrets,"queryInvoiceDigest",new[]{new XElement(Api+"page",query.Page),new XElement(Api+"invoiceDirection",direction),new XElement(Api+"invoiceQueryParams",new XElement(Api+"mandatoryQueryParams",new XElement(Api+"invoiceIssueDate",new XElement(Api+"dateFrom",query.From),new XElement(Api+"dateTo",query.To))))},ct,client);
         int Page(string name){if(!int.TryParse(Value(xml,name),out var value)||value is <0 or >10000)throw new ArgumentException("Hibás NAV-lapozási adat.");return value;}
         var current=Page("currentPage");var available=Page("availablePage");if(current!=query.Page||available>0&&available<current)throw new ArgumentException("Eltérő NAV-válaszoldal.");
-        var rows=xml.Descendants(Api+"invoiceDigest").Select(d=>new NavInvoiceDigest(Required(d,"invoiceNumber"),Value(d,"supplierName"),NavTaxpayerClient.TaxNumber(Required(d,"supplierTaxNumber")),Required(d,"invoiceIssueDate"),Value(d,"currency"),Value(d,"invoiceOperation"),decimal.TryParse(Value(d,"invoiceNetAmount"),NumberStyles.Number,CultureInfo.InvariantCulture,out var net)?net:null,int.TryParse(Value(d,"batchIndex"),out var batch)?batch:null)).ToArray();
+        var rows=xml.Descendants(Api+"invoiceDigest").Select(d=>new NavInvoiceDigest(Required(d,"invoiceNumber"),Value(d,"supplierName"),NavTaxpayerClient.TaxNumber(Required(d,"supplierTaxNumber")),Required(d,"invoiceIssueDate"),Value(d,"currency"),Value(d,"invoiceOperation"),decimal.TryParse(Value(d,"invoiceNetAmount"),NumberStyles.Number,CultureInfo.InvariantCulture,out var net)?net:null,int.TryParse(Value(d,"batchIndex"),out var batch)?batch:null,Value(d,"customerName"),Value(d,"customerTaxNumber"))).ToArray();
+        if(direction=="OUTBOUND"&&rows.Any(r=>r.SupplierTaxNumber!=NavTaxpayerClient.TaxNumber(secrets.TaxNumber)))throw new ArgumentException("A kimenő számla kibocsátója nem a kiválasztott cég.");
         if(rows.Length>100)throw new ArgumentException("Túl sok számla egy NAV-válaszoldalon.");return new(current,available,rows);
     }
     public static async Task<ImportedDocument> DownloadAsync(NavConnectionSecrets secrets,NavInvoiceImport input,CancellationToken ct,HttpClient? client=null)

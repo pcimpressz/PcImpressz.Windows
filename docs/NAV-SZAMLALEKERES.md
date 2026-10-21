@@ -1,3 +1,5 @@
+A 0.4.15-től a menü neve **Számlák → Bejövő számlák**; a NAV-lekérés ugyanazon az oldalon, lenyitható panelben jelenik meg. [Aktuális munkafelület](SZAMLAK-MUNKAFELULET.md).
+
 # NAV bejövő számlák – 0.4.14
 
 A korábbi raktárkezelő alapfolyamatát követi: számlalista, kiválasztás, tétel- és termékegyeztetés, majd bevételezés / költség / függő besorolás. A korábbi rendszer minden automatizmusának átvétele még nem történt meg.

@@ -26,6 +26,16 @@ public sealed class ReceivingModule : IModule
             var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
             return ReceivingJson.Element(await NavInvoiceClient.ListAsync(secret,query,ct));
         });
+        Register(context,"nav-outgoing-list","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
+        {
+            var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
+            return ReceivingJson.Element(await NavInvoiceClient.ListAsync(secret,query,ct,direction:"OUTBOUND"));
+        });
+        Register(context,"pdf-preview","receiving.read",CommandAccess.Licensed,(input,_,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(ReceivingJson.Element(new{text=InvoicePdf.ReadText(input.GetProperty("contentBase64").GetString())}));
+        });
         Register(context,"nav-import","receiving.write",CommandAccess.Licensed,async(input,actor,ct)=>
         {
             var query=ReceivingJson.Read<NavInvoiceImport>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
@@ -94,8 +104,8 @@ public sealed class ReceivingModule : IModule
         });
         Register(context, "archive", "receiving.write", CommandAccess.Licensed, (_, _, _) =>
             Task.FromException<JsonElement>(new ArgumentException("A számlát nem archiváljuk. A besorolás dönti el, hogy bevételezés, költség vagy függő.")));
-        context.RegisterPage(new("receiving", context.ModuleId, "Bevételezés",
-            "Kézi számla, NAV-besorolás vagy Excel/CSV/XML import. A szállító a partnertörzsből, a termék a terméktörzsből jön.",
+        context.RegisterPage(new("receiving", context.ModuleId, "Számlák",
+            "Bejövő és kimenő számlák. NAV-lekérés, kézi bevételezés és PDF alapján történő rögzítés.",
             "\uE7BF",
             [new("number", "Számlaszám", Required: true), new("supplierName", "Szállító", Required: true),
              new("issuedOn", "Kelt"), new("notes", "Megjegyzés", "multiline")],

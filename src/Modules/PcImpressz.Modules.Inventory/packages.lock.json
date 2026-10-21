@@ -5,7 +5,7 @@
       "pcimpressz.business": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.14, )"
+          "PcImpressz.Contracts": "[0.4.15, )"
         }
       },
       "pcimpressz.contracts": {

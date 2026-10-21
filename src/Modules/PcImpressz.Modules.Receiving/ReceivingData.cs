@@ -53,7 +53,7 @@ public sealed record ReceiptState(int SchemaVersion, long Revision, ReceiptRecor
 public sealed record ReceiptLineDraft(Guid? Id, Guid? ProductId, string? Name, string? Sku, string? Barcode,
     string? UnitCode, decimal Quantity, decimal NetUnitPrice, decimal VatRate, bool IsService = false);
 public sealed record ReceiptDraft(string? Number, Guid SupplierId, string? IssuedOn, string? DueOn, string? Notes,
-    string? Warehouse, ReceiptLineDraft[]? Lines);
+    string? Warehouse, ReceiptLineDraft[]? Lines, string? Source = null);
 public sealed record ReceiptSave(Guid CompanyId, Guid? Id, long Version, ReceiptDraft? Draft);
 public sealed record ReceiptQuery(Guid CompanyId, string Search = "", string Filter = "uj", int Page = 0, int PageSize = 50,
     string Sort = "", bool Descending = false);

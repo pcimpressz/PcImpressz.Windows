@@ -279,3 +279,7 @@ Eladás pénztári újratervezése: egysoros élő keresés, vonalkód automatik
 
 ## 2026-10-21 – 0.4.14 NAV bejövő számlák
 Dátumszűrt, lapozható NAV-számlalista és kiválasztott számla biztonságos letöltése; szállítóegyeztetés, meglévő termékegyeztetés és besorolás. Ismételt import készletduplázás nélkül. Hálózati művelet után ismételt jogosultság- és licencellenőrzés. 177/177 üzleti és 57/57 UI ellenőrzés sikeres. Élő céges NAV-próba még nem történt. Korlátok és használat: docs/NAV-SZAMLALEKERES.md.
+
+## 2026-10-21 – 0.4.15 Számlák munkafelület
+
+A Bevételezés menü Számlákra változott, bejövő és kimenő nézettel. A NAV-lekérés oldalon belüli lenyitható panel; a lista és szerkesztő megmarad. A NAV-panel szállítóválasztása külön állapot, nem írja át a megnyitott számlát. Kimenő saját számlák NAV OUTBOUND listával és kibocsátóellenőrzéssel. PDF-szöveg beolvasása ellenőrzött kézi rögzítéshez; automatikus tételfelismerés/OCR és PDF-archiválás nincs. A PDF-függőségek aláírt modulcsomagba kerülnek. 180 üzleti és 63 felületi teszt sikeres; valódi modul/IPC PDF-próba is futott. Élő céges NAV-próba nem történt. Részletek: docs/SZAMLAK-MUNKAFELULET.md.

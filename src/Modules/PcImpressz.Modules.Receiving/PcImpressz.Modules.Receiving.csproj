@@ -1,3 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies></PropertyGroup>
   <ItemGroup><ProjectReference Include="../../PcImpressz.Contracts/PcImpressz.Contracts.csproj" /><ProjectReference Include="../../PcImpressz.Business/PcImpressz.Business.csproj" /><ProjectReference Include="../PcImpressz.Modules.Partners/PcImpressz.Modules.Partners.csproj" /><ProjectReference Include="../PcImpressz.Modules.Catalog/PcImpressz.Modules.Catalog.csproj" /><ProjectReference Include="../PcImpressz.Modules.Sales/PcImpressz.Modules.Sales.csproj" /></ItemGroup>
+  <ItemGroup><PackageReference Include="PdfPig" Version="0.1.16" /></ItemGroup>
 </Project>

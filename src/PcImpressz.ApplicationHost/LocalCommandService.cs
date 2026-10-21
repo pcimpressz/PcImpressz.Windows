@@ -154,7 +154,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 }
                 var result = await commands.ExecuteAsync(new(command.ModuleId, command.Command,
                     JsonSerializer.SerializeToElement(payload)), caller, ct);
-                if(command.ModuleId=="receiving"&&command.Command is "nav-import" or "nav-list")
+                if(command.ModuleId=="receiving"&&command.Command is "nav-import" or "nav-list" or "nav-outgoing-list")
                 {
                     var current=Session(command.CompanyId);
                     if(command.Command=="nav-import")

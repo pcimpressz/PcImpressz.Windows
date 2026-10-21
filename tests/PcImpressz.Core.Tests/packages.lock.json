@@ -20,6 +20,11 @@
           "SQLitePCLRaw.core": "2.1.13"
         }
       },
+      "PdfPig": {
+        "type": "Transitive",
+        "resolved": "0.1.16",
+        "contentHash": "qQcbsNMYVY+K5ELptax2S8thNMk0+rSQq3H/KdYj3LLcko8yTCz8y5KIvsKxIyAuTN0ZYNnfsZkM+0EvxTwHVA=="
+      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Transitive",
         "resolved": "2.1.13",
@@ -50,7 +55,7 @@
       "pcimpressz.business": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.14, )"
+          "PcImpressz.Contracts": "[0.4.15, )"
         }
       },
       "pcimpressz.contracts": {
@@ -60,50 +65,51 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.13, )",
-          "PcImpressz.Contracts": "[0.4.14, )"
+          "PcImpressz.Contracts": "[0.4.15, )"
         }
       },
       "pcimpressz.modules.catalog": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.14, )"
+          "PcImpressz.Contracts": "[0.4.15, )"
         }
       },
       "pcimpressz.modules.inventory": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.14, )",
-          "PcImpressz.Contracts": "[0.4.14, )"
+          "PcImpressz.Business": "[0.4.15, )",
+          "PcImpressz.Contracts": "[0.4.15, )"
         }
       },
       "pcimpressz.modules.partners": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.14, )"
+          "PcImpressz.Contracts": "[0.4.15, )"
         }
       },
       "pcimpressz.modules.receiving": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.14, )",
-          "PcImpressz.Contracts": "[0.4.14, )",
-          "PcImpressz.Modules.Catalog": "[0.4.14, )",
-          "PcImpressz.Modules.Partners": "[0.4.14, )",
-          "PcImpressz.Modules.Sales": "[0.4.14, )"
+          "PcImpressz.Business": "[0.4.15, )",
+          "PcImpressz.Contracts": "[0.4.15, )",
+          "PcImpressz.Modules.Catalog": "[0.4.15, )",
+          "PcImpressz.Modules.Partners": "[0.4.15, )",
+          "PcImpressz.Modules.Sales": "[0.4.15, )",
+          "PdfPig": "[0.1.16, )"
         }
       },
       "pcimpressz.modules.sales": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Business": "[0.4.14, )",
-          "PcImpressz.Contracts": "[0.4.14, )",
-          "PcImpressz.Modules.Partners": "[0.4.14, )"
+          "PcImpressz.Business": "[0.4.15, )",
+          "PcImpressz.Contracts": "[0.4.15, )",
+          "PcImpressz.Modules.Partners": "[0.4.15, )"
         }
       },
       "pcimpressz.shell.customization": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.14, )"
+          "PcImpressz.Contracts": "[0.4.15, )"
         }
       }
     }

@@ -19,14 +19,16 @@ internal static class WorkflowUiChecks
         var view=new ReceivingPageView{DataContext=page,Width=1100};
         Snapshot(view,output,"receiving-home-"+skin,1100,1000);
         var labels=Descendants(view).OfType<Button>().Select(b=>b.Content?.ToString()??"").ToArray();
-        if(!labels.Contains("NAV-számlák lekérése")||labels.Any(s=>s.Contains("PDF")||s=="Lekérés a NAV-tól"))throw new InvalidOperationException("Nem támogatott importot ígér a felület.");
-        Set(page,"_mode","nav");typeof(ReceivingPageViewModel).GetMethod("NotifyMode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(page,null);page.NavInvoices.Add(new("NAV-MINTA-001","Minta nagyker","11111111","2026-10-21","HUF","CREATE","20 000",null));Snapshot(view,output,"nav-invoices-"+skin,1100,1100);if(Descendants(view).OfType<DatePicker>().Count()<2)throw new InvalidOperationException("Hiányzik a NAV-időszakválasztó.");
+        if(!labels.Contains("NAV-számlák lekérése")||!labels.Contains("PDF alapján rögzítés")||!labels.Contains("Kimenő számlák"))throw new InvalidOperationException("Nem támogatott importot ígér a felület.");
+        page.IsNav=true;typeof(ReceivingPageViewModel).GetMethod("NotifyMode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(page,null);page.NavInvoices.Add(new("NAV-MINTA-001","Minta nagyker","11111111","2026-10-21","HUF","CREATE","20 000",null));Snapshot(view,output,"nav-invoices-"+skin,1100,1100);if(Descendants(view).OfType<DatePicker>().Count()<2)throw new InvalidOperationException("Hiányzik a NAV-időszakválasztó.");
+        page.OutgoingCommand.Execute(null);page.OutgoingInvoices.Add(new("SAJAT-001","Minta vevő","22222222","2026-10-21","HUF","CREATE","10 000"));Snapshot(view,output,"outgoing-invoices-"+skin,1100,900);page.IncomingCommand.Execute(null);page.IsNav=false;
         Set(page,"_mode","editor");Set(page,"_editId",Guid.NewGuid());Set(page,"_version",2L);Set(page,"_status","bevetelezve");
         page.Number="BE-2026-001";page.IssuedOn="2026-10-21";
         page.Suppliers.Add(new(Guid.NewGuid(),"Teszt nagyker","12345678-2-42"));page.SelectedSupplier=page.Suppliers[0];
         var line=new LineEditor(page);line.FillQuiet(()=>{line.Name="Vezeték nélküli egér";line.Sku="MOUSE-1";line.UnitCode="DB";line.QuantityText="10";line.PriceText="12345,67";line.VatText="27";});page.Lines.Add(line);
         typeof(ReceivingPageViewModel).GetMethod("NotifyMode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(page,null);
         Snapshot(view,output,"receiving-editor-"+skin,1100,1800);
+        page.ApplyPdfPreview("Minta-szamla.pdf","Számlaszám: PDF-001\nUSB egér, 2 db, nettó 10 000 Ft, áfa 27%\nA tételeket ellenőrizve kell kitölteni.");Snapshot(view,output,"pdf-invoice-"+skin,1100,1800);
         if(page.IsEditable)throw new InvalidOperationException("Lezárt bevételezés szerkeszthető.");
         var saleDef=definition with{Id="sales",ModuleId="sales",ViewKind="sales"};
         var sale=new OperationsPageViewModel(saleDef,new HostConnection(output,null),()=>null,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"basket-check")));
