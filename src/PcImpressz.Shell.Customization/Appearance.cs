@@ -22,6 +22,7 @@ public static class BuiltInSkins
 
 public sealed record AppearancePreferences
 {
+    public bool FormatPartnerNames {get;init;}=true;
     public int MoneyDecimals { get; init; } = 0;
     public int SchemaVersion { get; init; } = 1;
     public string SkinId { get; init; } = "midnight";

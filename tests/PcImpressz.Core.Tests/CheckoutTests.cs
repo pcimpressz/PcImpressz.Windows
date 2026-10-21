@@ -35,6 +35,15 @@ internal static class CheckoutTests
             var previous=await f.Execute("list",new{date="2026-10-20"});Check.True(!previous.GetProperty("rows").EnumerateArray().Any(r=>r.GetProperty("id").GetGuid()==sale.Id));
             var export=await f.Execute("export",new{date="2026-10-20"});Check.True(!export.GetProperty("csv").GetString()!.Contains(sale.Number));
         });
+        yield return ("NAV short name preferred with full name fallback",()=>
+        {
+            var response=Response("test","true");var company=Guid.NewGuid();
+            Check.Equal("NAV Teszt Kft.",NavTaxpayerClient.Parse(response,company,"11111111","test").Name);
+            var shortResponse=response.Replace("</taxpayerName>","</taxpayerName><taxpayerShortName>PC-IMPRESSZ KFT.</taxpayerShortName>");
+            Check.Equal("PC-IMPRESSZ KFT.",NavTaxpayerClient.Parse(shortResponse,company,"11111111","test").Name);
+            Check.Equal("NAV Teszt Kft.",NavTaxpayerClient.Parse(response.Replace("</taxpayerName>","</taxpayerName><taxpayerShortName> </taxpayerShortName>"),company,"11111111","test").Name);
+            return Task.CompletedTask;
+        });
         yield return ("cash rounding boundaries and card exact amount",()=>
         {
             foreach(var item in new (decimal Input,decimal Expected)[]{(0,0),(1,0),(2.49m,0),(2.5m,5),(4.99m,5),(5,5),(7.49m,5),(7.5m,10),(9.99m,10),(127,125),(128,130)})

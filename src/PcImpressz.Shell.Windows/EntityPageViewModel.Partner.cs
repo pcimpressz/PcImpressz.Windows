@@ -18,7 +18,7 @@ public sealed partial class EntityPageViewModel
             var result=await _connection.SendAsync("partners.taxpayer",new TaxpayerLookup(company,tax),_shutdown);
             if(_company()!=company||_editId is not null)return;
             foreach(var field in Fields.Where(f=>new[]{"name","taxId","country","postalCode","city","address"}.Contains(f.Definition.Id)))
-                if(result.TryGetProperty(field.Definition.Id,out var value))field.Text=value.GetString()??"";
+                if(result.TryGetProperty(field.Definition.Id,out var value))field.Text=field.Definition.Id is "name" or "city" or "address"?PartnerNameFormatting.Format(value.GetString()??""):value.GetString()??"";
             Message="NAV-adatok betöltve az adatlapra. Ellenőrizd, majd a Mentés gombbal rögzítsd a partnert.";
         }
         catch(Exception ex) when(ex is not OutOfMemoryException){Message=ex.Message;}

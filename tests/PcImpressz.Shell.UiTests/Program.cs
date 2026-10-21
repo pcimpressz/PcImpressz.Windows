@@ -91,7 +91,7 @@ internal static class Program
             }
             PresentationTraceSources.DataBindingSource.Flush();
             if(bindingErrors.ToString().Length>0)throw new InvalidOperationException(bindingErrors.ToString());
-            Console.WriteLine("45/45 WPF renders passed; no binding errors.");return 0;
+            Console.WriteLine("48/48 WPF renders passed; no binding errors.");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }

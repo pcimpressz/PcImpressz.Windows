@@ -81,7 +81,7 @@ public sealed class EntityPageView : UserControl
         var fields = new Grid(); fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new());
         fields.SetBinding(IsEnabledProperty, new Binding("CanWrite"));
         editor.Children.Add(fields);
-        var nav=ActionButton("NAV-adószámlekérdezés – név és székhely kitöltése","LookupPartnerNavCommand");nav.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});nav.SetBinding(IsEnabledProperty,new Binding("CanLookupPartnerNav"));editor.Children.Insert(1,nav);
+        var taxHost=new StackPanel();editor.Children.Insert(1,taxHost);
         var advancedFields=new Grid();advancedFields.ColumnDefinitions.Add(new());advancedFields.ColumnDefinitions.Add(new());advancedFields.SetBinding(IsEnabledProperty,new Binding("CanWrite"));
         var advanced=new Expander{Header="Bővített adatok kitöltése",Content=advancedFields,Margin=new(0,16,0,0),IsExpanded=false};advanced.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});editor.Children.Add(advanced);
         var save = new WrapPanel { Margin = new(0,20,0,0) };
@@ -101,8 +101,16 @@ public sealed class EntityPageView : UserControl
         grid.MouseDoubleClick += (_, args) => { if (ViewMode == "list" && DataContext is EntityPageViewModel page && args.OriginalSource is DependencyObject source && ItemsControl.ContainerFromElement(grid, source) is DataGridRow) page.RequestEditSelected(); };
         void RenderFields(EntityPageViewModel vm)
         {
+            taxHost.Children.Clear();
+            if(vm.IsPartnerMaster&&vm.Fields.FirstOrDefault(f=>f.Definition.Id=="taxId") is {} taxField)
+            {
+                taxHost.Children.Add(new TextBlock{Text=taxField.Label,Margin=new(0,0,0,7)});
+                var taxRow=new Grid{Margin=new(0,0,0,16)};taxRow.ColumnDefinitions.Add(new(){Width=new(1,GridUnitType.Star)});taxRow.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+                var taxInput=Input();taxInput.DataContext=taxField;taxInput.SetBinding(TextBox.TextProperty,new Binding("Text"){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged});taxInput.SetBinding(IsEnabledProperty,new Binding("CanWrite"){Source=vm});taxRow.Children.Add(taxInput);
+                var lookup=new Button{Content="Lekérés",ToolTip="Név és székhely lekérése a NAV-tól",MinWidth=90,Margin=new(10,0,0,0)};lookup.SetBinding(Button.CommandProperty,new Binding("LookupPartnerNavCommand"){Source=vm});lookup.SetBinding(IsEnabledProperty,new Binding("CanLookupPartnerNav"){Source=vm});Grid.SetColumn(lookup,1);taxRow.Children.Add(lookup);taxHost.Children.Add(taxRow);
+            }
             var basic=new HashSet<string>(StringComparer.Ordinal){"name","taxId","country","postalCode","city","address","email","phone","isCustomer","isSupplier","isActive","notes"};
-            RenderGroup(fields,vm.Fields.Where(f=>f.Visible&&(!vm.IsPartnerMaster||f.Definition.Required||basic.Contains(f.Definition.Id))));
+            RenderGroup(fields,vm.Fields.Where(f=>f.Visible&&(!vm.IsPartnerMaster||f.Definition.Id!="taxId")&&(!vm.IsPartnerMaster||f.Definition.Required||basic.Contains(f.Definition.Id))));
             RenderGroup(advancedFields,vm.Fields.Where(f=>f.Visible&&vm.IsPartnerMaster&&!f.Definition.Required&&!basic.Contains(f.Definition.Id)));
         }
         void RenderGroup(Grid target,IEnumerable<EntityFieldViewModel> group)

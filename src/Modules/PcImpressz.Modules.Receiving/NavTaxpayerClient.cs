@@ -53,7 +53,8 @@ public static class NavTaxpayerClient
         var tax=taxpayerId+"-"+vat+"-"+county;
         var items=data.Descendants(Api+"taxpayerAddressItem").ToArray();var address=(items.FirstOrDefault(e=>Value(e,"taxpayerAddressType")=="HQ")??items.FirstOrDefault())?.Element(Api+"taxpayerAddress")??throw new ArgumentException("A NAV-válaszban nincs székhelycím.");
         var street=string.Join(" ",new[]{"streetName","publicPlaceCategory","number","building","staircase","floor","door"}.Select(key=>Value(address,key)).Where(v=>v.Length>0));
-        var result=new CheckoutCustomerSave(company,Value(data,"taxpayerName"),tax,Value(address,"countryCode"),Value(address,"postalCode"),Value(address,"city"),street);
+        var name=Value(data,"taxpayerShortName");if(string.IsNullOrWhiteSpace(name))name=Value(data,"taxpayerName");
+        var result=new CheckoutCustomerSave(company,name,tax,Value(address,"countryCode"),Value(address,"postalCode"),Value(address,"city"),street);
         if(new[]{result.Name,result.Country,result.PostalCode,result.City,result.Address}.Any(string.IsNullOrWhiteSpace))throw new ArgumentException("A NAV-ból hiányos név vagy cím érkezett. Nem mentettünk vevőt.");
         return result;
     }
