@@ -1,0 +1,26 @@
+<Project>
+  <!--
+    A globból és a későbbi generálásból is kiesik minden olyan assembly-forrás,
+    amely nem az éppen használt köztes könyvtárban van. Így az obj\Debug, obj\Release
+    és obj\codex-build, illetve egy projekt alatti régi artifacts köztes mappa
+    nem kerül egymás fordításába. Az aktuális könyvtár attribútumait a SDK továbbra is legenerálja.
+  -->
+  <ItemGroup>
+    <Compile Remove="obj\**\*.AssemblyInfo.cs;obj\**\*AssemblyAttributes.cs;obj\**\*.GlobalUsings.g.cs" />
+    <Compile Remove="artifacts\**\*.AssemblyInfo.cs;artifacts\**\*AssemblyAttributes.cs;artifacts\**\*.GlobalUsings.g.cs" />
+  </ItemGroup>
+  <Target Name="DropForeignGeneratedSources" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_ActiveIntermediate>$([MSBuild]::NormalizeDirectory($(MSBuildProjectDirectory), $(IntermediateOutputPath)))</_ActiveIntermediate>
+      <_ProjectObj>$([MSBuild]::NormalizeDirectory($(MSBuildProjectDirectory), obj))</_ProjectObj>
+      <_ProjectArtifacts>$([MSBuild]::NormalizeDirectory($(MSBuildProjectDirectory), artifacts))</_ProjectArtifacts>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ForeignGenerated Include="@(Compile)"
+        Condition="$([System.String]::Copy('%(FullPath)').StartsWith('$(_ProjectObj)', StringComparison.OrdinalIgnoreCase)) And !$([System.String]::Copy('%(FullPath)').StartsWith('$(_ActiveIntermediate)', StringComparison.OrdinalIgnoreCase))" />
+      <_ForeignGenerated Include="@(Compile)"
+        Condition="$([System.String]::Copy('%(FullPath)').StartsWith('$(_ProjectArtifacts)', StringComparison.OrdinalIgnoreCase)) And ($([System.String]::Copy('%(Filename)').EndsWith('.AssemblyInfo')) Or $([System.String]::Copy('%(Filename)').EndsWith('AssemblyAttributes')) Or $([System.String]::Copy('%(Filename)').EndsWith('.GlobalUsings.g')))" />
+      <Compile Remove="@(_ForeignGenerated)" />
+    </ItemGroup>
+  </Target>
+</Project>

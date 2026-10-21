@@ -26,9 +26,9 @@ $env:NUGET_PACKAGES = Join-Path $projectRoot 'artifacts\packages'
 
 Push-Location $projectRoot
 try {
-    & $dotnetPath restore '.\PcImpressz.Windows.slnx' --configfile '.\NuGet.Config' --locked-mode -p:MSBuildProjectExtensionsPath=obj/codex/ --nologo
+    & $dotnetPath restore '.\PcImpressz.Windows.slnx' --configfile '.\NuGet.Config' --locked-mode -p:PcImpresszIntermediate=codex --nologo
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & $dotnetPath build '.\PcImpressz.Windows.slnx' --configuration Release --no-restore -p:MSBuildProjectExtensionsPath=obj/codex/ -p:IntermediateOutputPath=obj/codex-build/ --nologo
+    & $dotnetPath build '.\PcImpressz.Windows.slnx' --configuration Release --no-restore -p:PcImpresszIntermediate=codex --nologo
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     switch ($Action) {
         'Build' { exit 0 }
@@ -41,13 +41,13 @@ try {
         }
         'Publish' {
             & $dotnetPath publish '.\src\PcImpressz.Shell.Windows\PcImpressz.Shell.Windows.csproj' `
-                --configuration Release --no-restore -p:MSBuildProjectExtensionsPath=obj/codex/ -p:IntermediateOutputPath=obj/codex-build/ --no-self-contained --output '.\artifacts\desktop' --nologo
+                --configuration Release --no-restore -p:PcImpresszIntermediate=codex --no-self-contained --output '.\artifacts\desktop' --nologo
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & $dotnetPath publish '.\src\PcImpressz.ApplicationHost\PcImpressz.ApplicationHost.csproj' `
-                --configuration Release --no-restore -p:MSBuildProjectExtensionsPath=obj/codex/ -p:IntermediateOutputPath=obj/codex-build/ --no-self-contained --output '.\artifacts\desktop\host' --nologo
+                --configuration Release --no-restore -p:PcImpresszIntermediate=codex --no-self-contained --output '.\artifacts\desktop\host' --nologo
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & $dotnetPath publish '.\tools\PcImpressz.Maintenance\PcImpressz.Maintenance.csproj' `
-                --configuration Release --no-restore -p:MSBuildProjectExtensionsPath=obj/codex/ -p:IntermediateOutputPath=obj/codex-build/ --no-self-contained --output '.\artifacts\desktop\maintenance' --nologo
+                --configuration Release --no-restore -p:PcImpresszIntermediate=codex --no-self-contained --output '.\artifacts\desktop\maintenance' --nologo
         }
         'Status' {
             & $dotnetPath '.\src\PcImpressz.ApplicationHost\bin\Release\net10.0\PcImpressz.ApplicationHost.dll' `
