@@ -78,7 +78,8 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     public ObservableCollection<SaleBasketLine> Basket {get;}=[];
     public ObservableCollection<EntityRow> Rows {get;}=[];
     public ObservableCollection<EntityRow> Movements {get;}=[];
-    public EntityRow? SelectedRow {get;set;}
+    private EntityRow? _selectedRow;
+    public EntityRow? SelectedRow {get=>_selectedRow;set{_selectedRow=value;Changed();if(IsSales)_=LoadHistorySelectionAsync();}}
     public EntityRow? SelectedMovement {get;set;}
     public SaleBasketLine? SelectedBasketLine {get;set;}
     public string BasketTotal=>MoneyDisplay.Format(Basket.Sum(l=>l.Gross))+" Ft";
@@ -147,7 +148,7 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     }
     private async Task RefreshRows()
     {
-        var query=RecordSearch;var listed=await Send("list",new{search=query,recordSearch=query,productId=_focusedProductId});_appliedRecordSearch=query;_listing=listed.Clone();PopulateRows();
+        var query=RecordSearch;var listed=await Send("list",new{search=query,recordSearch=query,productId=_focusedProductId,date=HistoryDate?.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture)});_appliedHistoryDate=HistoryDate;_appliedRecordSearch=query;_listing=listed.Clone();PopulateRows();
         Movements.Clear();SelectedMovement=null;
         if(listed.TryGetProperty("movements",out var movements))foreach(var row in movements.EnumerateArray())Movements.Add(DisplayRow(row));
     }
@@ -274,7 +275,7 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
         if(IsBusy)return;
         var file=new SaveFileDialog{Filter="CSV (*.csv)|*.csv",FileName=IsInventory?"keszlet.csv":"eladasok.csv"};if(file.ShowDialog()!=true)return;
         IsBusy=true;
-        try{var response=await Send("export",new{productId=_focusedProductId,search=_appliedRecordSearch,recordSearch=_appliedRecordSearch});await AtomicExport.WriteAsync(file.FileName,Text(response,"csv"),_shutdown);Message="A lista exportálva.";}
+        try{var response=await Send("export",new{productId=_focusedProductId,search=_appliedRecordSearch,recordSearch=_appliedRecordSearch,date=_appliedHistoryDate?.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture)});await AtomicExport.WriteAsync(file.FileName,Text(response,"csv"),_shutdown);Message="A lista exportálva.";}
         catch(Exception ex){Message=ex.Message;}
         finally{IsBusy=false;}
     }

@@ -39,3 +39,12 @@ Készpénzzel a teljes HUF végösszeget a legközelebbi 5 Ft-ra kerekítjük: a
 A Beállítások / Pénzösszegek megjelenítése alatt 0–4 tizedesjegy választható (alap: 0). Helyi munkaállomás-beállítás, megmarad újraindítás után. A pénztári árak, összegek, eladási előzmények és bevételezési összesítők követik; a szerkesztéskor a pontos érték látszik, formázás nem írja át az árat. A kerekítési eltérést mindig két tizedessel mutatjuk, hogy a különbség pontosan ellenőrizhető legyen.
 
 A NAV-mentésnél jelentkező NotSupportedException oka a modulbetöltő natív könyvtártiltása volt, nem a NAV hitelesítése. Csak a Windows rendszermappából betöltött crypt32.dll és kernel32.dll kapott kivételt a DPAPI titkosításhoz. A titkok továbbra is titkosítva tárolódnak; teszteléshez szintetikus hozzáférések készültek. A valódi cég jelszavát/kulcsait nem olvastuk ki vagy módosítottuk. A mentés önmagában nem ellenőrzi a NAV-hozzáférés érvényességét.
+## 0.4.9 – eladási előzmények és részleges visszavét
+
+Az előzményekben az Eladás napja mező egy budapesti naptári napra szűr; Minden nap megszünteti a szűrést. A CSV-export ugyanazt a betöltött napot és keresést követi. A bizonylat kiválasztásakor külön Tételek gomb nélkül megjelenik a részletezés és a soronként még visszavehető mennyiség.
+
+Válassz tételt, majd Kijelölt tétel visszavétele a kosárba. Egy darab (tört mennyiségnél legfeljebb a maradék) negatív előjellel kerül a kosárba. A mennyiséget negatív számként átírhatod; az eredeti ár és áfa nem módosítható. Több eredeti sor is hozzáadható, egy kosárban egy bizonylatról. Eladás és visszavét külön művelet. A kosársor törölhető.
+
+A Visszavét véglegesítése után választhatsz készpénzes vagy kártyás visszatérítést. A negatív fizetendő a vevőnek visszajáró összeg, készpénznél 5 Ft-ra kerekítve. A készlet az eredeti raktárban nő. Külön VV bizonylat készül, az eredeti eladás megmarad; a korábban visszavett mennyiségnél többet a háttérszolgáltatás sem enged. Részletekben történő visszavét összesített nettója/áfája fillérre egyezik az eredeti sorral. Ez továbbra sem adóügyi helyesbítő számla vagy terminálos visszatérítés vezérlése.
+
+A régi teljes visszafordítás gomb helyét a tételes visszavét vette át. Részleges visszavét után a teljes reverse parancs tiltott, hogy ne kerülhessen kétszer vissza készletre ugyanaz az áru. Az eredeti, még érintetlen régi bizonylatok is visszavehetők. A negatív VV bizonylat újabb visszavétele nem engedett.

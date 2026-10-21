@@ -6,21 +6,22 @@ using PcImpressz.Business;
 using PcImpressz.Contracts;
 
 namespace PcImpressz.Modules.Sales;
-public sealed record SaleLineDraft(Guid ProductId,decimal Quantity,decimal NetUnitPrice,decimal VatRate);
-public sealed record SaleRequest(Guid CompanyId,Guid OperationId,Guid? CustomerId,string Warehouse,SaleLineDraft[] Lines,string PaymentMethod="cash",bool InvoiceRequested=false);
+public sealed record SaleLineDraft(Guid ProductId,decimal Quantity,decimal NetUnitPrice,decimal VatRate,[property:System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? SourceLineIndex=null);
+public sealed record SaleRequest(Guid CompanyId,Guid OperationId,Guid? CustomerId,string Warehouse,SaleLineDraft[] Lines,string PaymentMethod="cash",bool InvoiceRequested=false,Guid? ReturnOf=null);
 public sealed record SaleReverse(Guid CompanyId,Guid Id,long Version);
-public sealed record SaleLine(Guid ProductId,string Name,string UnitCode,decimal Quantity,decimal NetUnitPrice,decimal VatRate,decimal Net,decimal Vat);
+public sealed record SaleLine(Guid ProductId,string Name,string UnitCode,decimal Quantity,decimal NetUnitPrice,decimal VatRate,decimal Net,decimal Vat,int? SourceLineIndex=null);
 public sealed record SaleRecord(Guid Id,long Version,string Number,Guid? CustomerId,string CustomerName,string Warehouse,string Currency,
-    SaleLine[] Lines,decimal Net,decimal Vat,decimal Gross,string Status,DateTimeOffset At,string Actor,string Fingerprint,DateTimeOffset? ReversedAt=null,string? ReversedBy=null,string? PaymentMethod=null,bool InvoiceRequested=false,BillingCustomer? InvoiceCustomer=null,decimal Rounding=0,decimal? Payable=null);
+    SaleLine[] Lines,decimal Net,decimal Vat,decimal Gross,string Status,DateTimeOffset At,string Actor,string Fingerprint,DateTimeOffset? ReversedAt=null,string? ReversedBy=null,string? PaymentMethod=null,bool InvoiceRequested=false,BillingCustomer? InvoiceCustomer=null,decimal Rounding=0,decimal? Payable=null,Guid? ReturnOf=null);
 public sealed record SaleCounter(int Value);
 public sealed partial class SalesModule:IModule
 {
     public ValueTask StartAsync(IModuleContext context,CancellationToken cancellationToken)
     {
         RegisterCheckout(context);
+        RegisterReturns(context);
         DomainCommands.Register(context,"list","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>
             DomainCommands.Json(new {total=MatchingRecords(tx,input).Length,rows=MatchingRecords(tx,input).Take(200)
-                .Select(s=>new{s.Id,s.Version,s.Number,s.CustomerName,s.Warehouse,s.Currency,s.Net,s.Vat,s.Gross,s.Rounding,payable=s.Payable??s.Gross,s.Status,s.PaymentMethod,s.InvoiceRequested,statusLabel=s.Status=="vegleges"?"Végleges":"Visszafordítva",s.At})}));
+                .Select(s=>new{s.Id,s.Version,s.Number,s.CustomerName,s.Warehouse,s.Currency,s.Net,s.Vat,s.Gross,s.Rounding,payable=s.Payable??s.Gross,s.Status,s.ReturnOf,s.PaymentMethod,s.InvoiceRequested,statusLabel=s.Status!="vegleges"?"Visszafordítva":s.ReturnOf is not null?"Visszavét":"Végleges",s.At})}));
         DomainCommands.Register(context,"get","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>
             DomainCommands.Json(tx.Read<SaleRecord>("sales","sale/"+input.GetProperty("id").GetGuid().ToString("N")) ?? throw new RecordNotFoundException("Az eladás nem található.")));
         DomainCommands.Register(context,"save","sales.write",CommandAccess.Licensed,(tx,input,actor)=>
@@ -28,17 +29,19 @@ public sealed partial class SalesModule:IModule
         DomainCommands.Register(context,"reverse","sales.write",CommandAccess.Licensed,(tx,input,actor)=>
             DomainCommands.Json(Reverse(tx,DomainCommands.Read<SaleReverse>(input),actor,context.TimeProvider.GetUtcNow())));
         DomainCommands.Register(context,"export","sales.export",CommandAccess.RecoveryReadOnly,(tx,input,_)=>DomainCommands.Json(new {
-            csv=DomainCommands.Csv(new[]{new[]{"Bizonylat","Vevő","Nettó","Áfa","Bruttó","Pénznem","Állapot","Fizetés","Számlaigény","Kerekítés","Fizetendő"}}.Concat(MatchingRecords(tx,input).Select(s=>new[]{s.Number,s.CustomerName,s.Net.ToString(CultureInfo.InvariantCulture),s.Vat.ToString(CultureInfo.InvariantCulture),s.Gross.ToString(CultureInfo.InvariantCulture),s.Currency,s.Status,s.PaymentMethod??"ismeretlen",s.InvoiceRequested?"igen":"nem",s.Rounding.ToString(CultureInfo.InvariantCulture),(s.Payable??s.Gross).ToString(CultureInfo.InvariantCulture)})))}));
+            csv=DomainCommands.Csv(new[]{new[]{"Bizonylat","Vevő","Nettó","Áfa","Bruttó","Pénznem","Állapot","Fizetés","Számlaigény","Kerekítés","Fizetendő","Eredeti eladás"}}.Concat(MatchingRecords(tx,input).Select(s=>new[]{s.Number,s.CustomerName,s.Net.ToString(CultureInfo.InvariantCulture),s.Vat.ToString(CultureInfo.InvariantCulture),s.Gross.ToString(CultureInfo.InvariantCulture),s.Currency,s.Status,s.PaymentMethod??"ismeretlen",s.InvoiceRequested?"igen":"nem",s.Rounding.ToString(CultureInfo.InvariantCulture),(s.Payable??s.Gross).ToString(CultureInfo.InvariantCulture),s.ReturnOf?.ToString()??""})))}));
         context.RegisterPage(new("sales",context.ModuleId,"Eladás","Helyi eladási bizonylat és készletcsökkentés. Nem adóügyi számla.","\uE719",
             [new("number","Bizonylat")],[new("number","Bizonylat"),new("customerName","Vevő"),new("gross","Bruttó"),new("statusLabel","Állapot")],new("list","save","reverse","export")) {ViewKind="sales"});
         return ValueTask.CompletedTask;
     }
     public ValueTask StopAsync(CancellationToken cancellationToken)=>ValueTask.CompletedTask;
-    private static SaleRecord[] MatchingRecords(ICompanyTransaction tx,JsonElement input)=>Records(tx).Where(s=>DomainCommands.Matches(s.Number+" "+s.CustomerName,DomainCommands.Search(input,"recordSearch"))).OrderByDescending(s=>s.At).ThenBy(s=>s.Id).ToArray();
+    private static SaleRecord[] MatchingRecords(ICompanyTransaction tx,JsonElement input)=>Records(tx).Where(s=>MatchesDay(s,input)).Where(s=>DomainCommands.Matches(s.Number+" "+s.CustomerName,DomainCommands.Search(input,"recordSearch"))).OrderByDescending(s=>s.At).ThenBy(s=>s.Id).ToArray();
     public static SaleRecord[] Records(ICompanyTransaction tx)=>tx.List("sales","sale/").Select(s=>JsonSerializer.Deserialize<SaleRecord>(s,CompanyDocuments.Json) ?? throw new IOException("Sérült eladás.")).ToArray();
     public static SaleRecord Post(ICompanyTransaction tx,SaleRequest request,string actor,DateTimeOffset at)
     {
         if(request.OperationId==Guid.Empty || request.Lines is null || request.Lines.Length is <1 or >400 || request.Lines.Any(l=>l is null))throw new ArgumentException("Egy eladáshoz 1–400 tétel és műveletazonosító kell.");
+        if(request.ReturnOf is not null)return PostReturn(tx,request,actor,at);
+        if(request.Lines.Any(l=>l.SourceLineIndex is not null))throw new ArgumentException("Visszavét csak eredeti bizonylathoz köthető.");
         if(request.PaymentMethod is not ("cash" or "card"))throw new ArgumentException("Válassz készpénzes vagy kártyás fizetést.");
         if(request.InvoiceRequested&&request.CustomerId is null)throw new ArgumentException("Számlaigényhez válassz vevőt.");
         var fingerprint=Fingerprint(request);
@@ -79,6 +82,7 @@ public sealed partial class SalesModule:IModule
         var key="sale/"+request.Id.ToString("N");
         var existing=tx.Read<SaleRecord>("sales",key) ?? throw new ArgumentException("Az eladás nem található.");
         if(existing.Status=="visszaforditva")return existing;
+        if(existing.ReturnOf is not null||Records(tx).Any(r=>r.ReturnOf==existing.Id))throw new ArgumentException("Részleges visszavét után teljes visszafordítás nem végezhető. A még visszavehető tételeket válaszd ki.");
         if(existing.Version!=request.Version)throw new ArgumentException("Az eladás közben megváltozott; frissítsd a listát.");
         StockLedger.Post(tx,"sale-reverse:"+request.Id.ToString("N"),"sales",request.Id,
             existing.Lines.Select(l=>new StockChange(l.ProductId,l.Name,l.UnitCode,existing.Warehouse,l.Quantity)).ToArray(),"Eladás visszafordítása "+existing.Number,actor,at);

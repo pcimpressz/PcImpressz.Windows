@@ -85,7 +85,7 @@ void InstallModule(ECDsa key, string id, string assemblyName, string entryType, 
     var moduleBytes = File.ReadAllBytes(dll);
     var manifest = new ModuleManifest
     {
-        SchemaVersion = 1, Id = id, Version = "0.4.8", ApiVersion = PlatformContract.ApiVersion,
+        SchemaVersion = 1, Id = id, Version = "0.4.9", ApiVersion = PlatformContract.ApiVersion,
         EntryAssembly = assemblyName + ".dll", EntryType = entryType,
         Files = new() { [assemblyName + ".dll"] = Convert.ToHexString(SHA256.HashData(moduleBytes)) },
         Dependencies = dependencies ?? []

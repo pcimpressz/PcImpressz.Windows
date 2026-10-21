@@ -8,12 +8,12 @@ using PcImpressz.Modules.Partners;
 namespace PcImpressz.Modules.Sales;
 public sealed partial class SalesModule
 {
-    private static string Fingerprint(SaleRequest r)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new{r.OperationId,r.CustomerId,r.Warehouse,r.Lines,r.PaymentMethod,r.InvoiceRequested},CompanyDocuments.Json))));
+    private static string Fingerprint(SaleRequest r)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(r.ReturnOf is null?(object)new{r.OperationId,r.CustomerId,r.Warehouse,r.Lines,r.PaymentMethod,r.InvoiceRequested}:new{r.OperationId,r.CustomerId,r.Warehouse,r.Lines,r.PaymentMethod,r.InvoiceRequested,r.ReturnOf},CompanyDocuments.Json))));
     private static string Fold(string value)=>string.Concat(value.Normalize(NormalizationForm.FormD).Where(c=>CharUnicodeInfo.GetUnicodeCategory(c)!=UnicodeCategory.NonSpacingMark)).ToUpperInvariant();
     private static bool Match(string value,string search)=>Fold(search).Split(' ',StringSplitOptions.RemoveEmptyEntries).All(term=>Fold(value).Contains(term,StringComparison.Ordinal));
     private static void RegisterCheckout(IModuleContext context)
     {
-        DomainCommands.Register(context,"checkout-info","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,actor)=>DomainCommands.Json(new{version=1}));
+        DomainCommands.Register(context,"checkout-info","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,actor)=>DomainCommands.Json(new{version=2}));
         DomainCommands.Register(context,"references","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>
         {
             var warehouse=input.TryGetProperty("warehouse",out var wh)?StockLedger.Warehouse(wh.GetString()):"Bolt";

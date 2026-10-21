@@ -66,6 +66,21 @@ internal static class CheckoutUiChecks
         var queued=new OperationsPageViewModel(Definition,connection,()=>company,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"queued-test")));
         queued.ProductSearch="BC-1";var firstScan=queued.EnterQuickProductAsync();queued.ProductSearch="BC-1";var secondScan=queued.EnterQuickProductAsync();await Task.WhenAll(firstScan,secondScan);
         if(queued.Basket.Sum(line=>line.Quantity)!=2||!queued.CanBeginCheckout)throw new InvalidOperationException("Az egymás utáni gyors beolvasások elvesztek vagy duplázódtak.");
+        var historyId=Guid.NewGuid();
+        Task<JsonElement> HistorySend(string operation,object payload,CancellationToken ct)
+        {
+            var request=(ModuleCommandRequest)payload;
+            return Task.FromResult(request.Command=="get"?JsonSerializer.SerializeToElement(new{id=historyId,number="EL-HISTORY",customerName="Teszt",warehouse="Bolt",gross=127m,payable=125m,at=DateTimeOffset.UtcNow}):JsonSerializer.SerializeToElement(new{id=historyId,number="EL-HISTORY",warehouse="Bolt",lines=new[]{new{index=0,productId=product,name="Egér",unitCode="DB",quantity=1m,netUnitPrice=100m,vatRate=27m,net=100m,vat=27m,returned=0m,available=1m}}}));
+        }
+        var historyConnection=new HostConnection(output,null,HistorySend);historyConnection.SetSession(company,new("test","seller","sales",DateTimeOffset.UtcNow.AddMinutes(30)));
+        var historyPage=new OperationsPageViewModel(Definition,historyConnection,()=>company,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"history-test")));
+        historyPage.SelectedRow=new EntityRow(JsonSerializer.SerializeToElement(new{id=historyId}));await Task.Delay(30);if(historyPage.HistoryLines.Count!=1||!historyPage.Details.Contains("EL-HISTORY"))throw new InvalidOperationException("A bizonylat kiválasztása nem töltötte be a tételeket automatikusan.");
+        var returns=new OperationsPageViewModel(Definition,connection,()=>company,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"returns-test")));
+        var historyLine=new HistorySaleLine(Guid.NewGuid(),"Bolt",0,product,"Egér","DB",3,0.33m,27,0.99m,0.27m,0,3);returns.AddReturnLine(historyLine);
+        if(returns.Basket.Count!=1||returns.Basket[0].Quantity!=-1||returns.Basket[0].Gross>=0||!returns.IsReturnCheckout)throw new InvalidOperationException("A visszavét nem negatív kosártétel.");
+        returns.Basket[0].QuantityText="-4";try{returns.ValidateCheckout();throw new InvalidOperationException("Túl sok visszavehető.");}catch(ArgumentException){}returns.Basket[0].QuantityText="-2";returns.ValidateCheckout();
+        if(returns.AddQuickProduct(new(product,"Egér","M","DB",10,NetUnitPrice:100)))throw new InvalidOperationException("Visszavét és eladás keverhető.");
+        returns.Basket[0].RemoveCommand.Execute(null);if(returns.IsReturnCheckout)throw new InvalidOperationException("Visszavét törlése után hibás kosármód.");
         Console.WriteLine("ui-ok live search race, barcode single addition, inline edits, row deletion and immutable retry");
     }
     public static void Render(string output,string skin)

@@ -147,7 +147,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 if(command.ModuleId=="sales"&&command.Command=="save")
                 {
                     var checkout=await commands.ExecuteAsync(new("sales","checkout-info",JsonSerializer.SerializeToElement(payload)),caller,ct);
-                    if(!checkout.TryGetProperty("version",out var version)||version.GetInt32()<1)throw new CommandDeniedException("Az eladásmodult frissíteni kell a pénztári fizetés és számlaigény mentéséhez.");
+                    if(!checkout.TryGetProperty("version",out var version)||version.GetInt32()<(payload.TryGetPropertyValue("returnOf",out var returnValue)&&returnValue is not null?2:1))throw new CommandDeniedException("Az eladásmodult frissíteni kell a pénztári fizetés és számlaigény mentéséhez.");
                 }
                 var result = await commands.ExecuteAsync(new(command.ModuleId, command.Command,
                     JsonSerializer.SerializeToElement(payload)), caller, ct);

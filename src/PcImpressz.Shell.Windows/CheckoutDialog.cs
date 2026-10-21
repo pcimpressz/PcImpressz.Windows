@@ -8,19 +8,20 @@ internal static class CheckoutDialog
     public static void Show(OperationsPageViewModel page)=>Build(page).ShowDialog();
     internal static Window Build(OperationsPageViewModel page)
     {
-        var window=new Window{Title="Eladás véglegesítése",Width=820,Height=760,MinWidth=650,MinHeight=580,WindowStartupLocation=WindowStartupLocation.CenterOwner,Owner=Application.Current.MainWindow is {IsVisible:true} owner?owner:null};
+        var window=new Window{Title=page.IsReturnCheckout?"Visszavét véglegesítése":"Eladás véglegesítése",Width=820,Height=760,MinWidth=650,MinHeight=580,WindowStartupLocation=WindowStartupLocation.CenterOwner,Owner=Application.Current.MainWindow is {IsVisible:true} owner?owner:null};
         window.SetResourceReference(Window.BackgroundProperty,"SurfaceBrush");window.SetResourceReference(Window.ForegroundProperty,"TextBrush");
         var dock=new DockPanel{Margin=new(24)};var bottom=new StackPanel();DockPanel.SetDock(bottom,Dock.Bottom);dock.Children.Add(bottom);
         var message=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,10,0,12)};message.SetResourceReference(TextBlock.ForegroundProperty,"AccentBrush");bottom.Children.Add(message);
-        var finish=new Button{Content="Készpénzes eladás rögzítése",Padding=new(20,12,20,12),IsDefault=true};finish.SetResourceReference(FrameworkElement.StyleProperty,"PrimaryButton");bottom.Children.Add(finish);
+        var finish=new Button{Content="Készpénzes művelet rögzítése",Padding=new(20,12,20,12),IsDefault=true};finish.SetResourceReference(FrameworkElement.StyleProperty,"PrimaryButton");bottom.Children.Add(finish);
         var body=new StackPanel();dock.Children.Add(new ScrollViewer{Content=body,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
         var total=new TextBlock{FontSize=30,FontWeight=FontWeights.Bold,Margin=new(0,0,0,8)};body.Children.Add(total);
         var rounding=new TextBlock{Margin=new(0,0,0,18)};body.Children.Add(rounding);
         var payments=new WrapPanel{Margin=new(0,0,0,18)};var cash=new RadioButton{Content="Készpénz",IsChecked=true,GroupName="payment",Margin=new(0,0,30,0),FontSize=18};var card=new RadioButton{Content="Kártya",GroupName="payment",FontSize=18};payments.Children.Add(cash);payments.Children.Add(card);body.Children.Add(payments);
-        cash.Checked+=(_,_)=>finish.Content="Készpénzes eladás rögzítése";card.Checked+=(_,_)=>finish.Content="Kártyás eladás rögzítése";
+        cash.Checked+=(_,_)=>finish.Content="Készpénzes művelet rögzítése";card.Checked+=(_,_)=>finish.Content="Kártyás művelet rögzítése";
         void UpdateTotal(){var gross=page.Basket.Sum(l=>l.Gross);var payable=PcImpressz.Contracts.PaymentRounding.Payable(gross,cash.IsChecked==true?"cash":"card");total.Text="Fizetendő: "+MoneyDisplay.Format(payable)+" Ft";rounding.Text="Bruttó: "+MoneyDisplay.Format(gross)+" Ft · Kerekítés: "+(payable-gross).ToString("+0.00;-0.00;0.00",System.Globalization.CultureInfo.GetCultureInfo("hu-HU"))+" Ft";}
         cash.Checked+=(_,_)=>UpdateTotal();card.Checked+=(_,_)=>UpdateTotal();UpdateTotal();
         var invoice=new CheckBox{Content="Számlát kér a vevő",FontSize=17,Margin=new(0,0,0,12)};body.Children.Add(invoice);
+        if(page.IsReturnCheckout){invoice.Visibility=Visibility.Collapsed;body.Children.Add(new TextBlock{Text="Visszavét az eredeti eladáshoz. A negatív fizetendő a vevőnek visszajáró összeg.",TextWrapping=TextWrapping.Wrap});}
         var buyer=new StackPanel{Visibility=Visibility.Collapsed};body.Children.Add(buyer);
         buyer.Children.Add(new TextBlock{Text="Vevő keresése névrészlettel vagy adószámmal",FontWeight=FontWeights.SemiBold,Margin=new(0,6,0,6)});
         var search=Text();buyer.Children.Add(search);

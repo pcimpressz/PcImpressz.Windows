@@ -17,7 +17,8 @@ internal sealed partial class OperationsPageViewModel
     public bool IsSearching{get=>_searching;private set{_searching=value;Changed();}}
     public bool HasUnresolvedOperation=>_pendingSale is not null;
     public bool CanEditSale=>CanWrite&&_pendingSale is null;
-    public string CheckoutLabel=>_pendingSale is null?"Eladás véglegesítése":"Eladás eredményének ellenőrzése / újrapróbálás";
+    public bool IsReturnCheckout=>Basket.Any(l=>l.IsReturn);
+    public string CheckoutLabel=>_pendingSale is null?(IsReturnCheckout?"Visszavét véglegesítése":"Eladás véglegesítése"):"Eladás eredményének ellenőrzése / újrapróbálás";
     public event Action? SearchFocusRequested;
     private void InitializeQuickCheckout()
     {
@@ -26,7 +27,7 @@ internal sealed partial class OperationsPageViewModel
         {
             if(e.OldItems is not null)foreach(SaleBasketLine line in e.OldItems)line.PropertyChanged-=LineChanged;
             if(e.NewItems is not null)foreach(SaleBasketLine line in e.NewItems){line.PropertyChanged+=LineChanged;line.RemoveCommand=new RelayCommand(()=>{if(CanEditSale)Basket.Remove(line);});}
-            Dirty();
+            Changed(nameof(IsReturnCheckout));Changed(nameof(CheckoutLabel));Dirty();
         };
     }
     private void LineChanged(object? sender,PropertyChangedEventArgs e){if(e.PropertyName==nameof(SaleBasketLine.Gross))Dirty();}
@@ -79,6 +80,7 @@ internal sealed partial class OperationsPageViewModel
     public bool AddQuickProduct(OperationProduct product,bool clearInput=true)
     {
         if(!CanEditSale)return false;
+        if(IsReturnCheckout){Message="Visszavét és eladás külön kosárban rögzíthető. Előbb zárd le a visszavétet.";return false;}
         try
         {
             var current=Basket.Where(l=>l.ProductId==product.Id).Sum(l=>l.Quantity);
@@ -110,7 +112,7 @@ internal sealed partial class OperationsPageViewModel
             if(_pendingSale is null)
             {
                 ValidateCheckout();if(invoice&&customer?.Id is null)throw new ArgumentException("Számlaigényhez válassz vevőt.");
-                _pendingSale=JsonSerializer.SerializeToElement(new{operationId=_operation,customerId=invoice?customer?.Id:null,warehouse=Warehouse.Trim(),lines=Basket.Select(l=>new{productId=l.ProductId,quantity=l.Quantity,netUnitPrice=l.NetUnitPrice,vatRate=l.VatRate}).ToArray(),paymentMethod=payment,invoiceRequested=invoice});
+                _pendingSale=JsonSerializer.SerializeToElement(new{operationId=_operation,customerId=invoice?customer?.Id:null,warehouse=Warehouse.Trim(),lines=Basket.Select(l=>new{productId=l.ProductId,quantity=l.Quantity,netUnitPrice=l.NetUnitPrice,vatRate=l.VatRate,sourceLineIndex=l.SourceLineIndex}).ToArray(),paymentMethod=payment,invoiceRequested=invoice,returnOf=Basket[0].ReturnOf});
             }
             CancelQuickSearch();QuickMatches.Clear();IsBusy=true;PermissionsChanged();
             JsonElement? recovered=null;
@@ -120,7 +122,7 @@ internal sealed partial class OperationsPageViewModel
                 catch(HostCommandException ex) when(ex.Code=="not-found"){confirmedAbsent=true;}
             }
             var result=recovered??await Send("save",_pendingSale.Value);committed=true;_pendingSale=null;_operation=Guid.NewGuid();Basket.Clear();IsDirty=false;SelectedCustomer=null;Changed(nameof(BasketTotal));
-            Message="Eladás rögzítve: "+Text(result,"number")+" · "+(Text(result,"paymentMethod")=="card"?"Kártya":"Készpénz")+(result.TryGetProperty("invoiceRequested",out var requested)&&requested.GetBoolean()?" · Számlaigény rögzítve.":".");
+            Message=(result.TryGetProperty("returnOf",out var returned)&&returned.ValueKind==JsonValueKind.String?"Visszavét rögzítve: ":"Eladás rögzítve: ")+Text(result,"number")+" · "+(Text(result,"paymentMethod")=="card"?"Kártya":"Készpénz")+(result.TryGetProperty("invoiceRequested",out var requested)&&requested.GetBoolean()?" · Számlaigény rögzítve.":".");
             try{await RefreshRows();await RefreshSalesStockAsync();}catch(Exception ex) when(ex is not OutOfMemoryException){Message+=" A nézet frissítése nem sikerült: "+ex.Message;}
             SearchFocusRequested?.Invoke();return true;
         }
@@ -137,8 +139,10 @@ internal sealed partial class OperationsPageViewModel
     private static void VerifyRecovered(JsonElement stored,JsonElement pending)
     {
         bool Same(string key)=>stored.GetProperty(key).ToString()==pending.GetProperty(key).ToString();
+        if(pending.TryGetProperty("returnOf",out var origin)&&origin.ValueKind==JsonValueKind.String&&(!stored.TryGetProperty("returnOf",out var actualOrigin)||actualOrigin.GetGuid()!=origin.GetGuid()))throw new InvalidOperationException("Eltérő eredeti visszavételi bizonylat.");
         var expected=pending.GetProperty("lines").EnumerateArray().ToArray();var actual=stored.GetProperty("lines").EnumerateArray().ToArray();
-        if(stored.GetProperty("id").GetGuid()!=pending.GetProperty("operationId").GetGuid()||!Same("customerId")||!Same("warehouse")||!Same("paymentMethod")||!Same("invoiceRequested")||expected.Length!=actual.Length
+        if(pending.TryGetProperty("returnOf",out var source)&&source.ValueKind==JsonValueKind.String&&expected.Where((line,i)=>!actual[i].TryGetProperty("sourceLineIndex",out var index)||index.GetInt32()!=line.GetProperty("sourceLineIndex").GetInt32()).Any())throw new InvalidOperationException("Eltérő eredeti visszavételi tétel.");
+        if(stored.GetProperty("id").GetGuid()!=pending.GetProperty("operationId").GetGuid()||(!(pending.TryGetProperty("returnOf",out var returnSource)&&returnSource.ValueKind==JsonValueKind.String)&&!Same("customerId"))||!Same("warehouse")||!Same("paymentMethod")||!Same("invoiceRequested")||expected.Length!=actual.Length
             ||expected.Where((line,i)=>new[]{"productId","quantity","netUnitPrice","vatRate"}.Any(key=>line.GetProperty(key).ValueKind==JsonValueKind.Number?line.GetProperty(key).GetDecimal()!=actual[i].GetProperty(key).GetDecimal():line.GetProperty(key).ToString()!=actual[i].GetProperty(key).ToString())).Any())
             throw new InvalidOperationException("A tárolt eladás eltér a függő művelettől. A kosár zárolva marad, adminisztrátori ellenőrzés szükséges.");
     }

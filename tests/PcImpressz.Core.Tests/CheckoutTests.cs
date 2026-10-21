@@ -16,6 +16,25 @@ internal static class CheckoutTests
 {
     public static IEnumerable<(string,Func<Task>)> Cases()
     {
+        yield return ("partial return restores stock once and rejects overreturn or altered price",async()=>
+        {
+            using var f=new Fixture();await f.Module.StartAsync(f.Context,CancellationToken.None);var product=f.Product();
+            var at=new DateTimeOffset(2026,10,20,22,30,0,TimeSpan.Zero);
+            var sale=f.Database.Execute(f.Company,tx=>SalesModule.Post(tx,new(f.Company,Guid.NewGuid(),null,"Bolt",[new(product.Id,3,0.33m,27),new(product.Id,1,100,5)],"card"),"test",at));
+            var before=f.Database.Execute(f.Company,tx=>StockLedger.Balances(tx).Single(b=>b.ProductId==product.Id&&b.Warehouse=="Bolt").Quantity);
+            var request=new SaleRequest(f.Company,Guid.NewGuid(),null,"Bolt",[new(product.Id,-1,0.33m,27,0)],"card",ReturnOf:sale.Id);
+            var first=f.Database.Execute(f.Company,tx=>SalesModule.Post(tx,request,"test",at));Check.Equal(-1m,first.Lines.Single().Quantity);Check.True(first.Gross<0);Check.Equal(sale.Id,first.ReturnOf!.Value);
+            var repeated=f.Database.Execute(f.Company,tx=>SalesModule.Post(tx,request,"test",at));Check.Equal(first.Id,repeated.Id);
+            Check.Equal(before+1,f.Database.Execute(f.Company,tx=>StockLedger.Balances(tx).Single(b=>b.ProductId==product.Id&&b.Warehouse=="Bolt").Quantity));
+            await Check.ThrowsAsync<ArgumentException>(()=>Task.Run(()=>f.Database.Execute(f.Company,tx=>SalesModule.Post(tx,request with{OperationId=Guid.NewGuid(),Lines=[new(product.Id,-3,0.33m,27,0)]},"test",at))));
+            await Check.ThrowsAsync<ArgumentException>(()=>Task.Run(()=>f.Database.Execute(f.Company,tx=>SalesModule.Post(tx,request with{OperationId=Guid.NewGuid(),Lines=[new(product.Id,-1,999,27,0)]},"test",at))));
+            await Check.ThrowsAsync<ArgumentException>(()=>Task.Run(()=>f.Database.Execute(f.Company,tx=>SalesModule.Reverse(tx,new(f.Company,sale.Id,1),"test",at))));
+            var second=f.Database.Execute(f.Company,tx=>SalesModule.Post(tx,request with{OperationId=Guid.NewGuid(),Lines=[new(product.Id,-2,0.33m,27,0)]},"test",at));Check.Equal(-sale.Lines[0].Net,first.Net+second.Net);Check.Equal(-sale.Lines[0].Vat,first.Vat+second.Vat);
+            var available=await f.Execute("returnable",new{id=sale.Id});Check.Equal(0m,available.GetProperty("lines")[0].GetProperty("available").GetDecimal());Check.Equal(1m,available.GetProperty("lines")[1].GetProperty("available").GetDecimal());
+            var day=await f.Execute("list",new{date="2026-10-21"});Check.True(day.GetProperty("rows").EnumerateArray().Any(r=>r.GetProperty("id").GetGuid()==sale.Id));
+            var previous=await f.Execute("list",new{date="2026-10-20"});Check.True(!previous.GetProperty("rows").EnumerateArray().Any(r=>r.GetProperty("id").GetGuid()==sale.Id));
+            var export=await f.Execute("export",new{date="2026-10-20"});Check.True(!export.GetProperty("csv").GetString()!.Contains(sale.Number));
+        });
         yield return ("cash rounding boundaries and card exact amount",()=>
         {
             foreach(var item in new (decimal Input,decimal Expected)[]{(0,0),(1,0),(2.49m,0),(2.5m,5),(4.99m,5),(5,5),(7.49m,5),(7.5m,10),(9.99m,10),(127,125),(128,130)})
