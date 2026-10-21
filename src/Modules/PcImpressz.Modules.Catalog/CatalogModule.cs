@@ -100,7 +100,7 @@ public sealed class CatalogModule : IModule
              new("description", "Leírás", "multiline"), new("parameters", "Paraméterek (név=érték)", "multiline"),
              new("isPurchaseable", "Beszerzésre jelölhető", "boolean"), new("isSalable", "Eladásra jelölhető", "boolean"),
              new("isActive", "Aktív", "boolean", DefaultChecked: true), new("notes", "Megjegyzés", "multiline")],
-            [new("name", "Termék", 220), new("sku", "Saját cikkszám", 140), new("manufacturerPartNumber", "Gyártói cikkszám", 170), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90),
+            [new("name", "Termék", 340), new("sku", "Saját cikkszám", 180), new("manufacturerPartNumber", "Gyártói cikkszám", 210), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90),
              new("quantity", "Saját készlet", 110), new("revision", "Revízió", 90, false), new("barcode", "Vonalkód", 140, false),
              new("isPurchaseable", "Beszerzés", 110, false), new("isSalable", "Eladás", 100, false)],
             new("products-list", "products-save", "products-archive", "products-export"),

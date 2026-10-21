@@ -238,3 +238,10 @@ P1: üzleti használat előtt javítandó. P2: stabilizálás során javítandó
 - A nagykeres kosár későbbi funkció; a mező- és adatkapcsolati terv dokumentálva, élő kapcsolat és rendelésküldés nincs.
 - Ellenőrzés elkülönített forrásmásolatból: 139/139, wheel-ok, 9/9 WPF és késleltetett keresés/export/mentetlen művelet regresszió.
 - Útmutató: docs/TERMEKTORZS-KESZLET-ES-NAGYKER.md.
+
+### 2026-10-21 – Codex – külön terméklista és adatlap, 0.4.2
+
+- Teljes szélességű terméklista, külön Termékadatlap fül; Új/szerkesztés/dupla kattintás, széles mezők és oszlopok.
+- A fülváltás megőrzi a szerkesztést. A készlet a harmadik belső fül; a munkaterület példánya megmarad navigációkor.
+- Az admin szerepkör és drag-and-drop/feliratszerkesztő még nincs kész. Következő munkacsomag: docs/ADMIN-FELULETSZERKESZTO.md.
+- Ellenőrzés elkülönített másolatból: 139/139, wheel-ok, 12/12 WPF; listasélesség, mezőszélesség és mentetlen adat fülváltása tesztelve.

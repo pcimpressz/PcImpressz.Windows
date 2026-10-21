@@ -201,11 +201,17 @@ public sealed partial class ShellViewModel : Observable
         ? ProductWorkspace(entityPage) : SelectedNavigation.PageKey switch
     { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(), _ => new DashboardPage() };
 
+    private ProductWorkspaceViewModel? _productWorkspace;
     private object ProductWorkspace(IWorkspacePage page)
     {
         if (page is EntityPageViewModel products && page.Definition.ModuleId == "catalog" && page.Definition.Id == "products"
             && !_disabledModules.Contains("inventory") && _entityPages.TryGetValue("inventory.inventory", out var stock)
-            && stock is OperationsPageViewModel inventory) return new ProductWorkspaceViewModel(products, inventory);
+            && stock is OperationsPageViewModel inventory)
+        {
+            if (_productWorkspace is null || !ReferenceEquals(_productWorkspace.Products, products) || !ReferenceEquals(_productWorkspace.Inventory, inventory))
+                _productWorkspace = new ProductWorkspaceViewModel(products, inventory);
+            return _productWorkspace;
+        }
         return page;
     }
     private NavigationItem FindNavigation(string id)

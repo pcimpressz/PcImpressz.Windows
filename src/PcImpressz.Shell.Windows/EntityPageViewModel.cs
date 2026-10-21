@@ -125,6 +125,13 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
         }
     }
 
+    public event Action? EditorRequested;
+    public void RequestEditSelected()
+    {
+        if (IsBusy) return;
+        if (_selected is null) { Message = Labels.NeedSelection; return; }
+        EditorRequested?.Invoke();
+    }
     public ICommand SearchCommand { get; }
     public ICommand NewCommand { get; }
     public ICommand SaveCommand { get; }
@@ -157,7 +164,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
             Fields.Add(vm);
         }
         SearchCommand = new RelayCommand(() => { _typed.CancelPending(); _page = 0; _ = LoadAsync(); });
-        NewCommand = new RelayCommand(() => { if (!IsBusy && CanDiscard()) Populate(null); });
+        NewCommand = new RelayCommand(() => { if (!IsBusy && CanDiscard()) { _selected = null; Changed(nameof(SelectedRow)); Populate(null); Message = Labels.NewTitle + " adatlapja megnyitva."; EditorRequested?.Invoke(); } });
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
         ArchiveCommand = new RelayCommand(() => _ = ArchiveAsync());
         ExportCommand = new RelayCommand(() => _ = ExportAsync());

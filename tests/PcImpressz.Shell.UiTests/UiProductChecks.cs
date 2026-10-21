@@ -61,12 +61,17 @@ internal static class UiProductChecks
         try { Dispatcher.PushFrame(frame); if (!task.IsCompleted) throw new TimeoutException("UI regression timeout"); task.GetAwaiter().GetResult(); }
         finally { timer.Stop(); }
     }
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        { var child = VisualTreeHelper.GetChild(parent, i); yield return child; foreach (var item in Descendants(child)) yield return item; }
+    }
     public static void Render(string output, string skin)
     {
         var definition = new EntityPageDescriptor("products", "catalog", "Terméktörzs", "", "",
             [new("name", "Termék neve"), new("sku", "Saját cikkszám"), new("manufacturerPartNumber", "Gyártói cikkszám")],
             [new("name", "Termék"), new("sku", "Cikkszám"), new("manufacturerPartNumber", "Gyártói cikkszám"), new("quantity", "Saját készlet")], new("list", "save", "archive", "export"));
-        definition = definition with { Labels = new EntityPageLabels { NewLabel="Új termék", EditTitle="Termék szerkesztése", CountNoun="termék", SearchHint="Több szó, ékezet nélkül is. Példa: vezetek nelkuli eger · gyartoi:=ABC-123" }, Filters = [new("all", "Aktív termékek")] };
+        definition = definition with { Labels = new EntityPageLabels { NewLabel="Új termék", NewTitle="Új termék", EditTitle="Termék szerkesztése", CountNoun="termék", SearchHint="Több szó, ékezet nélkül is. Példa: vezetek nelkuli eger · gyartoi:=ABC-123" }, Filters = [new("all", "Aktív termékek")] };
         var stockDefinition = definition with { Id = "inventory", ModuleId = "inventory", ViewKind = "inventory" };
         var connection = new HostConnection(output, null); var layouts = new ListLayoutStore(Path.Combine(output, "product-layout"));
         var products = new EntityPageViewModel(definition, connection, () => null, CancellationToken.None, layouts);
@@ -76,15 +81,28 @@ internal static class UiProductChecks
         var view = new ContentControl { Content = workspace, Width = 1100 };
         view.Measure(new Size(1100, double.PositiveInfinity)); var height = Math.Max(1000, Math.Min(2400, view.DesiredSize.Height));
         view.Arrange(new Rect(0, 0, 1100, height)); view.UpdateLayout();
+        var listGrid = Descendants(view).OfType<DataGrid>().First();
+        if (listGrid.ActualWidth < 1000) throw new InvalidOperationException("A terméklista nem teljes szélességű.");
         var surface = new Border { Background = (Brush)Application.Current.Resources["BackgroundBrush"], Child = view, Width = 1100, Height = height };
         surface.Measure(new Size(1100, height)); surface.Arrange(new Rect(0, 0, 1100, height)); surface.UpdateLayout();
         var bitmap = new RenderTargetBitmap(1100, (int)Math.Ceiling(height), 96, 96, PixelFormats.Pbgra32); bitmap.Render(surface);
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap)); using (var file = File.Create(Path.Combine(output, "products-" + skin + ".png"))) encoder.Save(file);
         workspace.SelectedStockCommand.Execute(null);
-        if (workspace.SelectedTab != 1 || stock.SelectedProduct?.Sku != "MOUSE-1") throw new InvalidOperationException("Nem a kijelölt termék készlete nyílt meg.");
+        if (workspace.SelectedTab != 2 || stock.SelectedProduct?.Sku != "MOUSE-1") throw new InvalidOperationException("Nem a kijelölt termék készlete nyílt meg.");
         stock.QuantityText = "3";
         workspace.AllStockCommand.Execute(null);
         if (stock.SelectedProduct?.Sku != "MOUSE-1") throw new InvalidOperationException("A készletnézet-váltás eldobta a szerkesztett műveletet.");
-        Console.WriteLine("ui-ok products and selected stock " + skin);
+        workspace.NewProductCommand.Execute(null);
+        if (workspace.SelectedTab != 1 || products.SelectedRow is not null) throw new InvalidOperationException("Az új termék nem külön adatlapon nyílt meg.");
+        Pump(Task.Delay(30)); view.Measure(new Size(1100, double.PositiveInfinity)); view.Arrange(new Rect(0, 0, 1100, height)); view.UpdateLayout();
+        var inputs = Descendants(view).OfType<TextBox>().Where(box => box.DataContext is EntityFieldViewModel).ToArray();
+        if (inputs.Length < 3 || inputs.Any(box => box.ActualWidth < 400)) throw new InvalidOperationException("A termékadatlap mezői túl keskenyek.");
+        products.Fields[0].Text = "Megőrzött terméknév";
+        workspace.SelectedTab = 0; Pump(Task.Delay(20)); workspace.SelectedTab = 1; Pump(Task.Delay(20));
+        if (products.Fields[0].Text != "Megőrzött terméknév" || !products.IsDirty) throw new InvalidOperationException("A fülváltás eldobta az adatlapot.");
+        surface.UpdateLayout();
+        var editorBitmap = new RenderTargetBitmap(1100, (int)Math.Ceiling(height), 96, 96, PixelFormats.Pbgra32); editorBitmap.Render(surface);
+        var editorEncoder = new PngBitmapEncoder(); editorEncoder.Frames.Add(BitmapFrame.Create(editorBitmap)); using (var editorFile = File.Create(Path.Combine(output, "product-editor-" + skin + ".png"))) editorEncoder.Save(editorFile);
+        Console.WriteLine("ui-ok full-width product list, editor, draft preservation and selected stock " + skin);
     }
 }

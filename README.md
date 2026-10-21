@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.1
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.2
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -120,3 +120,7 @@ A fejlesztői mesterlicenc aláírt és telepítéshez kötött, 2099-12-31-ig h
 ## 0.4.1 – Terméktörzs és készlet
 
 Gyártói cikkszám, többfeltételes/ékezetfüggetlen keresés, saját készletszűrők és a terméktörzsbe épített készletműveletek. Audit: alkalmazott keresés szerinti export és atomi CSV-írás. Ellenőrzés: 139/139 teszt, wheel-ok, 9/9 WPF-render és célzott UI-regressziók. Használat és a későbbi nagykerenkénti kosarak terve: [Terméktörzs, készlet és nagyker](docs/TERMEKTORZS-KESZLET-ES-NAGYKER.md).
+
+## 0.4.2 – Széles terméklista és külön adatlap
+
+A Terméklista teljes szélességet kapott. Új termék és kijelölt termék szerkesztése a külön Termékadatlap fülön nyílik; a listában a sor dupla kattintása is megnyitja. A terméknév és a többsoros mezők teljes sorosak, a többi mező szélesebb. A Készlet és mozgások a harmadik belső fül. A fülváltás megőrzi a szerkesztett adatot. Ellenőrzés: 139/139 teszt, wheel-ok, 12/12 WPF-render. Az adminhoz kötött drag-and-drop/feliratszerkesztő következő fejlesztés, még nincs kész: [Felületszerkesztő terve](docs/ADMIN-FELULETSZERKESZTO.md).

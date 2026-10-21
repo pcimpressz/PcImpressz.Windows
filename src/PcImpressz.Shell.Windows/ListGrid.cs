@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -31,12 +31,13 @@ internal static class ListGrid
         {
             var header = new TextBlock { Text = column.Label };
             if (column.Id == "quantity")
-                header.ToolTip = "A termék készlete az összes raktárban. Raktárankénti bontás a Készlet oldalon.";
+                header.ToolTip = "A termék készlete az összes raktárban. Raktárankénti bontás a Készlet és mozgások fülön.";
             var text = new DataGridTextColumn
             {
                 Header = header,
                 Binding = new Binding("[" + column.Id + "]") { Converter = CellText },
                 Width = new DataGridLength(column.Width),
+                ElementStyle = CellStyle(column.Id),
                 SortMemberPath = column.Id
             };
             if (column.Id == page.SortColumn)
@@ -45,6 +46,13 @@ internal static class ListGrid
         }
     }
 
+    private static Style CellStyle(string id)
+    {
+        var style = new Style(typeof(TextBlock));
+        style.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis));
+        style.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding("[" + id + "]") { Converter = CellText }));
+        return style;
+    }
     public static TextBlock MatchCount()
     {
         var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 12, 10), FontWeight = FontWeights.SemiBold };

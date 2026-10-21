@@ -8,6 +8,10 @@ namespace PcImpressz.Shell.Windows;
 // The module supplies field and column metadata; the Shell contains no partner assembly reference.
 public sealed class EntityPageView : UserControl
 {
+    public static readonly DependencyProperty ViewModeProperty = DependencyProperty.Register(nameof(ViewMode), typeof(string), typeof(EntityPageView),
+        new PropertyMetadata("split", (target, _) => ((EntityPageView)target)._applyLayout?.Invoke()));
+    public string ViewMode { get => (string)GetValue(ViewModeProperty); set => SetValue(ViewModeProperty, value); }
+    private Action? _applyLayout;
     public EntityPageView()
     {
         var root = new StackPanel();
@@ -89,22 +93,26 @@ public sealed class EntityPageView : UserControl
         root.Children.Add(body);
         root.Children.Add(DossierPage());
         Content = root;
+        var searchHelp = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,10), Visibility = Visibility.Collapsed }; root.Children.Insert(1, searchHelp);
+        grid.MouseDoubleClick += (_, args) => { if (ViewMode == "list" && DataContext is EntityPageViewModel page && args.OriginalSource is DependencyObject source && ItemsControl.ContainerFromElement(grid, source) is DataGridRow) page.RequestEditSelected(); };
         DataContextChanged += (_, _) =>
         {
             if (DataContext is not EntityPageViewModel vm) return;
             search.ToolTip = vm.Labels.SearchHint;
-            if (vm.Definition.ModuleId == "catalog" && vm.Definition.Id == "products") root.Children.Insert(1, new TextBlock { Text = vm.Labels.SearchHint, TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,10) });
+            searchHelp.Text = vm.Labels.SearchHint;
+            searchHelp.Visibility = ViewMode != "editor" && vm.Definition.ModuleId == "catalog" && vm.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
             create.Content = vm.Labels.NewLabel;
             filter.ItemsSource = vm.Filters;
             if (filter.SelectedValue is null) filter.SelectedValue = vm.Filters[0].Value;
             ListGrid.Show(grid, vm);
             fields.Children.Clear(); fields.RowDefinitions.Clear();
-            var position = 0;
+            var fieldRow = 0; var fieldColumn = 0;
             foreach (var field in vm.Fields)
             {
-                var index = position++;
-                fields.RowDefinitions.Add(new() { Height = GridLength.Auto });
-                var panel = new StackPanel { Margin = new(index % 2 == 0 ? 0 : 7,0,index % 2 == 0 ? 7 : 0,14), DataContext = field };
+                var wide = field.Definition.Id == "name" || field.Definition.Kind == "multiline";
+                if (wide && fieldColumn > 0) { fieldRow++; fieldColumn = 0; }
+                while (fields.RowDefinitions.Count <= fieldRow) fields.RowDefinitions.Add(new() { Height = GridLength.Auto });
+                var panel = new StackPanel { Margin = new(fieldColumn == 0 ? 0 : 10,0,wide || fieldColumn == 1 ? 0 : 10,16), DataContext = field };
                 if (field.Definition.Kind == "boolean")
                 {
                     var check = new CheckBox { Content = field.Label, Margin = new(0,8,0,4) };
@@ -117,22 +125,36 @@ public sealed class EntityPageView : UserControl
                     if (field.Definition.Kind == "multiline") { input.AcceptsReturn = true; input.TextWrapping = TextWrapping.Wrap; input.MinHeight = 85; }
                     panel.Children.Add(input);
                 }
-                Grid.SetRow(panel,index/2); Grid.SetColumn(panel,index%2); fields.Children.Add(panel);
+                Grid.SetRow(panel,fieldRow); Grid.SetColumn(panel,fieldColumn); Grid.SetColumnSpan(panel,wide ? 2 : 1); fields.Children.Add(panel);
+                if (wide || fieldColumn == 1) { fieldRow++; fieldColumn = 0; } else fieldColumn = 1;
             }
             vm.PropertyChanged += (_, args) =>
             {
                 if (args.PropertyName == nameof(EntityPageViewModel.DossierRevision)) RenderDossier(vm);
                 if (args.PropertyName == nameof(EntityPageViewModel.LayoutRevision)) ListGrid.Show(grid, vm);
             };
-            _ = vm.LoadAsync();
+            _applyLayout?.Invoke();
+            if (ViewMode != "editor") _ = vm.LoadAsync();
         };
-        SizeChanged += (_, _) =>
+        _applyLayout = () =>
         {
-            var narrow = ActualWidth < 980;
-            Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,narrow ? 1 : 0);
+            var separate = ViewMode is "list" or "editor";
+            var editorOnly = ViewMode == "editor";
+            toolbar.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
+            create.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
+            applied.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
+            searchHelp.Visibility = !editorOnly && DataContext is EntityPageViewModel page && page.Definition.ModuleId == "catalog" && page.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
+            listPanel.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
+            editorBorder.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
+            var narrow = separate || ActualWidth < 980;
+            Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,editorOnly ? 0 : narrow ? 1 : 0);
             Grid.SetColumnSpan(listPanel,narrow ? 2 : 1); Grid.SetColumnSpan(editorBorder,narrow ? 2 : 1);
-            editorBorder.Margin = narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);
+            editorBorder.Margin = separate ? new Thickness(0) : narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);
+            grid.MinHeight = ViewMode == "list" ? 480 : 360; grid.MaxHeight = ViewMode == "list" ? 680 : 480;
+            search.Width = ViewMode == "list" ? 360 : 230;
         };
+        SizeChanged += (_, _) => _applyLayout();
+        _applyLayout();
     }
     private WrapPanel cardHost = null!;
     private StackPanel sectionHost = null!;
