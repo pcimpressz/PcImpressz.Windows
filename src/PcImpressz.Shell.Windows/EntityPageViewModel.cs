@@ -53,6 +53,9 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
     private readonly ColumnList _columns;
     private readonly TypedSearch _typed;
     private readonly ListLoader _loader;
+    private sealed record AppliedQuery(string Search, string Filter, string Sort, bool Descending, int Page);
+    private AppliedQuery? _applied;
+    public string AppliedSearchLabel => _applied is null ? "Még nincs betöltött lista." : "Megjelenített keresés: " + (_applied.Search.Length == 0 ? "minden találat" : _applied.Search) + " · " + (Filters.FirstOrDefault(f => f.Value == _applied.Filter)?.Label ?? _applied.Filter);
     private bool _filtersReady;
     private EntityRow? _selected;
     private Guid? _editId;
@@ -105,7 +108,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
     public IReadOnlyList<DossierCardRow> DossierCards { get; private set; } = [];
     public IReadOnlyList<DossierSectionRow> DossierSections { get; private set; } = [];
     public string Message { get => _message; private set { _message = value; Changed(); } }
-    public string CountLabel => _total + " " + Labels.CountNoun + " · " + (_page + 1) + ". oldal";
+    public string CountLabel => _total + " " + Labels.CountNoun + " · " + ((_applied?.Page ?? 0) + 1) + ". oldal";
     public string MatchCount => _total + " db találat";
     public int LayoutRevision => _columns.Revision;
     public string SortColumn => _columns.SortColumn;
@@ -181,7 +184,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
 
     public void CompanyChanged()
     {
-        Rows.Clear(); _page = 0; _total = 0; _selected = null; Populate(null); _ = LoadAsync();
+        _applied = null; Changed(nameof(AppliedSearchLabel)); Rows.Clear(); _page = 0; _total = 0; _selected = null; Populate(null); _ = LoadAsync();
     }
     private bool CanDiscard() => !IsDirty || MessageBox.Show("Elveted a nem mentett változtatásokat?",
         "Nem mentett adatlap", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
@@ -260,15 +263,19 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
         IsBusy = true;
         try
         {
+            var query = new AppliedQuery(Search, Filter, SortColumn, SortDescending, _page);
             var result = await ExecuteAsync(Definition.Commands.List, new
             {
-                search = Search, filter = Filter, page = _page, pageSize = 50,
-                sort = SortColumn, descending = SortDescending
+                search = query.Search, filter = query.Filter, page = query.Page, pageSize = 50,
+                sort = query.Sort, descending = query.Descending
             });
             if (!_loader.IsCurrent(generation)) return;
+            var receivedRows = result.GetProperty("rows").EnumerateArray().Select(row => new EntityRow(row)).ToArray();
+            var receivedTotal = result.GetProperty("total").GetInt32();
+            _applied = query; Changed(nameof(AppliedSearchLabel));
             Rows.Clear();
-            foreach (var row in result.GetProperty("rows").EnumerateArray()) Rows.Add(new(row));
-            _total = result.GetProperty("total").GetInt32();
+            foreach (var row in receivedRows) Rows.Add(row);
+            _total = receivedTotal;
             Message = _total == 0 ? Labels.EmptyMessage : "A lista naprakész.";
             Changed(nameof(CountLabel)); Changed(nameof(MatchCount));
         }
@@ -319,13 +326,14 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
     private async Task ExportAsync()
     {
         if (IsBusy) return;
+        if (_applied is not { } query) { Message = "Először töltsd be az exportálandó listát."; return; }
         var dialog = new SaveFileDialog { Filter = "CSV fájl (*.csv)|*.csv", FileName = Labels.ExportFileName };
         if (dialog.ShowDialog() != true) return;
         IsBusy = true;
         try
         {
-            var result = await ExecuteAsync(Definition.Commands.Export, new { search = Search, filter = Filter, sort = SortColumn, descending = SortDescending });
-            await File.WriteAllTextAsync(dialog.FileName, result.GetProperty("csv").GetString(), new UTF8Encoding(true), _shutdown);
+            var result = await ExecuteAsync(Definition.Commands.Export, new { search = query.Search, filter = query.Filter, sort = query.Sort, descending = query.Descending });
+            await AtomicExport.WriteAsync(dialog.FileName, result.GetProperty("csv").GetString() ?? "", _shutdown);
             Message = Labels.ExportedMessage;
         }
         catch (Exception ex) { Message = ex.Message; }

@@ -11,6 +11,9 @@ public static class WorkspaceMenu
     {
         if (disabledModuleIds is { Count: > 0 })
             pages = pages.Where(page => !disabledModuleIds.Contains(page.ModuleId)).ToArray();
+        // Stock operations live inside the product workspace when that workspace is available.
+        if (pages.Any(p => p.ModuleId == "catalog" && p.Id == "products"))
+            pages = pages.Where(p => !(p.ModuleId == "inventory" && p.ViewKind == "inventory")).ToArray();
         var modules = pages.GroupBy(page => page.ModuleId, StringComparer.Ordinal).Select(Module).ToArray();
         return
         [

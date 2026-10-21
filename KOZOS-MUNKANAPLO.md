@@ -230,3 +230,11 @@ P1: üzleti használat előtt javítandó. P2: stabilizálás során javítandó
 - Maintenance restore/platform hiba, adatlapzár, bezárási védelem, technikai logger és teszt-host javítva.
 - Ellenőrzés: 133/133, wheel-ok, 6/6 render, WPF zárolási regresszió; 5 aktív modul és Active licenc.
 - Részletes A01–A16 állapot és következő csomag: docs/AUDIT-INTEGRACIO-2026-10-21.md.
+
+### 2026-10-21 – Codex – termék és készlet munkaterület, 0.4.1
+
+- Kiinduló commit d59396c. A08 keresési állapot/export, A09 stabil termék- és partnerrendezés, A07 atomi célfájl-részfeladat javítva.
+- MPN mező, kereső, saját készletszűrők; készletkezelés a terméktörzsben, kijelölt termékre szűrhető műveletek.
+- A nagykeres kosár későbbi funkció; a mező- és adatkapcsolati terv dokumentálva, élő kapcsolat és rendelésküldés nincs.
+- Ellenőrzés elkülönített forrásmásolatból: 139/139, wheel-ok, 9/9 WPF és késleltetett keresés/export/mentetlen művelet regresszió.
+- Útmutató: docs/TERMEKTORZS-KESZLET-ES-NAGYKER.md.

@@ -11,8 +11,7 @@ public sealed class PartnersModule : IModule
         context.RegisterCommand(new Handler("list", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerQuery>(input);
-            if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200 || !PartnerListing.IsSort(query.Sort))
-                throw new ArgumentException("Érvénytelen listázási kérés.");
+            PartnerListing.Validate(query);
             var snapshot = await repository.Snapshot(query.CompanyId, ct);
             var matching = PartnerListing.Match(snapshot.Partners, query);
             var rows = matching.Skip(query.Page * (long)query.PageSize > int.MaxValue ? int.MaxValue : query.Page * query.PageSize)
@@ -26,6 +25,7 @@ public sealed class PartnersModule : IModule
         context.RegisterCommand(new Handler("export", "partners.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = PartnerJson.Read<PartnerQuery>(input);
+            PartnerListing.Validate(query);
             return PartnerJson.Element(new { csv = PartnerRepository.ExportCsv(PartnerListing.Match((await repository.Snapshot(query.CompanyId, ct)).Partners, query)) });
         }));
         context.RegisterCommand(new Handler("dossier", "partners.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
@@ -76,11 +76,16 @@ public sealed class PartnersModule : IModule
 public static class PartnerListing
 {
     private static readonly StringComparer NameOrder = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("hu-HU"), true);
-    public static bool IsSort(string sort) => sort.Length <= 40 && sort.All(char.IsAsciiLetterOrDigit);
+    public static bool IsSort(string? sort) => sort is not null && sort.Length <= 40 && sort.All(char.IsAsciiLetterOrDigit);
+    public static void Validate(PartnerQuery query)
+    {
+        if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search is null || query.Search.Length > 200 || query.Filter is not ("all" or "customer" or "supplier" or "manufacturer" or "archived") || !IsSort(query.Sort))
+            throw new ArgumentException("Érvénytelen listázási kérés.");
+    }
     public static PartnerRecord[] Match(IEnumerable<PartnerRecord> source, PartnerQuery query)
     {
-        if (!IsSort(query.Sort)) throw new ArgumentException("Érvénytelen listázási kérés.");
-        var rows = source.Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
+        Validate(query);
+        var rows = source.OrderBy(p => p.Id).Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
             .Where(p => query.Filter switch
             { "customer" => p.Data.IsCustomer, "supplier" => p.Data.IsSupplier, "manufacturer" => p.Data.IsManufacturer, _ => true })
             .Where(p => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", p.Data.Name, p.Data.TaxId, p.Data.Email, p.Data.Phone, p.Data.City)

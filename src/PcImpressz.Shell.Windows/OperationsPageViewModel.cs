@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -23,6 +23,8 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     private readonly HostConnection _connection;
     private readonly Func<Guid?> _company;
     private readonly CancellationToken _shutdown;
+    private Guid? _focusedProductId;
+    public string StockScope {get;private set;}="Minden termék saját készlete";
     private bool _busy,_dirty,_filling;
     private Guid _operation=Guid.NewGuid();
     private string _productSearch="",_customerSearch="",_recordSearch="",_details="",_listNotice="";
@@ -91,9 +93,24 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     private void Dirty(){if(!_filling)IsDirty=true;Changed(nameof(BasketTotal));}
     public void CompanyChanged()
     {
-        Details="";ListNotice="";_filling=true;_listing=null;Rows.Clear();Movements.Clear();Basket.Clear();Products.Clear();Customers.Clear();
+        _focusedProductId=null;StockScope="Minden termék saját készlete";Changed(nameof(StockScope));Details="";ListNotice="";_filling=true;_listing=null;Rows.Clear();Movements.Clear();Basket.Clear();Products.Clear();Customers.Clear();
         SelectedRow=null;SelectedMovement=null;SelectedBasketLine=null;SelectedProduct=null;SelectedCustomer=null;
         _operation=Guid.NewGuid();_filling=false;IsDirty=false;Changed(nameof(BasketTotal));_=LoadAsync();
+    }
+    internal bool FocusProduct(EntityRow? row)
+    {
+        if(IsBusy||IsDirty){Message="Előbb fejezd be vagy vesd el a készletművelet szerkesztését.";return false;}
+        _focusedProductId=row?.Json.GetProperty("id").GetGuid();
+        StockScope=row is null ? "Minden termék saját készlete" : "Kijelölt termék: "+row["name"];
+        Changed(nameof(StockScope));_filling=true;
+        if(row is not null)
+        {
+            var product=new OperationProduct(_focusedProductId!.Value, row["name"]?.ToString()??"", row["sku"]?.ToString()??"", row["unitCode"]?.ToString()??"");
+            Products.Clear();Products.Add(product);SelectedProduct=product;
+        }
+        else SelectedProduct=null;
+        _recordSearch="";_productSearch="";Changed(nameof(RecordSearch));Changed(nameof(ProductSearch));_filling=false;
+        _=LoadAsync();return true;
     }
     private async Task<JsonElement> Send(string command,object payload)=>await _connection.SendAsync("module.execute",
         new ModuleCommandRequest(_company()??throw new InvalidOperationException("Válassz céget."),Definition.ModuleId,command,JsonSerializer.SerializeToElement(payload)),_shutdown);
@@ -103,7 +120,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
         IsBusy=true;
         try
         {
-            var refs=await Send("references",new{search=ProductSearch,customerSearch=CustomerSearch});
+            var refs=await Send("references",new{search=ProductSearch,customerSearch=CustomerSearch,productId=_focusedProductId});
             var selectedProduct=SelectedProduct;var selectedCustomer=SelectedCustomer;var productId=selectedProduct?.Id;var customerId=selectedCustomer?.Id;
             _filling=true;
             Products.Clear();foreach(var product in refs.GetProperty("products").EnumerateArray())
@@ -125,7 +142,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
     }
     private async Task RefreshRows()
     {
-        var listed=await Send("list",new{search=RecordSearch,recordSearch=RecordSearch});_listing=listed.Clone();PopulateRows();
+        var listed=await Send("list",new{search=RecordSearch,recordSearch=RecordSearch,productId=_focusedProductId});_listing=listed.Clone();PopulateRows();
         Movements.Clear();SelectedMovement=null;
         if(listed.TryGetProperty("movements",out var movements))foreach(var row in movements.EnumerateArray())Movements.Add(DisplayRow(row));
     }
@@ -248,7 +265,7 @@ internal sealed class OperationsPageViewModel:Observable,IWorkspacePage,IColumnL
         if(IsBusy)return;
         var file=new SaveFileDialog{Filter="CSV (*.csv)|*.csv",FileName=IsInventory?"keszlet.csv":"eladasok.csv"};if(file.ShowDialog()!=true)return;
         IsBusy=true;
-        try{var response=await Send("export",new{});await File.WriteAllTextAsync(file.FileName,Text(response,"csv"),new System.Text.UTF8Encoding(true),_shutdown);Message="A lista exportálva.";}
+        try{var response=await Send("export",new{productId=_focusedProductId,search=RecordSearch});await AtomicExport.WriteAsync(file.FileName,Text(response,"csv"),_shutdown);Message="A lista exportálva.";}
         catch(Exception ex){Message=ex.Message;}
         finally{IsBusy=false;}
     }

@@ -198,9 +198,16 @@ public sealed partial class ShellViewModel : Observable
     public string PageTitle => SelectedNavigation.Title;
     public string PageDescription => SelectedNavigation.Description;
     public object CurrentPage => _entityPages.TryGetValue(SelectedNavigation.PageKey, out var entityPage)
-        ? entityPage : SelectedNavigation.PageKey switch
+        ? ProductWorkspace(entityPage) : SelectedNavigation.PageKey switch
     { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(), _ => new DashboardPage() };
 
+    private object ProductWorkspace(IWorkspacePage page)
+    {
+        if (page is EntityPageViewModel products && page.Definition.ModuleId == "catalog" && page.Definition.Id == "products"
+            && !_disabledModules.Contains("inventory") && _entityPages.TryGetValue("inventory.inventory", out var stock)
+            && stock is OperationsPageViewModel inventory) return new ProductWorkspaceViewModel(products, inventory);
+        return page;
+    }
     private NavigationItem FindNavigation(string id)
     {
         foreach (var item in Navigation)

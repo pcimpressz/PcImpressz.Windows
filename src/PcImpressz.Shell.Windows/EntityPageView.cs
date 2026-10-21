@@ -27,6 +27,8 @@ public sealed class EntityPageView : UserControl
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,16) };
         message.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); message.SetBinding(TextBlock.TextProperty, new Binding("Message"));
         root.Children.Add(message);
+        var applied = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,10) };
+        applied.SetBinding(TextBlock.TextProperty, new Binding("AppliedSearchLabel")); root.Children.Add(applied);
         var body = new Grid(); body.ColumnDefinitions.Add(new() { Width = new(3, GridUnitType.Star) });
         body.ColumnDefinitions.Add(new() { Width = new(2, GridUnitType.Star) });
         body.RowDefinitions.Add(new() { Height = GridLength.Auto }); body.RowDefinitions.Add(new() { Height = GridLength.Auto });
@@ -91,6 +93,7 @@ public sealed class EntityPageView : UserControl
         {
             if (DataContext is not EntityPageViewModel vm) return;
             search.ToolTip = vm.Labels.SearchHint;
+            if (vm.Definition.ModuleId == "catalog" && vm.Definition.Id == "products") root.Children.Insert(1, new TextBlock { Text = vm.Labels.SearchHint, TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,10) });
             create.Content = vm.Labels.NewLabel;
             filter.ItemsSource = vm.Filters;
             if (filter.SelectedValue is null) filter.SelectedValue = vm.Filters[0].Value;

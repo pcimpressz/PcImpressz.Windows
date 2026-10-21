@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 
@@ -22,6 +22,7 @@ internal sealed class OperationsPageView:UserControl
         var actions=new WrapPanel();actions.Children.Add(Button("Frissítés","RefreshCommand"));actions.Children.Add(Button("CSV export","ExportCommand"));actions.Children.Add(ListGrid.ColumnButton(()=>DataContext as IColumnList));root.Children.Add(actions);
         var message=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,8,0,16)};message.SetResourceReference(TextBlock.ForegroundProperty,"AccentBrush");message.SetBinding(TextBlock.TextProperty,new Binding("Message"));root.Children.Add(message);
         root.Children.Add(Label(page.IsInventory?"Készletváltozás":"Új eladás"));
+        if(page.IsInventory){var scope=new TextBlock{FontWeight=FontWeights.SemiBold,Margin=new(0,0,0,10)};scope.SetBinding(TextBlock.TextProperty,new Binding("StockScope"));root.Children.Add(scope);}
         if(page.IsInventory)root.Children.Add(new TextBlock{Text="A régi, csak besorolt számlákból nem képzünk visszamenőleg készletet. A tényleges induló mennyiséget egyszer, nyitókészletként rögzítsd.",TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)});
         var editor=new StackPanel();editor.SetBinding(IsEnabledProperty,new Binding("IsNotBusy"));
         editor.Children.Add(Field("Termékkeresés (név vagy cikkszám)","ProductSearch"));

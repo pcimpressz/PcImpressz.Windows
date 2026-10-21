@@ -20,7 +20,7 @@ public sealed class CatalogModule : IModule
             CategoryRow(await repository.ArchiveCategory(CatalogJson.Read<CatalogArchive>(input), actor, ct)));
         Register(context, "categories-export", "catalog.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
-            var query = CatalogJson.Read<CatalogQuery>(input);
+            var query = ReadQuery(input);
             var rows = FilterCategories((await repository.Snapshot(query.CompanyId, ct)).Categories, query);
             return CatalogJson.Element(new { csv = CatalogRepository.ExportCsv("Név;Kód;Szülő;Leírás;Aktív", rows, c =>
                 [c.Data.Name, c.Data.Code, c.Data.ParentCode, c.Data.Description, c.Data.IsActive ? "Igen" : "Nem"]) });
@@ -37,7 +37,7 @@ public sealed class CatalogModule : IModule
             UnitRow(await repository.ArchiveUnit(CatalogJson.Read<CatalogArchive>(input), actor, ct)));
         Register(context, "units-export", "catalog.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
-            var query = CatalogJson.Read<CatalogQuery>(input);
+            var query = ReadQuery(input);
             var rows = FilterUnits((await repository.Snapshot(query.CompanyId, ct)).Units, query);
             return CatalogJson.Element(new { csv = CatalogRepository.ExportCsv("Név;Kód;Jelölés;Aktív", rows, u =>
                 [u.Data.Name, u.Data.Code, u.Data.Symbol, u.Data.IsActive ? "Igen" : "Nem"]) });
@@ -46,11 +46,16 @@ public sealed class CatalogModule : IModule
         {
             var query = ReadQuery(input);
             var matching = FilterProducts((await repository.Snapshot(query.CompanyId, ct)).Products, query);
-            if (context.Database is null) return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p => ProductRow(p)), matching.Length);
+            if (context.Database is null)
+            {
+                if (query.Filter is "in-stock" or "out-of-stock") throw new InvalidOperationException("A készletszűréshez céges adatbázis szükséges.");
+                return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p => ProductRow(p)), matching.Length);
+            }
             return context.Database.Execute(query.CompanyId, tx =>
             {
                 var quantities = CompanyReferenceQueries.StockQuantities(tx);
-                if (query.Sort == "quantity") matching = (query.Descending ? matching.OrderByDescending(p=>quantities.GetValueOrDefault(p.Id)) : matching.OrderBy(p=>quantities.GetValueOrDefault(p.Id))).ToArray();
+                matching = FilterStock(matching, quantities, query.Filter);
+                if (query.Sort == "quantity") matching = (query.Descending ? matching.OrderByDescending(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id) : matching.OrderBy(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id)).ToArray();
                 return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p=>ProductRow(p, quantities.GetValueOrDefault(p.Id))), matching.Length);
             });
         });
@@ -60,11 +65,18 @@ public sealed class CatalogModule : IModule
             ProductRow(await repository.ArchiveProduct(CatalogJson.Read<CatalogArchive>(input), actor, ct)));
         Register(context, "products-export", "catalog.export", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
-            var query = CatalogJson.Read<CatalogQuery>(input);
+            var query = ReadQuery(input);
             var rows = FilterProducts((await repository.Snapshot(query.CompanyId, ct)).Products, query);
+            if (context.Database is not null) rows = context.Database.Execute(query.CompanyId, tx =>
+            {
+                var quantities = CompanyReferenceQueries.StockQuantities(tx);
+                var filtered = FilterStock(rows, quantities, query.Filter);
+                return query.Sort == "quantity" ? (query.Descending ? filtered.OrderByDescending(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id) : filtered.OrderBy(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id)).ToArray() : filtered;
+            });
+            else if (query.Filter is "in-stock" or "out-of-stock") throw new InvalidOperationException("A készletszűréshez céges adatbázis szükséges.");
             return CatalogJson.Element(new { csv = CatalogRepository.ExportCsv(
-                "Név;Cikkszám;Kategória;Mértékegység;Revízió;Vonalkód;Beszerzés;Eladás;Aktív;Leírás;Paraméterek;Megjegyzés", rows, p =>
-                [p.Data.Name, p.Data.Sku, p.Data.CategoryCode, p.Data.UnitCode, p.Data.Revision, p.Data.Barcode,
+                "Név;Cikkszám;Gyártói cikkszám;Kategória;Mértékegység;Revízió;Vonalkód;Beszerzés;Eladás;Aktív;Leírás;Paraméterek;Megjegyzés", rows, p =>
+                [p.Data.Name, p.Data.Sku, p.Data.ManufacturerPartNumber, p.Data.CategoryCode, p.Data.UnitCode, p.Data.Revision, p.Data.Barcode,
                  p.Data.IsPurchaseable ? "Igen" : "Nem", p.Data.IsSalable ? "Igen" : "Nem", p.Data.IsActive ? "Igen" : "Nem",
                  p.Data.Description, p.Data.Parameters, p.Data.Notes]) });
         });
@@ -83,13 +95,13 @@ public sealed class CatalogModule : IModule
             Labels("mértékegység", "Mértékegység", "mértékegységet", "mertekegysegek.csv", "Keresés név, kód vagy jelölés alapján"),
             [new("all", "Aktív mértékegységek"), new("archived", "Archiváltak")]));
         context.RegisterPage(Page("products", context.ModuleId, "Terméktörzs", "Cikkszám, kategória, mértékegység és alapparaméterek.", "\uE7B8",
-            [new("name", "Termék neve", Required: true), new("sku", "Cikkszám", Required: true), new("categoryCode", "Kategória kódja"),
+            [new("name", "Termék neve", Required: true), new("sku", "Saját cikkszám", Required: true), new("manufacturerPartNumber", "Gyártói cikkszám"), new("categoryCode", "Kategória kódja"),
              new("unitCode", "Mértékegység kódja", Required: true), new("revision", "Revízió"), new("barcode", "Vonalkód"),
              new("description", "Leírás", "multiline"), new("parameters", "Paraméterek (név=érték)", "multiline"),
              new("isPurchaseable", "Beszerzésre jelölhető", "boolean"), new("isSalable", "Eladásra jelölhető", "boolean"),
              new("isActive", "Aktív", "boolean", DefaultChecked: true), new("notes", "Megjegyzés", "multiline")],
-            [new("name", "Termék", 220), new("sku", "Cikkszám", 140), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90),
-             new("quantity", "Darabszám", 110), new("revision", "Revízió", 90, false), new("barcode", "Vonalkód", 140, false),
+            [new("name", "Termék", 220), new("sku", "Saját cikkszám", 140), new("manufacturerPartNumber", "Gyártói cikkszám", 170), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90),
+             new("quantity", "Saját készlet", 110), new("revision", "Revízió", 90, false), new("barcode", "Vonalkód", 140, false),
              new("isPurchaseable", "Beszerzés", 110, false), new("isSalable", "Eladás", 100, false)],
             new("products-list", "products-save", "products-archive", "products-export"),
             new EntityPageLabels
@@ -100,9 +112,9 @@ public sealed class CatalogModule : IModule
                 ArchiveQuestion = "A termék inaktív állapotba kerül. Az adatai megmaradnak.",
                 ArchiveTitle = "Termék archiválása", ArchivedMessage = "A termék archiválva.",
                 ExportFileName = "termekek.csv", ExportedMessage = "A szűrt terméklista exportálva.",
-                SearchHint = "Keresés név, cikkszám, vonalkód, kategória vagy mértékegység alapján"
+                SearchHint = "Több szó, ékezet nélkül is. Példa: vezetek nelkuli eger · gyartoi:=ABC-123 · sku:=MOUSE-1 · vonalkod:599 · nev:\"vezeték nélküli\""
             },
-            [new("all", "Aktív termékek"), new("purchaseable", "Beszerzésre jelöltek"), new("salable", "Eladásra jelöltek"), new("archived", "Archiváltak")]));
+            [new("all", "Aktív termékek"), new("in-stock", "Van saját készleten"), new("out-of-stock", "Nincs saját készleten"), new("purchaseable", "Beszerzésre jelöltek"), new("salable", "Eladásra jelöltek"), new("archived", "Archiváltak")]));
         return ValueTask.CompletedTask;
     }
     public ValueTask StopAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
@@ -112,10 +124,13 @@ public sealed class CatalogModule : IModule
     private static CatalogQuery ReadQuery(JsonElement input)
     {
         var query = CatalogJson.Read<CatalogQuery>(input);
-        if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Search.Length > 200 || !IsSort(query.Sort))
+        if (query.Page < 0 || query.PageSize is < 1 or > 200 || (query.Search is null || query.Search.Length > 200) || query.Filter is null || query.Sort is null || !IsSort(query.Sort))
             throw new ArgumentException("Érvénytelen listázási kérés.");
         return query;
     }
+    public static ProductRecord[] FilterStock(ProductRecord[] products, IReadOnlyDictionary<Guid, decimal> quantities, string filter) =>
+        products.Where(p => filter switch
+        { "in-stock" => quantities.GetValueOrDefault(p.Id) > 0, "out-of-stock" => quantities.GetValueOrDefault(p.Id) <= 0, _ => true }).ToArray();
     private static int Skip(CatalogQuery query) => query.Page * (long)query.PageSize > int.MaxValue ? int.MaxValue : query.Page * query.PageSize;
     private static JsonElement Page(IEnumerable<JsonElement> rows, int total) => CatalogJson.Element(new { rows, total });
     private static EntityPageDescriptor Page(string id, string moduleId, string title, string description, string icon,
@@ -181,11 +196,12 @@ public static class CatalogListing
     public static ProductRecord[] Products(IEnumerable<ProductRecord> source, CatalogQuery query)
     {
         RequireSort(query.Sort);
-        var rows = source.Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
+        var search = new ProductSearch(query.Search);
+        var rows = source.OrderBy(p => p.Id).Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
             .Where(p => query.Filter switch
             { "purchaseable" => p.Data.IsPurchaseable, "salable" => p.Data.IsSalable, _ => true })
-            .Where(p => Contains(query.Search, p.Data.Name, p.Data.Sku, p.Data.Barcode, p.Data.CategoryCode, p.Data.UnitCode)).ToArray();
-        return Order(rows, query, ProductKeys, p => p.Data.Name);
+            .Where(p => search.Matches(p.Data)).ToArray();
+        return query.Sort.Length == 0 ? rows.OrderBy(p => search.Rank(p.Data)).ThenBy(p => p.Data.Name, NameOrder).ThenBy(p => p.Id).ToArray() : Order(rows, query, ProductKeys, p => p.Data.Name);
     }
     private static T[] Order<T>(T[] rows, CatalogQuery query, Dictionary<string, Func<T, string>> keys, Func<T, string> name) =>
         query.Sort.Length > 0 && keys.TryGetValue(query.Sort, out var key)
@@ -209,7 +225,7 @@ public static class CatalogListing
     };
     private static readonly Dictionary<string, Func<ProductRecord, string>> ProductKeys = new(StringComparer.Ordinal)
     {
-        ["name"] = p => p.Data.Name, ["sku"] = p => p.Data.Sku, ["categoryCode"] = p => p.Data.CategoryCode,
+        ["name"] = p => p.Data.Name, ["sku"] = p => p.Data.Sku, ["manufacturerPartNumber"] = p => p.Data.ManufacturerPartNumber, ["categoryCode"] = p => p.Data.CategoryCode,
         ["unitCode"] = p => p.Data.UnitCode, ["revision"] = p => p.Data.Revision, ["barcode"] = p => p.Data.Barcode,
         ["quantity"] = _ => "—", ["isPurchaseable"] = p => Yes(p.Data.IsPurchaseable), ["isSalable"] = p => Yes(p.Data.IsSalable)
     };

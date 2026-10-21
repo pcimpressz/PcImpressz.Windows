@@ -21,6 +21,7 @@ public sealed record ProductData
 {
     public string Name { get; init; } = "";
     public string Sku { get; init; } = "";
+    public string ManufacturerPartNumber { get; init; } = "";
     public string CategoryCode { get; init; } = "";
     public string UnitCode { get; init; } = "";
     public string Revision { get; init; } = "";
@@ -80,6 +81,7 @@ public static class CatalogValidation
             Sku = Code(data.Sku, 80, "Cikkszám", "/"),
             CategoryCode = OptionalCode(data.CategoryCode, 40, "Kategóriakód"),
             UnitCode = Code(data.UnitCode, 20, "Mértékegységkód", "/"),
+            ManufacturerPartNumber = Text(data.ManufacturerPartNumber, 100, "Gyártói cikkszám"),
             Revision = Text(data.Revision, 40, "Revízió"),
             Barcode = Text(data.Barcode, 80, "Vonalkód"),
             Description = Text(data.Description, 4000, "Leírás"),

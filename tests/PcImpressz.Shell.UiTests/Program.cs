@@ -53,9 +53,11 @@ internal static class Program
             var output=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../artifacts/ui-checks"));Directory.CreateDirectory(output);
             var bindingErrors=new StringWriter();PresentationTraceSources.DataBindingSource.Listeners.Add(new TextWriterTraceListener(bindingErrors));PresentationTraceSources.DataBindingSource.Switch.Level=SourceLevels.Error;
             VerifyBusyEditor();
+            UiProductChecks.VerifyAppliedQuery();
             foreach(var skin in BuiltInSkins.All)
             {
                 ThemeManager.Apply(skin,new AppearancePreferences{SkinId=skin.Id});
+                UiProductChecks.Render(output,skin.Id);
                 foreach(var kind in new[]{"inventory","sales"})
                 {
                     var definition=new EntityPageDescriptor(kind,kind,kind,"","",[new("name","Név")],
@@ -80,7 +82,7 @@ internal static class Program
             }
             PresentationTraceSources.DataBindingSource.Flush();
             if(bindingErrors.ToString().Length>0)throw new InvalidOperationException(bindingErrors.ToString());
-            Console.WriteLine("6/6 WPF renders passed; no binding errors.");return 0;
+            Console.WriteLine("9/9 WPF renders passed; no binding errors.");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }

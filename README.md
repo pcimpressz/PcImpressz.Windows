@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.1
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -116,3 +116,7 @@ A `CallerIdentity` egy későbbi megbízható hitelesítési réteg eredménye. 
 A bevételezés a szállítót a partnertörzs beszállítói közül, a terméket a terméktörzsből választja. A besorolás megmarad: bevételezés, költség vagy függő. Készletmozgás, helyi eladás és ellenőrzött cégmentés már működik. Élő NAV Online Számla lekérdezés és PDF-olvasás még nincs. A kiadói aktiválás, gépkulcsos megújítás és a drag & drop szerkesztő külön későbbi fejlesztés.
 
 A fejlesztői mesterlicenc aláírt és telepítéshez kötött, 2099-12-31-ig használható; normál ügyféllicencnél a legfeljebb 7 napos működési engedély megmarad. Részletek: [Fejlesztői licenc](docs/DEVELOPER_MASTER_LICENSE.md). Az InvenTree-kapcsolat kivezetve; az alkalmazás saját adatbázissal működik.
+
+## 0.4.1 – Terméktörzs és készlet
+
+Gyártói cikkszám, többfeltételes/ékezetfüggetlen keresés, saját készletszűrők és a terméktörzsbe épített készletműveletek. Audit: alkalmazott keresés szerinti export és atomi CSV-írás. Ellenőrzés: 139/139 teszt, wheel-ok, 9/9 WPF-render és célzott UI-regressziók. Használat és a későbbi nagykerenkénti kosarak terve: [Terméktörzs, készlet és nagyker](docs/TERMEKTORZS-KESZLET-ES-NAGYKER.md).
