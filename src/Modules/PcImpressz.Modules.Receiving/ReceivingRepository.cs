@@ -33,6 +33,12 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         Locked(request.CompanyId, (directory, state) => WriteClassification(directory, state, request, actor), ct);
     public Task<ReceiptRecord> Import(ReceiptImport request, ImportedDocument document, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (directory, state) => WriteImport(directory, state, request, document, actor), ct);
+    public Task<ReceiptRecord> Supplement(ReceiptSupplement request, ImportedDocument document, string actor, CancellationToken ct = default) =>
+        Locked(request.CompanyId, (scope, state) => WriteSupplement(scope, state, request, document, actor), ct);
+    public Task<bool> KnowsSupplier(Guid company, string taxId, CancellationToken ct = default) =>
+        Locked(company, (scope, _) => Supplier(MasterIndex.Load(scope.Directory, scope.Transaction), null, taxId) is not null, ct);
+    public Task<string?> ReadPartnersAsync(Guid company, CancellationToken ct = default) =>
+        Locked(company, (scope, _) => SupplierXmlLinks.ReadPartners(scope.Directory, scope.Transaction), ct);
 
     public Task<ReceiptRecord> Reverse(ReceiptReverse request, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (scope, state) =>
@@ -75,7 +81,7 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         if (document.Currency != "HUF") throw new ArgumentException("Most csak HUF számla importálható; a devizás összeget nem számítjuk át automatikusan.");
         var index = MasterIndex.Load(scope.Directory, scope.Transaction);
         var supplier = Supplier(index, request.SupplierId, document.SupplierTaxId)
-            ?? throw new ArgumentException(string.IsNullOrWhiteSpace(document.SupplierName)
+            ?? throw new ReceivingUnknownSupplierException(string.IsNullOrWhiteSpace(document.SupplierName)
                 ? "Válassz szállítót a partnertörzs beszállítói közül."
                 : "Nincs ilyen beszállító a partnertörzsben: " + document.SupplierName.Trim() + ". Vedd fel kézzel, majd olvasd be újra.");
         if (!string.IsNullOrWhiteSpace(document.SupplierTaxId) && ReceivingText.TaxKey(supplier.TaxId) != ReceivingText.TaxKey(document.SupplierTaxId))
@@ -86,11 +92,66 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var due = string.IsNullOrWhiteSpace(request.DueOn) ? document.DueOn : request.DueOn;
         var lines = ReceivingMatching.Build(document.Lines.Select(line => new ReceiptLineDraft(null, null, line.Name, line.Sku, line.Barcode, line.UnitCode,
             line.Quantity, line.NetUnitPrice, line.VatRate ?? throw new ArgumentException("Hiányzó áfakulcs: add meg az importban."), line.IsService)).ToArray(), index.Products);
-        var data = Compose(number, supplier, issued, due, "", "Bolt", source, "uj", null, lines);
+        var data = Compose(number, supplier, issued, due, request.Notes, "Bolt", source, "uj", null, lines);
         data = data with { SourceNet=document.ExpectedNet, SourceVat=document.ExpectedVat, SourceGross=document.ExpectedGross };
         CheckSourceTotals(data);
         RejectDuplicate(state, null, data);
         return Store(scope, state, null, data, actor, "import");
+    }
+    private ReceiptRecord WriteSupplement(ModuleStorageScope scope, ReceiptState state, ReceiptSupplement request, ImportedDocument document, string actor)
+    {
+        var existing = Find(state, request.Id, request.Version) ?? throw new ReceivingConflictException("A számla nem található.");
+        if (existing.Data.Status is not ("uj" or "fuggo"))
+            throw new ArgumentException("A lezárt számla adatai nem pótolhatók.");
+        if (document.Currency != "HUF") throw new ArgumentException("Most csak HUF számla adata pótolható.");
+        if (!string.IsNullOrWhiteSpace(document.SupplierTaxId) && ReceivingText.TaxKey(existing.Data.SupplierTaxId) != ReceivingText.TaxKey(document.SupplierTaxId))
+            throw new ArgumentException("A pótló fájl adószáma nem ehhez a szállítóhoz tartozik.");
+        if (!string.IsNullOrWhiteSpace(document.Number) && !document.Number.Trim().Equals(existing.Data.Number, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("A pótló fájl számlaszáma nem egyezik a megnyitott számlával.");
+        var changed = false;
+        var due = existing.Data.DueOn;
+        if (due.Length == 0 && !string.IsNullOrWhiteSpace(document.DueOn)) { due = document.DueOn; changed = true; }
+        var index = MasterIndex.Load(scope.Directory, scope.Transaction);
+        ReceiptLine[] lines;
+        if (existing.Data.Lines.Length == 0)
+        {
+            lines = ReceivingMatching.Build(document.Lines.Select(line => new ReceiptLineDraft(null, null, line.Name, line.Sku, line.Barcode, line.UnitCode,
+                line.Quantity, line.NetUnitPrice, line.VatRate ?? throw new ArgumentException("Hiányzó áfakulcs a pótló fájlban."), line.IsService)).ToArray(), index.Products);
+            changed = true;
+        }
+        else
+        {
+            var drafts = existing.Data.Lines.Select(line =>
+            {
+                var extra = document.Lines.FirstOrDefault(candidate => ReceivingText.Compact(candidate.Name) == ReceivingText.Compact(line.Name));
+                var sku = line.Sku;
+                var barcode = line.Barcode;
+                if (extra is not null && sku.Length == 0 && extra.Sku.Length > 0) { sku = extra.Sku; changed = true; }
+                if (extra is not null && barcode.Length == 0 && extra.Barcode.Length > 0) { barcode = extra.Barcode; changed = true; }
+                return new ReceiptLineDraft(line.Id, barcode != line.Barcode || sku != line.Sku ? null : line.ProductId, line.Name, sku, barcode, line.UnitCode,
+                    line.Quantity, line.NetUnitPrice, line.VatRate, line.Match == "szolgaltatas");
+            }).ToArray();
+            lines = ReceivingMatching.Build(drafts, index.Products);
+        }
+        if (!changed) throw new ArgumentException("A fájl nem tartalmazott új, hiányzó adatot ehhez a számlához.");
+        var (net, vat, gross) = ReceivingMatching.Totals(lines);
+        var sourceName = string.IsNullOrWhiteSpace(request.FileName) ? "fájl" : Path.GetFileName(request.FileName);
+        var data = existing.Data with
+        {
+            DueOn = ReceivingText.Date(due, "A fizetési határidő", false),
+            Lines = lines, Net = net, Vat = vat, Gross = gross,
+            Notes = JoinNote(existing.Data.Notes, "Hiányzó adatok pótolva: " + sourceName),
+            SourceNet = existing.Data.SourceNet ?? document.ExpectedNet,
+            SourceVat = existing.Data.SourceVat ?? document.ExpectedVat,
+            SourceGross = existing.Data.SourceGross ?? document.ExpectedGross
+        };
+        CheckSourceTotals(data);
+        return Store(scope, state, existing, data, actor, "supplement");
+    }
+    private static string JoinNote(string existing, string extra)
+    {
+        var text = string.IsNullOrWhiteSpace(existing) ? extra : existing.TrimEnd() + "\n" + extra;
+        return text.Length <= 4000 ? text : text[^4000..];
     }
     private ReceiptRecord WriteClassification(ModuleStorageScope scope, ReceiptState state, ReceiptClassify request, string actor)
     {
@@ -157,7 +218,7 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         if (state.Receipts.Any(receipt => receipt.Id != self
             && receipt.Data.SupplierId == data.SupplierId
             && string.Equals(receipt.Data.Number, data.Number, StringComparison.OrdinalIgnoreCase)))
-            throw new ArgumentException("Ezzel a számlaszámmal ennél a szállítónál már van bevételezés.");
+            throw new ReceivingDuplicateException("Ezzel a számlaszámmal ennél a szállítónál már van bevételezés.");
     }
     private ReceiptRecord Store(ModuleStorageScope scope, ReceiptState state, ReceiptRecord? existing, ReceiptData data, string actor, string action)
     {

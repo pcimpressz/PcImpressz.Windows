@@ -59,6 +59,19 @@ public sealed class ReceivingModule : IModule
             request = request with { Source = extension == ".xml" || request.Source == "nav" ? "nav" : "xls" };
             return Detail(await repository.Import(request, ReceivingImport.Read(request.FileName, request.ContentBase64), actor, ct));
         });
+        Register(context, "nav-pull", "receiving.write", CommandAccess.Licensed, async (input, actor, ct) =>
+        {
+            var request = ReceivingJson.Read<NavPullRequest>(input);
+            var secrets = NavConnectionStore.Read(context.GetCompanyDataDirectory(request.CompanyId), request.CompanyId)
+                ?? throw new ArgumentException("Az admin előbb állítsa be a cég NAV-kapcsolatát a Beállításokban.");
+            var today = DateOnly.FromDateTime(context.TimeProvider.GetUtcNow().UtcDateTime);
+            return ReceivingJson.Element(await NavIntake.PullAsync(repository, secrets, request.CompanyId, request.From, request.To, today, actor, ct));
+        });
+        Register(context, "supplement", "receiving.write", CommandAccess.Licensed, async (input, actor, ct) =>
+        {
+            var request = ReceivingJson.Read<ReceiptSupplement>(input);
+            return Detail(await repository.Supplement(request, ReceivingImport.ReadSupplement(request.FileName, request.ContentBase64), actor, ct));
+        });
         Register(context, "nav-status", "receiving.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = ReceivingJson.Read<ReceiptQuery>(input);
@@ -80,7 +93,7 @@ public sealed class ReceivingModule : IModule
         Register(context, "archive", "receiving.write", CommandAccess.Licensed, (_, _, _) =>
             Task.FromException<JsonElement>(new ArgumentException("A számlát nem archiváljuk. A besorolás dönti el, hogy bevételezés, költség vagy függő.")));
         context.RegisterPage(new("receiving", context.ModuleId, "Bevételezés",
-            "Kézi számla, NAV-besorolás vagy Excel/CSV/XML import. A szállító a partnertörzsből, a termék a terméktörzsből jön.",
+            "Kézi számla, NAV-lekérés vagy Excel/CSV/XML import. A hiányzó azonosító XML-ből vagy PDF-be ágyazott számlából pótolható.",
             "\uE7BF",
             [new("number", "Számlaszám", Required: true), new("supplierName", "Szállító", Required: true),
              new("issuedOn", "Kelt"), new("notes", "Megjegyzés", "multiline")],

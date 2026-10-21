@@ -15,9 +15,13 @@ A bevételezés bejövő számlát tart. A lista elején lehet választani, honn
 
 ## NAV és import
 
-A NAV-gomb ebben a körben a már letöltött NAV-számla XML-t olvassa. Az élő Online Számla lekérdezés a Beállításokban mentett technikai felhasználót használja majd. A kapcsolat cégenként külön van.
+A NAV-indítás a Beállításokban mentett Online Számla kapcsolattal kéri le a bejövő számlákat. Az alap a legutóbbi 30 nap, legfeljebb egy év, és a lista húsz oldalnál megáll. A beérkezett számla új állapotba kerül; a besorolás dönti el, hogy bevételezés, költség vagy függő. Már ismert számlaszám nem íródik felül. Ha a szállító nincs a partnertörzsben, a számla kimarad, és a program felsorolja: vedd fel a szállítót, majd kérd le újra. A letöltött NAV-számla XML továbbra is megnyitható fájlból. A kapcsolat cégenként külön van.
 
-A Beállítások oldalon adható meg az adószám, a technikai felhasználó, a jelszó, az aláírókulcs, a cserekulcs és a teszt mód. A jelszó és a két kulcs a Windows-felhasználóhoz kötött titkosítással kerül a cég `modules/receiving/nav-connection.bin` fájljába. A fájl nem tartalmazza olvashatóan a titkot, másik felhasználó vagy másik gép nem nyitja meg. A képernyő a mentés után nem írja vissza a jelszót és a kulcsokat. Üresen hagyva a már mentett titok marad. A demó cég adatainak törlése ezt a fájlt is törli. A PDF tételsorainak kiolvasása szintén a következő kör. Most Excel (xlsx) és CSV olvasható: termék neve, mennyiség, nettó egységár. A cikkszám és a vonalkód a párosítást segíti.
+Ha a szállító egyedi mezője `xml-szamla`, a program felismeri az XML-kapcsolatot. `xml-szamla=https://...` esetén megpróbálja lekérni a számlát, és csak a hiányzó cikkszámot vagy vonalkódot pótolja. `xml-szamla=igen` azt jelzi, hogy a kapcsolat később lesz bekötve; a NAV-számla ettől még bekerül.
+
+A megnyitott, még nem lezárt számlán a hiányzó adat külön XML-ből vagy PDF-ből pótolható. A PDF-ből csak a beágyazott számla-XML olvasható; a képi tételsorok olvasása nincs kész. Az e-mailes számlafogadás későbbi kör.
+
+A Beállítások oldalon adható meg az adószám, a technikai felhasználó, a jelszó, az aláírókulcs, a cserekulcs és a teszt mód. A jelszó és a két kulcs a Windows-felhasználóhoz kötött titkosítással kerül a cég `modules/receiving/nav-connection.bin` fájljába. A fájl nem tartalmazza olvashatóan a titkot, másik felhasználó vagy másik gép nem nyitja meg. A képernyő a mentés után nem írja vissza a jelszót és a kulcsokat. Üresen hagyva a már mentett titok marad. A demó cég adatainak törlése ezt a fájlt is törli. Excel (xlsx) és CSV olvasható: termék neve, mennyiség, nettó egységár és áfa. A cikkszám és a vonalkód a párosítást segíti.
 
 Az import és a NAV-számla is új állapotba kerül. A besorolás ugyanaz, mint a kézi számlánál.
 

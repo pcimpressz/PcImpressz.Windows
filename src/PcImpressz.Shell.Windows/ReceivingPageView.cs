@@ -24,7 +24,7 @@ public sealed class ReceivingPageView : UserControl
         var panel = new StackPanel();
         panel.SetBinding(VisibilityProperty, new Binding("IsHome") { Converter = new BooleanToVisibilityConverter() });
         panel.Children.Add(Text("Bevételezés", 22, true));
-        panel.Children.Add(Muted("Válaszd ki, honnan jön a számla. Ami NAV-ról vagy importból érkezik, új állapotba kerül: bevételezed, költségként hagyod, vagy függőben marad."));
+        panel.Children.Add(Muted("Válaszd ki, honnan jön a számla. A NAV-lekérés az Online Számla bejövő számláit hozza. Ami bekerül, új állapotba kerül: bevételezed, költségként hagyod, vagy függőben marad."));
         var modes = new WrapPanel { Margin = new(0, 0, 0, 12) };
         modes.Children.Add(Primary("Kézi számla", "ManualCommand"));
         modes.Children.Add(Button("NAV XML betöltése", "NavCommand"));
@@ -80,6 +80,12 @@ public sealed class ReceivingPageView : UserControl
         panel.Children.Add(Text("Szállító", 14, true));
         panel.Children.Add(Suppliers());
         panel.Children.Add(Button("Új szállító a partnertörzsbe", "NewSupplierCommand"));
+        if (nav)
+        {
+            panel.Children.Add(Plain("Kezdő nap (éééé-hh-nn)", "PullFrom"));
+            panel.Children.Add(Plain("Záró nap (éééé-hh-nn)", "PullTo"));
+            panel.Children.Add(Primary("Számlák lekérése a NAV-tól", "PullNavCommand"));
+        }
         panel.Children.Add(Labeled("Számlaszám (XML-ből kitölthető)", "Number"));
         panel.Children.Add(Labeled("Kelt (éééé-hh-nn, üresen a fájl vagy a mai nap)", "IssuedOn"));
         panel.Children.Add(Primary(nav ? "NAV-számla XML megnyitása" : "Fájl kiválasztása és beolvasás", "PickFileCommand"));
@@ -107,6 +113,9 @@ public sealed class ReceivingPageView : UserControl
         var add = Button("Új tételsor", "AddLineCommand");
         add.SetBinding(VisibilityProperty, new Binding("IsEditable") { Converter = new BooleanToVisibilityConverter() });
         panel.Children.Add(add);
+        var supplement = Button("Hiányzó adatok XML-ből vagy PDF-ből", "SupplementCommand");
+        supplement.SetBinding(VisibilityProperty, new Binding("IsEditable") { Converter = new BooleanToVisibilityConverter() });
+        panel.Children.Add(supplement);
         panel.Children.Add(Bound(Text("", 14, true), "NetLabel"));
         panel.Children.Add(Bound(Text("", 14, true), "GrossLabel"));
         var save = Primary("Mentés", "SaveCommand");
@@ -163,6 +172,15 @@ public sealed class ReceivingPageView : UserControl
         combo.SetBinding(ComboBox.SelectedItemProperty, new Binding("SelectedSupplier"));
         combo.SetBinding(IsEnabledProperty, new Binding("CanPickSupplier"));
         return combo;
+    }
+    private static UIElement Plain(string label, string path)
+    {
+        var panel = new StackPanel { Margin = new(0, 0, 0, 8) };
+        panel.Children.Add(Muted(label));
+        var box = Input();
+        box.SetBinding(TextBox.TextProperty, new Binding(path) { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        panel.Children.Add(box);
+        return panel;
     }
     private static UIElement Labeled(string label, string path)
     {

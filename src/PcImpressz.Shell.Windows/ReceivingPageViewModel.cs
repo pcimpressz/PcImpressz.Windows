@@ -116,6 +116,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     private string _message = "Válassz céget, majd töltsd be a számlákat.";
     private string _counts = "";
     private string _search = "", _filter = "uj", _number = "", _issued = "", _due = "", _notes = "", _warehouse = "Bolt";
+    private string _pullFrom = "", _pullTo = "";
     private string _net = "0", _gross = "0";
     private SupplierOption? _supplier;
     private ReceiptRow? _selected;
@@ -141,6 +142,8 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         AddLineCommand = new RelayCommand(AddLine);
         NewSupplierCommand = new RelayCommand(() => _ = CreateSupplierAsync());
         PickFileCommand = new RelayCommand(() => _ = ImportFileAsync());
+        PullNavCommand = new RelayCommand(() => _ = PullNavAsync());
+        SupplementCommand = new RelayCommand(() => _ = SupplementFileAsync());
         ExportCommand = new RelayCommand(() => _ = ExportAsync());
         SearchCommand = new RelayCommand(() => { _typed.CancelPending(); _ = LoadAsync(); });
     }
@@ -190,9 +193,11 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public string GrossLabel => "Bruttó: " + _gross + " Ft";
     public string EditorTitle => (_editId is null ? "Új kézi számla" : Number) + " · " + ReceivingStatus(_status) + (IsDirty ? " · nincs mentve" : "");
     public string IntakeTitle => IsNav ? "NAV-számla besorolása" : "Számla importálása";
+    public string PullFrom { get => _pullFrom; set { _pullFrom = value; Changed(); } }
+    public string PullTo { get => _pullTo; set { _pullTo = value; Changed(); } }
     public string IntakeHelp => IsNav
-        ? "Az élő NAV Online Számla lekérdezéshez technikai felhasználó kell; azt a következő kör köti be. A letöltött NAV-számla XML ugyanúgy új állapotba kerül, és eldöntöd: bevételezés, költség vagy függő."
-        : "Excel (xlsx) vagy CSV: termék neve, mennyiség, nettó egységár. A saját cikkszám, gyártói cikkszám és vonalkód segít a párosításban. A PDF olvasása a következő kör.";
+        ? "A Számlák lekérése a NAV-tól gomb a Beállításokban mentett kapcsolattal kéri le a bejövő számlákat. Új állapotba kerülnek, a besorolást te döntöd el. Ismeretlen szállító számlája kimarad, amíg a partnertörzsbe nem kerül. A letöltött NAV XML továbbra is megnyitható. Ha a szállító egyedi mezője xml-szamla, a program felismeri az XML-kapcsolatot, és ha van címe, megpróbálja pótolni a hiányzó azonosítókat."
+        : "Excel (xlsx) vagy CSV: termék neve, mennyiség, nettó egységár és áfa. A cikkszám és a vonalkód a párosítást segíti. A képi PDF-olvasás még nincs kész. Megnyitott számlán a hiányzó adat külön XML-ből vagy a PDF-be ágyazott számla-XML-ből pótolható.";
     public SupplierOption? SelectedSupplier { get => _supplier; set { _supplier = value; Changed(); MarkDirty(); } }
     public ReceiptRow? SelectedRow { get => _selected; set { _selected = value; Changed(); } }
     public ICommand ManualCommand { get; }
@@ -208,6 +213,8 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public ICommand AddLineCommand { get; }
     public ICommand NewSupplierCommand { get; }
     public ICommand PickFileCommand { get; }
+    public ICommand PullNavCommand { get; }
+    public ICommand SupplementCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand SearchCommand { get; }
 
@@ -292,7 +299,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
             _matches = result.GetProperty("total").GetInt32();
             Changed(nameof(MatchCount));
             if (IsHome) Message = _matches == 0
-                ? "Ebben a nézetben nincs számla. Kézi felvétel, NAV XML vagy import indítható."
+                ? "Ebben a nézetben nincs számla. Kézi felvétel, NAV-lekérés vagy import indítható."
                 : "A lista naprakész. Új számlánál döntesz: bevételezés, költség vagy függő.";
         }
         catch (Exception ex) { if (_loader.IsCurrent(generation)) Message = ex.Message; }
@@ -397,6 +404,70 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         }
         catch (Exception ex) { Message = ex.Message; }
         finally { IsBusy = false; }
+    }
+    private async Task PullNavAsync()
+    {
+        if (IsBusy || !IsNav) return;
+        IsBusy = true;
+        string? summary = null;
+        try
+        {
+            var result = await ModuleAsync("receiving", "nav-pull", new { from = PullFrom, to = PullTo });
+            summary = PullSummary(result);
+            _mode = "home";
+            NotifyMode();
+        }
+        catch (Exception ex) { Message = ex.Message; }
+        finally { IsBusy = false; }
+        if (summary is null) return;
+        await LoadAsync();
+        Message = summary;
+    }
+    private async Task SupplementFileAsync()
+    {
+        if (IsBusy || !IsEditor || !IsEditable || _editId is null) return;
+        if (IsDirty) { Message = "Előbb mentsd a számlát, utána pótolhatók a hiányzó adatok."; return; }
+        var dialog = new OpenFileDialog
+        {
+            Title = "Hiányzó adatok", CheckFileExists = true,
+            Filter = "XML vagy PDF (*.xml;*.pdf)|*.xml;*.pdf"
+        };
+        if (dialog.ShowDialog() != true) return;
+        IsBusy = true;
+        try
+        {
+            var pdf = Path.GetExtension(dialog.FileName).Equals(".pdf", StringComparison.OrdinalIgnoreCase);
+            if (new FileInfo(dialog.FileName).Length > (pdf ? 8_000_000 : 1_500_000))
+                throw new IOException(pdf ? "A fájl nagyobb 8 MB-nál." : "A fájl nagyobb 1,5 MB-nál.");
+            var bytes = await File.ReadAllBytesAsync(dialog.FileName, _shutdown);
+            var saved = await ModuleAsync("receiving", "supplement", new
+            {
+                id = _editId, version = _version, fileName = Path.GetFileName(dialog.FileName), contentBase64 = Convert.ToBase64String(bytes)
+            });
+            Fill(saved);
+            Message = "A hiányzó adatok bekerültek a számlára. Nézd át a párosítást, majd válassz besorolást.";
+        }
+        catch (Exception ex) { Message = ex.Message; }
+        finally { IsBusy = false; }
+    }
+    private static string PullSummary(JsonElement result)
+    {
+        var text = result.GetProperty("from").GetString() + " – " + result.GetProperty("to").GetString()
+            + ": " + result.GetProperty("found").GetInt32() + " számla a NAV-listán, "
+            + result.GetProperty("imported").GetArrayLength() + " újként bekerült, "
+            + result.GetProperty("skipped").GetInt32() + " már ismert vagy nem rögzítendő.";
+        var unknown = result.GetProperty("unknownSuppliers");
+        if (unknown.GetArrayLength() > 0)
+            text += " Ismeretlen szállító, ezért kimaradt: " + string.Join(", ", unknown.EnumerateArray().Take(8).Select(row =>
+                (row.GetProperty("name").GetString() ?? "") + " (" + row.GetProperty("invoiceNumber").GetString() + ")")) + ".";
+        var errors = result.GetProperty("errors");
+        if (errors.GetArrayLength() > 0)
+            text += " Hibák: " + string.Join(" ", errors.EnumerateArray().Take(5).Select(item => item.GetString()));
+        var feeds = result.GetProperty("xmlFeeds");
+        if (feeds.GetArrayLength() > 0)
+            text += " Szállítói XML: " + string.Join(" ", feeds.EnumerateArray().Take(5).Select(item => item.GetString()));
+        if (result.GetProperty("truncated").GetBoolean()) text += " A lista 20 oldalnál megállt, szűkítsd a dátumot.";
+        return text;
     }
     private async Task ExportAsync()
     {
@@ -509,8 +580,17 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     private void BeginIntake(string mode)
     {
         if (!CanLeave()) return;
-        _populating = true; _number = ""; _issued = ""; _due = ""; _supplier = null; _populating = false; IsDirty = false;
-        _mode = mode; NotifyMode(); _ = LoadSuppliersAsync();
+        _populating = true;
+        _editId = null; _version = 0; _status = "uj"; _number = ""; _issued = ""; _due = ""; _supplier = null;
+        if (mode == "nav")
+        {
+            _pullTo = DateTime.Now.ToString("yyyy-MM-dd");
+            _pullFrom = DateTime.Now.AddDays(-30).ToString("yyyy-MM-dd");
+        }
+        _populating = false; IsDirty = false;
+        _mode = mode; NotifyMode();
+        Changed(nameof(PullFrom)); Changed(nameof(PullTo));
+        _ = LoadSuppliersAsync();
         Message = IntakeHelp;
     }
     private void Back()

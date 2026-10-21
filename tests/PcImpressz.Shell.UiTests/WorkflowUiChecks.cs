@@ -19,7 +19,13 @@ internal static class WorkflowUiChecks
         var view=new ReceivingPageView{DataContext=page,Width=1100};
         Snapshot(view,output,"receiving-home-"+skin,1100,1000);
         var labels=Descendants(view).OfType<Button>().Select(b=>b.Content?.ToString()??"").ToArray();
-        if(!labels.Contains("NAV XML betöltése")||labels.Any(s=>s.Contains("PDF")||s=="Lekérés a NAV-tól"))throw new InvalidOperationException("Nem támogatott importot ígér a felület.");
+        if(!labels.Contains("NAV XML betöltése"))throw new InvalidOperationException("A NAV belépés hiányzik a bevételezésről.");
+        page.NavCommand.Execute(null);view.UpdateLayout();
+        labels=Descendants(view).OfType<Button>().Select(b=>b.Content?.ToString()??"").ToArray();
+        if(!labels.Contains("Számlák lekérése a NAV-tól"))throw new InvalidOperationException("A NAV-számla lekérése nincs a felületen.");
+        Set(page,"_mode","editor");page.GetType().GetMethod("NotifyMode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(page,null);view.UpdateLayout();
+        labels=Descendants(view).OfType<Button>().Select(b=>b.Content?.ToString()??"").ToArray();
+        if(!labels.Contains("Hiányzó adatok XML-ből vagy PDF-ből"))throw new InvalidOperationException("A hiányzó adatok pótlása nincs a számlán.");
         Set(page,"_mode","editor");Set(page,"_editId",Guid.NewGuid());Set(page,"_version",2L);Set(page,"_status","bevetelezve");
         page.Number="BE-2026-001";page.IssuedOn="2026-10-21";
         page.Suppliers.Add(new(Guid.NewGuid(),"Teszt nagyker","12345678-2-42"));page.SelectedSupplier=page.Suppliers[0];
