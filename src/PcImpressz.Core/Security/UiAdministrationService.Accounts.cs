@@ -10,6 +10,11 @@ public sealed partial class UiAdministrationService
         {
             if(token is null || !_sessions.TryGetValue(token,out var bound) || bound.Company!=company || bound.Sid!=sid || bound.Session.ExpiresAt<=clock.GetUtcNow())
                 throw new UnauthorizedAccessException("Jelentkezz be a kiválasztott céghez. A munkamenet hiányzik vagy lejárt.");
+            if(bound.Development)
+            {
+                if(developmentAccess?.Invoke(sid)!=true)throw new UnauthorizedAccessException("A fejlesztői mód kikapcsolva; jelentkezz be rendesen.");
+                return bound.Session;
+            }
             var user=credentials.Execute(company,tx=>tx.Read<User>("accounts","user/"+bound.Session.UserName));
             if(user is null || user.Disabled || user.Role!=bound.Session.Role)throw new UnauthorizedAccessException("A fiók jogosultsága megváltozott. Jelentkezz be újra.");
             return bound.Session;

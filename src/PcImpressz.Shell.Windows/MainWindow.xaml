@@ -48,10 +48,10 @@
 <StackPanel Margin="8,0,0,0" Visibility="{DynamicResource NavigationLabelVisibility}">
  <TextBlock Text="{Binding SignedInLabel}" TextWrapping="Wrap" Margin="0,0,0,8" />
  <WrapPanel Visibility="{Binding IsSignedIn, Converter={StaticResource BoolVisibility}}">
-  <Button Content="Kijelentkezés" Command="{Binding LogoutCommand}" Padding="8,5" Margin="0,0,5,6" />
-  <Button Content="Jelszócsere" Command="{Binding PasswordCommand}" Padding="8,5" Margin="0,0,5,6" />
+  <Button Visibility="{Binding ShowAccountControls, Converter={StaticResource BoolVisibility}}" Content="Kijelentkezés" Command="{Binding LogoutCommand}" Padding="8,5" Margin="0,0,5,6" />
+  <Button Visibility="{Binding ShowAccountControls, Converter={StaticResource BoolVisibility}}" Content="Jelszócsere" Command="{Binding PasswordCommand}" Padding="8,5" Margin="0,0,5,6" />
  </WrapPanel>
- <Button Content="Felhasználók és jogosultságok" Command="{Binding UsersCommand}" Padding="8,5" Visibility="{Binding IsCompanyAdmin, Converter={StaticResource BoolVisibility}}" />
+ <Button Content="Felhasználók és jogosultságok" Command="{Binding UsersCommand}" Padding="8,5" Visibility="{Binding CanManageAccounts, Converter={StaticResource BoolVisibility}}" />
 </StackPanel><TextBlock Text="MUNKATERÜLET" Style="{StaticResource Eyebrow}" Margin="8,16,0,0" Visibility="{DynamicResource NavigationLabelVisibility}" />
       </StackPanel>
       <StackPanel DockPanel.Dock="Bottom">

@@ -96,7 +96,7 @@ internal static class UiProductChecks
         if (workspace.SelectedTab != 1 || products.SelectedRow is not null) throw new InvalidOperationException("Az új termék nem külön adatlapon nyílt meg.");
         Pump(Task.Delay(30)); view.Measure(new Size(1100, double.PositiveInfinity)); view.Arrange(new Rect(0, 0, 1100, height)); view.UpdateLayout();
         var inputs = Descendants(view).OfType<TextBox>().Where(box => box.DataContext is EntityFieldViewModel).ToArray();
-        if (inputs.Length < 3 || inputs.Any(box => box.ActualWidth < 400)) throw new InvalidOperationException("A termékadatlap mezői túl keskenyek.");
+        if (inputs.Length < 3 || inputs.Any(box => box.ActualWidth < 180)) throw new InvalidOperationException("A kompakt termékadatlap mezői nem használható szélességűek.");
         products.Fields[0].Text = "Megőrzött terméknév";
         workspace.SelectedTab = 0; Pump(Task.Delay(20)); workspace.SelectedTab = 1; Pump(Task.Delay(20));
         if (products.Fields[0].Text != "Megőrzött terméknév" || !products.IsDirty) throw new InvalidOperationException("A fülváltás eldobta az adatlapot.");

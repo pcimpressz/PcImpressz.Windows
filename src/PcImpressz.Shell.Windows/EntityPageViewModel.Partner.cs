@@ -4,6 +4,11 @@ using PcImpressz.Contracts;
 namespace PcImpressz.Shell.Windows;
 public sealed partial class EntityPageViewModel
 {
+    public bool IsProductMaster=>Definition.ModuleId=="catalog"&&Definition.Id=="products";
+    public bool IsCompactMaster=>IsPartnerMaster||IsProductMaster;
+    public event Action? StockRequested;
+    public ICommand OpenProductStockCommand=>new RelayCommand(()=>StockRequested?.Invoke());
+    public bool IsOverviewDataAllowed=>_connection.Session?.Role=="admin";
     public bool IsPartnerMaster=>Definition.ModuleId=="partners"&&Definition.Id=="partners";
     public bool CanLookupPartnerNav=>IsPartnerMaster&&_editId is null&&CanWrite;
     public ICommand LookupPartnerNavCommand=>new RelayCommand(()=>_=LookupPartnerNavAsync());

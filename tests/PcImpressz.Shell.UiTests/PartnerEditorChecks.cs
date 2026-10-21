@@ -18,6 +18,14 @@ internal static class PartnerEditorChecks
         if(PartnerNameFormatting.Format("PC-IMPRESSZ KFT.")!="PC-Impressz Kft."||PartnerNameFormatting.Format("ÁRVÍZTŰRŐ UTCA 12. II.")!="Árvíztűrő Utca 12. II."||PartnerNameFormatting.Format("iPhone Kft.")!="iPhone Kft.")throw new InvalidOperationException("Hibás magyar névformázás.");
         PartnerNameFormatting.Enabled=false;if(PartnerNameFormatting.Format("BUDAPEST")!="BUDAPEST")throw new InvalidOperationException("A névformázás nem kapcsolható ki.");PartnerNameFormatting.Enabled=true;
         var preferenceStore=new AppearanceStore(Path.Combine(output,"name-format-check"));preferenceStore.Save(new AppearancePreferences{FormatPartnerNames=false});if(preferenceStore.Load().FormatPartnerNames)throw new InvalidOperationException("A névformázás beállítása nem marad meg.");
+        var developmentCompany=Guid.NewGuid();var developmentShell=new ShellViewModel(new AppearanceStore(Path.Combine(output,"development-login")),output,null);
+        Task<JsonElement> AutoLogin(string operation,object payload,CancellationToken ct)=>Task.FromResult(JsonSerializer.SerializeToElement(new UiSession("development-test-token","development","admin",DateTimeOffset.UtcNow.AddMinutes(30))));
+        var developmentConnection=new HostConnection(output,null,AutoLogin);
+        typeof(ShellViewModel).GetField("_connection",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(developmentShell,developmentConnection);
+        typeof(ShellViewModel).GetField("_selectedCompany",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(developmentShell,new CompanyInfo(developmentCompany,"Fejlesztői próba",true,DateTimeOffset.UtcNow));
+        typeof(ShellViewModel).GetField("_status",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(developmentShell,new HostDiagnostic("Ready","test",output,"1.2","Active","",null,DateTimeOffset.UtcNow,1,[]){DevelopmentLoginEnabled=true});
+        await (Task)typeof(ShellViewModel).GetMethod("PrepareAuthenticationAsync",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(developmentShell,null)!;
+        if(!developmentShell.IsSignedIn||!developmentShell.DevelopmentMode||developmentShell.ShowAccountControls||developmentShell.CanManageAccounts)throw new InvalidOperationException("A fejlesztői automatikus belépés nem működik.");developmentShell.Stop();
         var company=Guid.NewGuid();var lookups=0;
         Task<JsonElement> Send(string operation,object input,CancellationToken ct)
         {

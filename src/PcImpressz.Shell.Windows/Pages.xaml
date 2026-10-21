@@ -4,47 +4,13 @@
   </DataTemplate>
   <DataTemplate DataType="{x:Type local:ProductWorkspaceViewModel}">
     <StackPanel>
-      <WrapPanel>
-        <Button Content="Feliratok és elrendezés – admin" Command="{Binding Products.EditLayoutCommand}" IsEnabled="{Binding Products.CanAdmin}" Margin="0,0,10,10" />
-        <Button Content="Új termék" Command="{Binding NewProductCommand}" IsEnabled="{Binding Products.CanWrite}" Style="{StaticResource PrimaryButton}" Margin="0,0,10,10" />
-        <Button Content="Kijelölt termék szerkesztése" Command="{Binding EditProductCommand}" IsEnabled="{Binding Products.CanWrite}" Margin="0,0,10,10" />
-        <Button Content="Kijelölt termék készlete és mozgásai" Command="{Binding SelectedStockCommand}" Margin="0,0,10,10" />
-        <Button Content="Minden termék készlete" Command="{Binding AllStockCommand}" Margin="0,0,0,10" />
-      </WrapPanel>
-      <TabControl SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource StrokeBrush}" Padding="14">
-        <TabControl.Resources>
-          <Style TargetType="TabItem">
-            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-            <Setter Property="Template">
-              <Setter.Value>
-                <ControlTemplate TargetType="TabItem">
-                  <Border x:Name="Header" Background="{DynamicResource ElevatedBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="18,10" Margin="0,0,6,0">
-                    <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
-                  </Border>
-                  <ControlTemplate.Triggers>
-                    <Trigger Property="IsSelected" Value="True">
-                      <Setter TargetName="Header" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
-                      <Setter TargetName="Header" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
-                    </Trigger>
-                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                      <Setter TargetName="Header" Property="BorderThickness" Value="2" />
-                    </Trigger>
-                  </ControlTemplate.Triggers>
-                </ControlTemplate>
-              </Setter.Value>
-            </Setter>
-          </Style>
-        </TabControl.Resources>
-        <TabItem Header="Terméklista">
-          <local:EntityPageView DataContext="{Binding Products}" ViewMode="list" />
-        </TabItem>
-        <TabItem Header="Termékadatlap">
-          <local:EntityPageView DataContext="{Binding Products}" ViewMode="editor" />
-        </TabItem>
-        <TabItem Header="Készlet és mozgások">
+      <local:EntityPageView DataContext="{Binding Products}" />
+      <Expander Header="Készlet és mozgások" IsExpanded="{Binding IsStockExpanded, Mode=TwoWay}" Margin="0,22,0,0">
+        <StackPanel Margin="0,14,0,0">
+          <WrapPanel><Button Content="Kijelölt termék készlete" Command="{Binding SelectedStockCommand}" Margin="0,0,10,10" /><Button Content="Minden termék készlete" Command="{Binding AllStockCommand}" Margin="0,0,0,10" /></WrapPanel>
           <ContentControl Content="{Binding Inventory}" />
-        </TabItem>
-      </TabControl>
+        </StackPanel>
+      </Expander>
     </StackPanel>
   </DataTemplate>
   <DataTemplate DataType="{x:Type local:EntityPageViewModel}">

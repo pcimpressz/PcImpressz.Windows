@@ -3,10 +3,11 @@ using PcImpressz.Contracts;
 
 namespace PcImpressz.Modules.Catalog;
 
-public sealed class CatalogModule : IModule
+public sealed partial class CatalogModule : IModule
 {
     public ValueTask StartAsync(IModuleContext context, CancellationToken cancellationToken)
     {
+        RegisterProductOverview(context);
         var repository = new CatalogRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
         Register(context, "categories-list", "catalog.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {

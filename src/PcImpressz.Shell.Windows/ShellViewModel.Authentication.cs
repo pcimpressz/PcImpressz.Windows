@@ -21,7 +21,10 @@ public sealed partial class ShellViewModel
     public bool IsSignedIn=>_connection.Session is not null && _connection.SessionCompany==SelectedCompany?.Id;
     public bool CanCreateCompany=>IsCompanyAdmin||Companies.Count==0;
     public bool IsCompanyAdmin=>_connection.Session?.Role=="admin";
-    public string SignedInLabel=>_connection.Session is {} s?s.UserName+" · "+CompanyRoles.Label(s.Role):"Nincs bejelentkezve";
+    public bool DevelopmentMode=>_status?.DevelopmentLoginEnabled==true;
+    public bool ShowAccountControls=>!DevelopmentMode;
+    public bool CanManageAccounts=>IsCompanyAdmin&&!DevelopmentMode;
+    public string SignedInLabel=>DevelopmentMode&&IsSignedIn?"Fejlesztői mód · automatikus hozzáférés":_connection.Session is {} s?s.UserName+" · "+CompanyRoles.Label(s.Role):"Nincs bejelentkezve";
     public ICommand LogoutCommand {get;private set;}=null!;
     public ICommand UsersCommand {get;private set;}=null!;
     public ICommand PasswordCommand {get;private set;}=null!;
@@ -35,13 +38,25 @@ public sealed partial class ShellViewModel
     {
         foreach(var page in _entityPages.Values)page.PermissionsChanged();
         SyncNavigation();
-        foreach(var name in new[]{nameof(CanSeedDemo),nameof(IsDemoCompany),nameof(CanCreateCompany),nameof(IsSignedIn),nameof(IsCompanyAdmin),nameof(SignedInLabel),nameof(NeedsFirstAdmin),nameof(LoginHeading),nameof(LoginCompany),nameof(CurrentPage)})Changed(name);
+        foreach(var name in new[]{nameof(DevelopmentMode),nameof(ShowAccountControls),nameof(CanManageAccounts),nameof(CanSeedDemo),nameof(IsDemoCompany),nameof(CanCreateCompany),nameof(IsSignedIn),nameof(IsCompanyAdmin),nameof(SignedInLabel),nameof(NeedsFirstAdmin),nameof(LoginHeading),nameof(LoginCompany),nameof(CurrentPage)})Changed(name);
     }
     private async Task PrepareAuthenticationAsync()
     {
         if(SelectedCompany is not {} company)return;
         try
         {
+            if(DevelopmentMode)
+            {
+                var prior=_connection.Session;
+                if(prior is null||prior.UserName!="development"||prior.ExpiresAt<=DateTimeOffset.UtcNow.AddMinutes(2))
+                {
+                    var development=(await _connection.SendAsync("ui.auth.development",new{CompanyId=company.Id},_shutdown.Token)).Deserialize<UiSession>()!;
+                    if(SelectedCompany?.Id!=company.Id)return;
+                    _connection.SetSession(company.Id,development);_authConfigured=true;AuthMessage="Fejlesztői hozzáférés aktív.";AuthChanged();
+                    if(prior is null&&!_entityPages.Values.Any(p=>p.IsDirty||p.HasUnresolvedOperation))foreach(var page in _entityPages.Values)page.CompanyChanged();
+                }
+                return;
+            }
             var configured=(await _connection.SendAsync("ui.auth.status",new{CompanyId=company.Id},_shutdown.Token)).Deserialize<UiAuthStatus>()!.Configured;
             if(SelectedCompany?.Id!=company.Id)return;
             _authConfigured=configured;

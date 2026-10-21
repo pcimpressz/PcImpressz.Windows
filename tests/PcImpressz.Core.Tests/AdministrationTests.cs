@@ -11,6 +11,15 @@ internal static class AdministrationTests
         [new("name","Termék neve",Required:true),new("sku","Saját cikkszám"),new("notes","Megjegyzés","multiline")],[],new("list","save","archive","export"));
     public static IEnumerable<(string,Func<Task>)> Cases()
     {
+        yield return Test("development access is opt-in SID-bound revocable and does not create accounts",f=>
+        {
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.DevelopmentSession(f.Company,Sid));
+            var enabled=true;var dev=new UiAdministrationService(f.Data,f.Credentials,f.Clock,sid=>enabled&&sid==Sid);
+            var session=dev.DevelopmentSession(f.Company,Sid);Check.Equal("admin",dev.Authenticate(f.Company,session.Token,Sid).Role);Check.True(!dev.Status(f.Company).Configured);
+            Check.Throws<UnauthorizedAccessException>(()=>dev.Authenticate(Guid.NewGuid(),session.Token,Sid));Check.Throws<UnauthorizedAccessException>(()=>dev.Authenticate(f.Company,session.Token,"other-owner"));
+            enabled=false;Check.Throws<UnauthorizedAccessException>(()=>dev.Authenticate(f.Company,session.Token,Sid));
+            var admin=f.Admin();Check.Equal("admin",f.Service.Authenticate(f.Company,admin.Token,Sid).Role);
+        });
         yield return Test("role policy separates warehouse sales and viewer permissions",f=>
         {
             foreach(var permission in new[]{"partners.read","partners.write","partners.export","catalog.read","catalog.write","catalog.export","inventory.read","inventory.write","inventory.export","receiving.read","receiving.write","receiving.export","sales.read","sales.write","sales.export"})Check.True(CompanyRoles.Allows("admin",permission));

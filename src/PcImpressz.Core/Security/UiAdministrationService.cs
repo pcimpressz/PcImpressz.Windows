@@ -7,11 +7,11 @@ namespace PcImpressz.Core.Security;
 
 // Credentials are installation-local and separate from portable company backups.
 // The Windows owner remains a trusted local operator; this is not an OS sandbox.
-public sealed partial class UiAdministrationService(ICompanyDatabase companies, ICompanyDatabase credentials, TimeProvider clock)
+public sealed partial class UiAdministrationService(ICompanyDatabase companies, ICompanyDatabase credentials, TimeProvider clock, Func<string,bool>? developmentAccess=null)
 {
     private sealed record Owner(string Sid);
     private sealed record User(string UserName, string Role, string Salt, string Hash, bool Disabled = false);
-    private sealed record BoundSession(Guid Company, string Sid, UiSession Session);
+    private sealed record BoundSession(Guid Company, string Sid, UiSession Session,bool Development=false);
     private readonly Dictionary<string, BoundSession> _sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, (int Count, DateTimeOffset Until)> _failures = [];
     private readonly object _gate = new();
@@ -68,7 +68,7 @@ public sealed partial class UiAdministrationService(ICompanyDatabase companies, 
             _failures.Remove(input.CompanyId); return Issue(input.CompanyId, sid, user);
         }
     }
-    private UiSession Issue(Guid company, string sid, User user)
+    private UiSession Issue(Guid company, string sid, User user,bool development=false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sid);
         lock (_gate)
@@ -76,8 +76,13 @@ public sealed partial class UiAdministrationService(ICompanyDatabase companies, 
             foreach (var token in _sessions.Where(p => p.Value.Session.ExpiresAt <= clock.GetUtcNow()).Select(p => p.Key).ToArray()) _sessions.Remove(token);
             if (_sessions.Count >= 128) throw new InvalidOperationException("Túl sok aktív bejelentkezés.");
             var session = new UiSession(Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), user.UserName, user.Role, clock.GetUtcNow().AddMinutes(30));
-            _sessions.Add(session.Token, new(company, sid, session)); return session;
+            _sessions.Add(session.Token, new(company, sid, session,development)); return session;
         }
+    }
+    public UiSession DevelopmentSession(Guid company,string sid)
+    {
+        if(developmentAccess?.Invoke(sid)!=true)throw new UnauthorizedAccessException("A helyi fejlesztői belépés nincs engedélyezve ehhez a Windows-fiókhoz.");
+        return Issue(company,sid,new User("development","admin","",""),true);
     }
     private string Admin(Guid company, string? token, string sid) => RequireAdmin(company, token, sid).UserName;
     public void CreateUser(UiCreateUser input, string sid)

@@ -84,7 +84,7 @@ public sealed class EntityPageView : UserControl
         editor.Children.Add(fields);
         var taxHost=new StackPanel();editor.Children.Insert(1,taxHost);
         var advancedFields=new Grid();advancedFields.ColumnDefinitions.Add(new());advancedFields.ColumnDefinitions.Add(new());advancedFields.SetBinding(IsEnabledProperty,new Binding("CanWrite"));
-        var advanced=new Expander{Header="Bővített adatok kitöltése",Content=advancedFields,Margin=new(0,16,0,0),IsExpanded=false};advanced.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});editor.Children.Add(advanced);
+        var advanced=new Expander{Header="Bővített adatok kitöltése",Content=advancedFields,Margin=new(0,16,0,0),IsExpanded=false};advanced.SetBinding(VisibilityProperty,new Binding("IsCompactMaster"){Converter=new BooleanToVisibilityConverter()});editor.Children.Add(advanced);
         var save = new WrapPanel { Margin = new(0,20,0,0) };
         var saveButton = ActionButton("Mentés", "SaveCommand"); saveButton.SetResourceReference(StyleProperty, "PrimaryButton");
         save.Children.Add(saveButton);save.Children.Add(ActionButton("Módosítások elvetése","DiscardChangesCommand"));
@@ -95,15 +95,15 @@ public sealed class EntityPageView : UserControl
         dossier.SetBinding(IsEnabledProperty, new Binding("CanOpenDossier"));
         secondaryActions.Children.Add(dossier); editor.Children.Add(save);editor.Children.Add(new Expander{Header="További műveletek",Content=secondaryActions,Margin=new(0,16,0,0)});
         editorBorder.Child = editor; Grid.SetColumn(editorBorder,1); body.Children.Add(editorBorder);
-        var overviewBorder=new Border{Padding=new(22),CornerRadius=new(14),BorderThickness=new(1),VerticalAlignment=VerticalAlignment.Top,MaxWidth=540};overviewBorder.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush");overviewBorder.SetResourceReference(Border.BorderBrushProperty,"StrokeBrush");overviewBorder.SetBinding(VisibilityProperty,new Binding("IsPartnerMaster"){Converter=new BooleanToVisibilityConverter()});
+        var overviewBorder=new Border{Padding=new(22),CornerRadius=new(14),BorderThickness=new(1),VerticalAlignment=VerticalAlignment.Top,MaxWidth=540};overviewBorder.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush");overviewBorder.SetResourceReference(Border.BorderBrushProperty,"StrokeBrush");overviewBorder.SetBinding(VisibilityProperty,new Binding("IsCompactMaster"){Converter=new BooleanToVisibilityConverter()});
         var overview=new StackPanel();overviewBorder.Child=overview;
-        var overviewEyebrow=new TextBlock{Text="PARTNER ÁTTEKINTÉS",Margin=new(0,0,0,12)};overviewEyebrow.SetResourceReference(StyleProperty,"Eyebrow");overview.Children.Add(overviewEyebrow);
+        var overviewEyebrow=new TextBlock{Text="PARTNER ÁTTEKINTÉS",Margin=new(0,0,0,12)};overviewEyebrow.SetBinding(TextBlock.TextProperty,"OverviewEyebrow");overviewEyebrow.SetResourceReference(StyleProperty,"Eyebrow");overview.Children.Add(overviewEyebrow);
         var overviewName=new TextBlock{FontSize=23,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,10)};overviewName.SetBinding(TextBlock.TextProperty,"PartnerOverviewTitle");overview.Children.Add(overviewName);
         var overviewSubtitle=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,18)};overviewSubtitle.SetResourceReference(StyleProperty,"Muted");overviewSubtitle.SetBinding(TextBlock.TextProperty,"PartnerOverviewSubtitle");overview.Children.Add(overviewSubtitle);
         var overviewContact=new TextBlock{TextWrapping=TextWrapping.Wrap,LineHeight=24,Margin=new(0,0,0,20)};overviewContact.SetBinding(TextBlock.TextProperty,"PartnerOverviewContact");overview.Children.Add(overviewContact);
         var cards=new ItemsControl();cards.SetBinding(ItemsControl.ItemsSourceProperty,"PartnerOverviewCards");var cardTemplate=new DataTemplate();var cardPanel=new FrameworkElementFactory(typeof(StackPanel));cardPanel.SetValue(MarginProperty,new Thickness(0,0,0,18));var cardLabel=new FrameworkElementFactory(typeof(TextBlock));cardLabel.SetBinding(TextBlock.TextProperty,new Binding("Label"));cardLabel.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);cardPanel.AppendChild(cardLabel);var cardValue=new FrameworkElementFactory(typeof(TextBlock));cardValue.SetBinding(TextBlock.TextProperty,new Binding("Value"));cardValue.SetValue(TextBlock.FontSizeProperty,21d);cardValue.SetValue(TextBlock.FontWeightProperty,FontWeights.SemiBold);cardValue.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);cardPanel.AppendChild(cardValue);cardTemplate.VisualTree=cardPanel;cards.ItemTemplate=cardTemplate;overview.Children.Add(cards);
         var overviewNotice=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)};overviewNotice.SetResourceReference(StyleProperty,"Muted");overviewNotice.SetBinding(TextBlock.TextProperty,"PartnerOverviewNotice");overview.Children.Add(overviewNotice);
-        var fullDossier=ActionButton("Részletes dosszié megnyitása","DossierCommand");fullDossier.SetBinding(IsEnabledProperty,"CanOpenDossier");fullDossier.SetBinding(VisibilityProperty,new Binding("HasDossier"){Converter=new BooleanToVisibilityConverter()});overview.Children.Add(fullDossier);overviewBorder.SizeChanged+=(_,_)=>{var width=Math.Max(0,overviewBorder.ActualWidth-46);foreach(var text in overview.Children.OfType<TextBlock>())text.MaxWidth=width;cards.MaxWidth=width;};body.Children.Add(overviewBorder);
+        var fullDossier=ActionButton("Részletes dosszié megnyitása","DossierCommand");fullDossier.SetBinding(IsEnabledProperty,"CanOpenDossier");fullDossier.SetBinding(VisibilityProperty,new Binding("HasDossier"){Converter=new BooleanToVisibilityConverter()});overview.Children.Add(fullDossier);var stockButton=ActionButton("Készlet és mozgások megnyitása","OpenProductStockCommand");stockButton.SetBinding(VisibilityProperty,new Binding("IsProductMaster"){Converter=new BooleanToVisibilityConverter()});overview.Children.Add(stockButton);overviewBorder.SizeChanged+=(_,_)=>{var width=Math.Max(0,overviewBorder.ActualWidth-46);foreach(var text in overview.Children.OfType<TextBlock>())text.MaxWidth=width;cards.MaxWidth=width;};body.Children.Add(overviewBorder);
         body.SetBinding(VisibilityProperty, new Binding("ShowPartnerList") { Converter = new BooleanToVisibilityConverter() });
         root.Children.Add(body);
         root.Children.Add(DossierPage());
@@ -121,8 +121,9 @@ public sealed class EntityPageView : UserControl
                 var lookup=new Button{Content="Lekérés",ToolTip="Név és székhely lekérése a NAV-tól",MinWidth=90,Margin=new(10,0,0,0)};lookup.SetBinding(Button.CommandProperty,new Binding("LookupPartnerNavCommand"){Source=vm});lookup.SetBinding(IsEnabledProperty,new Binding("CanLookupPartnerNav"){Source=vm});Grid.SetColumn(lookup,1);taxRow.Children.Add(lookup);taxHost.Children.Add(taxRow);
             }
             var basic=new HashSet<string>(StringComparer.Ordinal){"name","taxId","country","postalCode","city","address","email","phone","isCustomer","isSupplier","isActive","notes"};
-            RenderGroup(fields,vm.Fields.Where(f=>f.Visible&&(!vm.IsPartnerMaster||f.Definition.Id!="taxId")&&(!vm.IsPartnerMaster||f.Definition.Required||basic.Contains(f.Definition.Id))));
-            RenderGroup(advancedFields,vm.Fields.Where(f=>f.Visible&&vm.IsPartnerMaster&&!f.Definition.Required&&!basic.Contains(f.Definition.Id)));
+            if(vm.IsProductMaster)basic=new HashSet<string>(StringComparer.Ordinal){"name","sku","manufacturerPartNumber","barcode","unitCode","categoryCode","saleNetUnitPrice","saleVatRate","isActive","isSalable","isPurchaseable"};
+            RenderGroup(fields,vm.Fields.Where(f=>f.Visible&&(!vm.IsPartnerMaster||f.Definition.Id!="taxId")&&(!vm.IsCompactMaster||f.Definition.Required||basic.Contains(f.Definition.Id))));
+            RenderGroup(advancedFields,vm.Fields.Where(f=>f.Visible&&vm.IsCompactMaster&&!f.Definition.Required&&!basic.Contains(f.Definition.Id)));
         }
         void RenderGroup(Grid target,IEnumerable<EntityFieldViewModel> group)
         {
@@ -187,7 +188,7 @@ public sealed class EntityPageView : UserControl
             searchHelp.Visibility = !editorOnly && DataContext is EntityPageViewModel page && page.Definition.ModuleId == "catalog" && page.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
             listPanel.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
             editorBorder.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
-            var partner=DataContext is EntityPageViewModel {IsPartnerMaster:true};
+            var partner=DataContext is EntityPageViewModel {IsCompactMaster:true};
             var narrow = separate || partner || ActualWidth < 980;
             editorBorder.MaxWidth=partner?680:DataContext is EntityPageViewModel pageVm&&pageVm.Definition.ModuleId=="catalog"&&pageVm.Definition.Id=="products"?900:680;
             editorBorder.HorizontalAlignment=HorizontalAlignment.Stretch;editorBorder.VerticalAlignment=VerticalAlignment.Top;

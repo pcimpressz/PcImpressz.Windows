@@ -30,3 +30,11 @@ Ez helyi Windows-alkalmazás: a névcső azonos Windows-felhasználóra korláto
 A 2026-10-21-i helyi mentésben egy demócég, egy partner és nulla termék volt. A mentést új cégként, elkülönített tesztkönyvtárba állítottuk vissza; a hiányzó próba-termék kizárólag ebben a másolatban készült. Sikeres a raktáros bevételezése → eladó eladása → készlethiány miatt elutasított bevételezés-visszafordítás → eladás-visszafordítás → bevételezés-visszafordítás folyamat. Az eredeti adatbázis SHA-256 lenyomata változatlan. Ez másolati technikai próba, a valódi céges adatokkal végzett felhasználói átvételt nem helyettesíti.
 
 A saját éles cég előkészítése után a kezelővel közös következő próba: saját mértékegység és termék, valós szállító, bevételezés, készletellenőrzés, eladás, szükség esetén visszafordítás, végül ellenőrzött cégmentés. A bizonylatok továbbra sem adóügyi számlák; élő NAV-lekérés és PDF-feldolgozás nincs beépítve.
+
+## 0.4.13 – ideiglenes helyi fejlesztői belépés
+
+A felhasználó kérésére a helyi fejlesztéshez bekapcsolható az automatikus admin munkamenet. A `.local/development-access.json` fájlban `enabled: true` és a kért Windows-fiók `windowsSid` azonosítója kell. A jelenlegi gépen ezt külön, helyben engedélyeztük. Ez a fájl nem kerül GitHubra vagy a kiadott csomagba. Hiányzó/hibás/kikapcsolt fájlnál, más Windows-fiókból és alapértelmezésben továbbra is jelszavas belépés kell.
+
+A fejlesztői munkamenet céghez és Windows-fiókhoz kötött, lejár, a felület automatikusan megújítja. Minden szerverműveletnél újra ellenőrizzük az engedélyező fájlt. A beállítás nem hoz létre fiókot, nem módosítja a korábbi adminok jelszavát/szerepét, nem kapcsolja ki a licenceket vagy a parancsok ellenőrzését. A felület Fejlesztői mód felirattal jelzi az automatikus hozzáférést; a kijelentkezés, jelszócsere és felhasználókezelés gombjai ideiglenesen rejtettek.
+
+Visszakapcsolás: a beírt adatlapokat mentsd el, zárd be a programot, állítsd a fájlban az `enabled` értékét `false`-ra (vagy távolítsd el ezt az egy kapcsolófájlt), majd indítsd újra a programot és a háttérszolgáltatást. A korábbi fiókokkal ismét rendesen be lehet lépni. A kapcsoló kikapcsolása a már kiadott fejlesztői tokeneket is érvényteleníti.

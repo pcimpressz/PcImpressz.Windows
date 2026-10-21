@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.12
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.13
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -141,15 +141,17 @@ Használat és pontos szerepkörök: [Céges belépés és jogosultságok](docs/
 ## 0.4.6 – Demócég feltöltése mintaadatokkal
 
 A Beállításokban megjelent a **Feltöltés mintaadatokkal** gomb. Csak a kiválasztott demócég adminja indíthatja, előzetes ellenőrzött mentéssel és ismétléskor duplikáció nélkül. A csomag 20 terméket, 5 vevőt, 5 szállítót, kategóriákat, mértékegységeket, két raktár készletét, 8 bevételezést és 10 eladást tartalmaz. A helyi demócég tényleges feltöltése is megtörtént, a meglévő adatok megmaradtak. Útmutató: [Demó mintaadatok](docs/DEMO-MINTAADATOK.md). Ellenőrzés: 162/162 teszt, 33/33 WPF-render.
-## 0.4.12 – Gyors pénztári eladás
+## 0.4.13 – Gyors pénztári eladás
 
 Egy keresősor, automatikus név/cikkszám/vonalkód találatok, kattintásra vagy pontos vonalkódra kosárba helyezés. A kosárban közvetlen mennyiség-, bruttóár- és áfamódosítás, soronkénti törlés; véglegesítéskor készpénz/kártya, számlaigénynél élő partnerkereső, kézi vevőfelvétel vagy valódi NAV-adószámlekérdezés. Terméktörzsbeli alapárak, mentett fizetési mód és vevőadat-pillanatkép, bizonytalan küldés visszaellenőrzése. A számlaigény nyilvántartása még nem adóügyi számlakiállítás. Használat: [Pénztári eladás](docs/PENZTARI-ELADAS.md). 168/168 teszt és 39/39 WPF-render. A NAV-protokoll szimulált válasszal ellenőrzött; éles technikai felhasználóval próba még szükséges.
-0.4.12: készpénzes végösszeg 5 Ft-ra kerekítve, külön kerekítés és fizetendő; kártyán nincs 5 Ft-os kerekítés. Beállításokban 0–4 megjelenített tizedes (alap 0), a számítások pontossága megmarad. NAV-mentés: a Windows DPAPI rendszerkönyvtárainak célzott betöltése javítva.
+0.4.13: készpénzes végösszeg 5 Ft-ra kerekítve, külön kerekítés és fizetendő; kártyán nincs 5 Ft-os kerekítés. Beállításokban 0–4 megjelenített tizedes (alap 0), a számítások pontossága megmarad. NAV-mentés: a Windows DPAPI rendszerkönyvtárainak célzott betöltése javítva.
 
-0.4.12: eladási nap szűrése, automatikus bizonylattételek, részleges visszavét az eredeti sorhoz kötve negatív kosárban. A visszavét véglegesítése állítja vissza a készletet. Normál és dev.ps1 fordítás egymás után ellenőrizve; minden obj/bin köztes mappa kizárva.
+0.4.13: eladási nap szűrése, automatikus bizonylattételek, részleges visszavét az eredeti sorhoz kötve negatív kosárban. A visszavét véglegesítése állítja vissza a készletet. Normál és dev.ps1 fordítás egymás után ellenőrizve; minden obj/bin köztes mappa kizárva.
 
-0.4.12: partnertörzs teljes szélességű listával és alatta szerkesztővel; alapadatok és lenyitható bővített adatok; új partner NAV-adószámlekérdezése az adatlap kitöltéséhez. Alapértelmezett Nem a nem mentett adatlap elvetésénél és kilépésnél, saját főablakhoz kötött kérdés, ismételt ablakbezárás elleni védelem.
+0.4.13: partnertörzs teljes szélességű listával és alatta szerkesztővel; alapadatok és lenyitható bővített adatok; új partner NAV-adószámlekérdezése az adatlap kitöltéséhez. Alapértelmezett Nem a nem mentett adatlap elvetésénél és kilépésnél, saját főablakhoz kötött kérdés, ismételt ablakbezárás elleni védelem.
 
-0.4.12: partneradatlap első sora adószám és kompakt Lekérés gomb. NAV-rövidnév elsőbbséggel; kapcsolható nagybetűs név/cím formázás a Beállítások / Partnertörzs alatt. A beállítások általános, partner-, eladási/készlet-, NAV- és cégmentési csoportokban találhatók.
+0.4.13: partneradatlap első sora adószám és kompakt Lekérés gomb. NAV-rövidnév elsőbbséggel; kapcsolható nagybetűs név/cím formázás a Beállítások / Partnertörzs alatt. A beállítások általános, partner-, eladási/készlet-, NAV- és cégmentési csoportokban találhatók.
 
-0.4.12: kompakt, legfeljebb 680 px széles általános adatlapok; a partnerlista alatt keskeny szerkesztő és külön mentettpartner-/dosszié-áttekintés. Keskeny ablakban egymás alá rendeződő panelek. Mentés/Elvetés kiemelve, ritkább műveletek külön lenyithatók. A termékadatlap hosszú mezői és a táblázatok megtartják a szükséges helyet.
+0.4.13: kompakt, legfeljebb 680 px széles általános adatlapok; a partnerlista alatt keskeny szerkesztő és külön mentettpartner-/dosszié-áttekintés. Keskeny ablakban egymás alá rendeződő panelek. Mentés/Elvetés kiemelve, ritkább műveletek külön lenyithatók. A termékadatlap hosszú mezői és a táblázatok megtartják a szükséges helyet.
+
+0.4.13: helyi, Windows-fiókhoz kötött fejlesztői automatikus belépés külön kapcsolófájllal; a régi fiókok/jelszavak megmaradnak. Terméktörzs: teljes lista, alatta kompakt adatlap és tulajdonság/készlet/forgalom összesítő; a részletes készletmozgások lenyithatók.
