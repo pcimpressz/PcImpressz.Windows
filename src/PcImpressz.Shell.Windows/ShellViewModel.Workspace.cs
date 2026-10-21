@@ -24,15 +24,19 @@ public sealed partial class ShellViewModel
             if (_entityPages.Values.Any(p => p.IsDirty) && MessageBox.Show("A nem mentett változtatásokat elveted?",
                 "Cégváltás", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             { Changed(); return; }
+            var previousCompany=_selectedCompany;var previousSession=_connection.Session;
+            if(previousCompany is not null && previousSession is not null) _ = RevokePreviousSessionAsync(previousCompany.Id,previousSession);
+            _connection.SetSession(null,null);
             _selectedCompany = value;
             _preferences = _preferences with { SelectedCompanyId = value.Id };
             try { _store.Save(_preferences); } catch (System.IO.IOException) { }
             foreach (var page in _entityPages.Values) page.CompanyChanged();
             Changed(); Changed(nameof(CompanyMode)); Changed(nameof(NavCompanyLabel));
-            _ = LoadNavAsync();
+            AuthChanged();
+            _ = PrepareAuthenticationAsync();
         }
     }
-    public bool WorkspaceIsIdle => !_maintenanceBusy && !_entityPages.Values.Any(p => p.IsBusy);
+    public bool WorkspaceIsIdle => !_authBusy && !_maintenanceBusy && !_entityPages.Values.Any(p => p.IsBusy);
     public string CompanyMode => SelectedCompany is { IsDemo: true } ? "DEMÓ CÉG · ELKÜLÖNÍTETT ADATOK" : "SAJÁT CÉGES ADATOK";
     public ICommand CreateCompanyCommand { get; private set; } = null!;
 
@@ -57,10 +61,10 @@ public sealed partial class ShellViewModel
             var key = page.ModuleId + "." + page.Id;
             if (_entityPages.ContainsKey(key)) continue;
             IWorkspacePage vm = page.ViewKind is "inventory" or "sales"
-                ? new OperationsPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts)
+                ? new OperationsPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts)
                 : page.ViewKind == "receiving"
-                ? new ReceivingPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts)
-                : new EntityPageViewModel(page, _connection, () => SelectedCompany?.Id, _shutdown.Token, _layouts);
+                ? new ReceivingPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts)
+                : new EntityPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts);
             vm.PropertyChanged += (_, e) => { if (e.PropertyName == "IsBusy") Changed(nameof(WorkspaceIsIdle)); };
             _entityPages.Add(key, vm);
             if (_companiesLoaded && SelectedCompany is not null) vm.CompanyChanged();
@@ -93,7 +97,7 @@ public sealed partial class ShellViewModel
     private void SyncNavigation()
     {
         var selectedId = _selectedNavigation.Id;
-        ApplyMenu(Navigation, WorkspaceMenu.Compose(_entityPages.Values.Select(page => page.Definition).ToArray(), _disabledModules));
+        ApplyMenu(Navigation, WorkspaceMenu.Compose(_entityPages.Values.Where(page=>IsSignedIn&&_connection.Allows(page.Definition.ModuleId+".read")).Select(page => page.Definition).ToArray(), _disabledModules));
         var match = FindNavigationOrNull(selectedId);
         if (ReferenceEquals(match, _selectedNavigation)) return;
         _selectedNavigation.IsSelected = false;
@@ -176,7 +180,8 @@ public sealed partial class ShellViewModel
             Changed(nameof(ActionMessage));
             return;
         }
-        if (MessageBox.Show("A demó cég partnerei, terméktörzse és minden moduladata törlődik. A cég bejegyzése megmarad, utána üresen tölthető fel. A licenc, a megjelenés és a modulok ki-be állapota megmarad. Más cég adata a helyén marad.",
+        if(!IsCompanyAdmin||SelectedCompany is not {IsDemo:true}){_actionMessage="A törléshez a kiválasztott demócég adminjaként jelentkezz be.";Changed(nameof(ActionMessage));return;}
+        if (MessageBox.Show("A kiválasztott demó cég partnerei, terméktörzse és minden moduladata törlődik. A cég bejegyzése megmarad, utána üresen tölthető fel. A licenc, a megjelenés és a modulok ki-be állapota megmarad. Más cég adata a helyén marad.",
             "Kísérleti adatbázis törlése", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
         try

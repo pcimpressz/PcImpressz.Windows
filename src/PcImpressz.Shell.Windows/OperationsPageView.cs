@@ -24,7 +24,7 @@ internal sealed class OperationsPageView:UserControl
         root.Children.Add(Label(page.IsInventory?"Készletváltozás":"Új eladás"));
         if(page.IsInventory){var scope=new TextBlock{FontWeight=FontWeights.SemiBold,Margin=new(0,0,0,10)};scope.SetBinding(TextBlock.TextProperty,new Binding("StockScope"));root.Children.Add(scope);}
         if(page.IsInventory)root.Children.Add(new TextBlock{Text="A régi, csak besorolt számlákból nem képzünk visszamenőleg készletet. A tényleges induló mennyiséget egyszer, nyitókészletként rögzítsd.",TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)});
-        var editor=new StackPanel();editor.SetBinding(IsEnabledProperty,new Binding("IsNotBusy"));
+        var editor=new StackPanel();editor.SetBinding(IsEnabledProperty,new Binding("CanWrite"));
         editor.Children.Add(Field("Termékkeresés (név, cikkszám, gyártói cikkszám, vonalkód)","ProductSearch"));
         editor.Children.Add(Button("Választók frissítése","RefreshCommand"));
         editor.Children.Add(Combo("Termék","Products","SelectedProduct","Label"));
@@ -88,5 +88,5 @@ internal sealed class OperationsPageView:UserControl
         var box=new TextBox{MinHeight=34,Padding=new(8,4,8,4)};box.SetResourceReference(Control.BackgroundProperty,"ElevatedBrush");box.SetResourceReference(Control.ForegroundProperty,"TextBrush");box.SetResourceReference(Control.BorderBrushProperty,"StrokeBrush");box.SetBinding(TextBox.TextProperty,new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged});panel.Children.Add(box);return panel;
     }
     private static Button Button(string text,string command)
-    {var button=new Button{Content=text,Margin=new(0,0,10,10)};button.SetBinding(System.Windows.Controls.Primitives.ButtonBase.CommandProperty,new Binding(command));button.SetBinding(IsEnabledProperty,new Binding("IsNotBusy"));return button;}
+    {var button=new Button{Content=text,Margin=new(0,0,10,10)};button.SetBinding(System.Windows.Controls.Primitives.ButtonBase.CommandProperty,new Binding(command));button.SetBinding(IsEnabledProperty,new Binding(command is "SaveCommand" or "ReverseCommand"?"CanWrite":command=="ExportCommand"?"CanExport":"IsNotBusy"));return button;}
 }

@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.4
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.5
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -132,3 +132,9 @@ A törzsadatlapok Feliratok és elrendezés – admin gombja cégenkénti bejele
 ## 0.4.4 – Bevételezés–eladás munkafolyamat
 
 Készletbiztos bevételezés-visszafordítás, szerkeszthető eladási kosár, raktári készlet és gyártói cikkszám alapú keresés; szűrt exportok. A külön engedélyezett offline admin-helyreállítás is elkészült. Részletek: [munkafolyamat](docs/BEVETELEZES-ELADAS.md) és [admin-kezelés](docs/ADMIN-FELULETSZERKESZTO.md). Ellenőrzés: 155/155 teszt, 21/21 WPF-render.
+
+## 0.4.5 – Céges bejelentkezés és dolgozói jogosultságok
+
+Minden üzleti olvasás, írás és export céges bejelentkezést igényel. Adminisztrátor, raktáros, eladó és megtekintő szerepkör; admin felhasználókezelés, fióktiltás, szerepkörváltás, saját jelszócsere és visszavont munkamenetek. Az ellenőrzést a háttérszolgáltatás is elvégzi, a menük és szerkesztők alkalmazkodnak a szerephez. A korábbi adminfiókok megmaradnak; az első admin a bejelentkező képernyőn hozható létre. Újraindításkor a korábban külön indított régi háttérszolgáltatást is le kell állítani.
+
+Használat és pontos szerepkörök: [Céges belépés és jogosultságok](docs/BELEPES-ES-JOGOSULTSAGOK.md). Ellenőrzés: 158/158 teszt, 30/30 WPF-render; a helyi demócég ellenőrzött másolatán raktáros–eladó folyamatpróba, az eredeti adatbázis változatlan lenyomatával. A forrásban nulla termék és egy partner volt, a próba-termék kizárólag a másolatba került. Éles céges felhasználói átvétel még szükséges.

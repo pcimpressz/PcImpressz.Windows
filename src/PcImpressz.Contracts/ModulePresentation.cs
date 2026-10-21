@@ -35,7 +35,7 @@ public sealed record EntityPageDescriptor(string Id, string ModuleId, string Tit
     EntityPageLabels? Labels = null, EntityFilterOption[]? Filters = null)
 { public string ViewKind { get; init; } = "entity"; public string? DossierCommand { get; init; } }
 public sealed record ModuleCommandRequest(Guid CompanyId, string ModuleId, string Command, JsonElement Input);
-public sealed record LocalRequest(string Operation, JsonElement Payload);
+public sealed record LocalRequest(string Operation, JsonElement Payload, Guid? AuthCompanyId = null, string? SessionToken = null);
 public sealed record LocalResponse(bool Success, JsonElement? Data = null, string? Error = null, string? Code = null);
 public sealed record CompanyInfo(Guid Id, string Name, bool IsDemo, DateTimeOffset CreatedAt);
 public sealed record CreateCompanyRequest(string Name, bool IsDemo);

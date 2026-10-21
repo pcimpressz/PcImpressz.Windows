@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using PcImpressz.Contracts;
 
 namespace PcImpressz.Core.Companies;
@@ -48,11 +48,11 @@ public sealed class CompanyStore
             return company;
         }
     }
-    public DemoDataClearance ClearDemoData()
+    public DemoDataClearance ClearDemoData(Guid? companyId = null)
     {
         lock (_gate)
         {
-            var demos = List().Where(c => c.IsDemo).ToArray();
+            var demos = List().Where(c => c.IsDemo && (companyId is null || c.Id == companyId)).ToArray();
             var cleared = 0;
             foreach (var company in demos)
             {

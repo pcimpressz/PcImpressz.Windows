@@ -150,6 +150,7 @@ public sealed partial class ShellViewModel : Observable
         OpenLogsCommand = new RelayCommand(() => OpenFolder(Path.Combine(DataDirectory, "logs")));
         OpenModulesCommand = new RelayCommand(() => OpenFolder(Path.Combine(DataDirectory, "modules")));
         InitializeWorkspace();
+        InitializeAuthentication();
         _ready = true;
     }
 
@@ -197,7 +198,8 @@ public sealed partial class ShellViewModel : Observable
     }
     public string PageTitle => SelectedNavigation.Title;
     public string PageDescription => SelectedNavigation.Description;
-    public object CurrentPage => _entityPages.TryGetValue(SelectedNavigation.PageKey, out var entityPage)
+    private LoginPanel? _loginPanel;
+    public object CurrentPage => !IsSignedIn ? (_loginPanel ??= new LoginPanel { DataContext=this }) : _entityPages.TryGetValue(SelectedNavigation.PageKey, out var entityPage)
         ? ProductWorkspace(entityPage) : SelectedNavigation.PageKey switch
     { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(), _ => new DashboardPage() };
 
@@ -294,11 +296,13 @@ public sealed partial class ShellViewModel : Observable
                 _connection.StartIfNeeded();
                 status = await _connection.ReadAsync(_shutdown.Token);
             }
+            if(status.State=="Ready"&&status.CompanyAuthenticationVersion<1)throw new InvalidOperationException("Régi háttérszolgáltatás fut. Zárd be a programot és a korábban külön indított magot, majd indítsd újra a Start.cmd fájllal.");
             _status = status;
             _lastConnectionError = null;
             _connectionMessage = "A maghoz kapcsolódva";
             ApplyModuleCards(status.Modules);
             await UpdateWorkspaceAsync(status);
+            await PrepareAuthenticationAsync();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

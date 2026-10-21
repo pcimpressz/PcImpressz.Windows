@@ -13,7 +13,7 @@ using PcImpressz.Core.Security;
 
 namespace PcImpressz.ApplicationHost;
 
-// Initial desktop mode: the Host's Windows user owns all local companies.
+// Company sessions and roles are checked before dispatch; the OS caller SID is trusted.
 // There is no client-supplied identity, permission list or network listener.
 internal sealed class LocalCommandService(HostOptions options, CompanyStore companies, CommandDispatcher commands,
     ModuleEnablementStore modulesEnabled, CompanyBackupService backups, UiAdministrationService administration, ModuleRuntime runtime, ILogger<LocalCommandService> logger) : BackgroundService
@@ -74,14 +74,19 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
             "ui.auth.status" => administration.Status(company),
             "ui.auth.bootstrap" => administration.Bootstrap(Read<UiLogin>(), sid),
             "ui.auth.login" => administration.Login(Read<UiLogin>(), sid),
-            "ui.layout.read" => administration.Read(company, Page()),
+            "ui.auth.session" => administration.Authenticate(company, request.SessionToken, sid),
+            "ui.users.list" => administration.ListUsers(company, request.SessionToken ?? "", sid),
+            "ui.layout.read" => ReadLayout(),
             "ui.layout.save" => administration.Save(Read<UiLayoutSave>(), Page(), sid),
             "ui.layout.restore" => administration.Restore(Read<UiLayoutRestore>(), Page(), sid),
             _ => ExecuteOther()
         };
         return new(true, JsonSerializer.SerializeToElement(value));
+        object ReadLayout() { administration.Authenticate(company, request.SessionToken, sid); return administration.Read(company, Page()); }
         object ExecuteOther()
         {
+            if (request.Operation == "ui.users.update") { administration.UpdateUser(Read<UiUpdateUser>(), sid); return new { saved = true }; }
+            if (request.Operation == "ui.auth.change-password") { administration.ChangePassword(Read<UiChangePassword>(), sid); return new { saved = true }; }
             if (request.Operation == "ui.users.create") { administration.CreateUser(Read<UiCreateUser>(), sid); return new { saved = true }; }
             if (request.Operation == "ui.auth.logout") { administration.Logout(company, request.Payload.GetProperty("Token").GetString() ?? "", sid); return new { loggedOut = true }; }
             throw new ArgumentException("Ismeretlen adminisztrációs művelet.");
@@ -90,21 +95,28 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
     private async Task<LocalResponse> Execute(LocalRequest request, string actor, CancellationToken ct)
     {
         if (request.Operation.StartsWith("ui.", StringComparison.Ordinal)) return AdminCommand(request, actor);
+        UiSession Session(Guid company) => administration.Authenticate(company,request.SessionToken,actor);
+        void Admin(Guid? company=null) => administration.RequireAdmin(company ?? request.AuthCompanyId ?? throw new UnauthorizedAccessException("Adminbejelentkezés szükséges."),request.SessionToken,actor);
         switch (request.Operation)
         {
             case "companies.list": return new(true, JsonSerializer.SerializeToElement(companies.List()));
             case "companies.create":
+                if(companies.List().Any(c=>administration.Status(c.Id).Configured)) Admin();
                 var company = request.Payload.Deserialize<CreateCompanyRequest>() ?? throw new ArgumentException("Hiányzó cégnév.");
                 return new(true, JsonSerializer.SerializeToElement(companies.Create(company.Name, company.IsDemo)));
             case "companies.backup":
                 var backup = request.Payload.Deserialize<CompanyBackupRequest>() ?? throw new ArgumentException("Hiányzó mentési kérés.");
+                Admin(backup.CompanyId);
                 return new(true, JsonSerializer.SerializeToElement(new { fileName = backups.Create(backup.CompanyId, backup.FileName) }));
             case "companies.restore":
+                Admin();
                 var restore = request.Payload.Deserialize<CompanyRestoreRequest>() ?? throw new ArgumentException("Hiányzó visszaállítási kérés.");
                 return new(true, JsonSerializer.SerializeToElement(backups.Restore(restore.FileName, restore.Name, restore.IsDemo)));
             case "companies.clear-demo":
-                return new(true, JsonSerializer.SerializeToElement(companies.ClearDemoData()));
+                Admin();
+                return new(true, JsonSerializer.SerializeToElement(companies.ClearDemoData(request.AuthCompanyId)));
             case "modules.set-enabled":
+                Admin();
                 var change = request.Payload.Deserialize<SetModuleEnabledRequest>() ?? throw new ArgumentException("Hiányzó modul.");
                 modulesEnabled.SetEnabled(change.ModuleId, change.Enabled);
                 return new(true, JsonSerializer.SerializeToElement(new { change.ModuleId, change.Enabled }));
@@ -121,7 +133,11 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
                 foreach (var key in payload.Select(p => p.Key).Where(k => k.Equals("companyId", StringComparison.OrdinalIgnoreCase)).ToArray())
                     payload.Remove(key);
                 payload["companyId"] = command.CompanyId;
-                var caller = new CallerIdentity(actor, commands.RegisteredPermissions);
+                var session=Session(command.CompanyId);
+                // Dossiers expose cross-module history; NAV settings contain local secrets.
+                if ((command.ModuleId=="receiving" && command.Command=="nav-save") || (command.ModuleId=="partners" && command.Command=="dossier"))
+                    Admin(command.CompanyId);
+                var caller = new CallerIdentity(actor+"/"+session.UserName, commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(session.Role,p)).ToHashSet(StringComparer.Ordinal));
                 var result = await commands.ExecuteAsync(new(command.ModuleId, command.Command,
                     JsonSerializer.SerializeToElement(payload)), caller, ct);
                 return new(true, result);

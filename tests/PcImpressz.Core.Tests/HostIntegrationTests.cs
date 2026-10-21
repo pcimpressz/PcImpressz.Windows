@@ -19,6 +19,7 @@ internal static class HostIntegrationTests
             Console.WriteLine("SKIP host integration: a névcső és a .tools dotnet.exe Windowsos.");
             return;
         }
+        var sessionTokens=new Dictionary<Guid,string>();Guid? activeCompany=null;
         using var dir=new TestDirectory();using var crypto=new CryptoFixture();
         var root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../"));
         var install=Guid.NewGuid().ToString("D");
@@ -79,6 +80,7 @@ internal static class HostIntegrationTests
                 var status=await JsonSerializer.DeserializeAsync<HostDiagnostic>(statusPipe,cancellationToken:deadline.Token);
                 if(status?.State=="Ready")
                 {
+                    Check.Equal(1,status.CompanyAuthenticationVersion);
                     Check.True(status.Modules.All(m=>m.State=="Active"),string.Join("; ",status.Modules.Select(m=>m.Reason)));
                     break;
                 }
@@ -90,6 +92,7 @@ internal static class HostIntegrationTests
             var adminStatus=await Send("ui.auth.status",new{CompanyId=a});
             Check.True(!adminStatus.Data!.Value.Deserialize<UiAuthStatus>()!.Configured);
             var adminSession=(await Send("ui.auth.bootstrap",new UiLogin(a,"admin","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+            await Send("ui.auth.bootstrap",new UiLogin(b,"admin","Test-only-password-2026"));activeCompany=a;
             Check.True(!(await Send("ui.auth.bootstrap",new UiLogin(a,"other","Test-only-password-2026"))).Success);
             Check.True((await Send("ui.users.create",new UiCreateUser(a,adminSession.Token,"reader","Test-only-password-2026","user"))).Success);
             var readerSession=(await Send("ui.auth.login",new UiLogin(a,"reader","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
@@ -103,6 +106,25 @@ internal static class HostIntegrationTests
             Check.True(!(await Send("ui.layout.save",new UiLayoutSave(a,"partners.partners",adminSession.Token,0,layout.Fields))).Success);
             Check.True((await Send("ui.layout.restore",new UiLayoutRestore(a,"partners.partners",adminSession.Token,1,-1))).Success);
 
+            Check.True(!(await Send("module.execute",new ModuleCommandRequest(a,"partners","list",JsonSerializer.SerializeToElement(new{})),anonymous:true)).Success);
+            Check.True((await Send("ui.users.create",new UiCreateUser(a,adminSession.Token,"seller","Test-only-password-2026","sales"))).Success);
+            Check.True((await Send("ui.users.create",new UiCreateUser(a,adminSession.Token,"warehouse","Test-only-password-2026","warehouse"))).Success);
+            var seller=(await Send("ui.auth.login",new UiLogin(a,"seller","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+            var warehouse=(await Send("ui.auth.login",new UiLogin(a,"warehouse","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+            foreach(var deniedRequest in new[]{new ModuleCommandRequest(a,"receiving","list",JsonSerializer.SerializeToElement(new{})),new ModuleCommandRequest(a,"inventory","save",JsonSerializer.SerializeToElement(new{role="admin",permissions=new[]{"inventory.write"}})),new ModuleCommandRequest(a,"partners","dossier",JsonSerializer.SerializeToElement(new{})),new ModuleCommandRequest(b,"sales","list",JsonSerializer.SerializeToElement(new{}))})
+            {var response=await Send("module.execute",deniedRequest,seller.Token);Check.True(!response.Success);Check.Equal("denied",response.Code);}
+            Check.True(!(await Send("module.execute",new ModuleCommandRequest(a,"sales","list",JsonSerializer.SerializeToElement(new{})),warehouse.Token)).Success);
+            Check.True(!(await Send("module.execute",new ModuleCommandRequest(a,"receiving","nav-save",JsonSerializer.SerializeToElement(new{})),warehouse.Token)).Success);
+            Check.True(!(await Send("companies.backup",new CompanyBackupRequest(a,Path.Combine(dir.Path,"denied.pcibak")),seller.Token)).Success);
+            Check.True(!(await Send("ui.users.list",new{CompanyId=a},seller.Token)).Success);
+            foreach(var (operation,input) in new (string,object)[]{("companies.create",new CreateCompanyRequest("Tiltott cég",false)),("companies.restore",new CompanyRestoreRequest("nincs.pcibak","Tiltott",false)),("companies.clear-demo",new{}),("modules.set-enabled",new SetModuleEnabledRequest("sales",false))})
+            {var response=await Send(operation,input,seller.Token);Check.True(!response.Success);Check.Equal("denied",response.Code);}
+            Check.True((await Send("module.execute",new ModuleCommandRequest(a,"sales","list",JsonSerializer.SerializeToElement(new{})),seller.Token)).Success);
+            Check.True((await Send("module.execute",new ModuleCommandRequest(a,"receiving","list",JsonSerializer.SerializeToElement(new{})),warehouse.Token)).Success);
+            Check.True((await Send("ui.users.update",new UiUpdateUser(a,adminSession.Token,"warehouse","warehouse",true))).Success);
+            Check.True(!(await Send("module.execute",new ModuleCommandRequest(a,"receiving","list",JsonSerializer.SerializeToElement(new{})),warehouse.Token)).Success);
+            Check.True((await Send("ui.users.update",new UiUpdateUser(a,adminSession.Token,"warehouse","warehouse",false))).Success);
+            Check.True(!(await Send("module.execute",new ModuleCommandRequest(a,"receiving","list",JsonSerializer.SerializeToElement(new{})),warehouse.Token)).Success);
             Check.Equal(0,(await Module(a,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
             var saved=await Module(a,"save",new Dictionary<string,object?>{["CompanyId"]=b,["companyId"]=b,["id"]=null,["version"]=0,["data"]=new{name="IPC partner",isCustomer=true,isSupplier=true,isActive=true},["actor"]="fake-user"});
             Check.True(saved.Success,saved.Error??"Save failed");
@@ -160,6 +182,7 @@ internal static class HostIntegrationTests
             Check.True((await Module(a,"list",new{})).Success);
             var demo=first.Data!.Value[0].GetProperty("Id").GetGuid();
             Check.True(first.Data.Value[0].GetProperty("IsDemo").GetBoolean());
+            await Send("ui.auth.bootstrap",new UiLogin(demo,"admin","Test-only-password-2026"));
             var demoPartner=await Module(demo,"save",new{id=(Guid?)null,version=0,data=new{name="Demó partner",isCustomer=true,isActive=true}});
             Check.True(demoPartner.Success,demoPartner.Error??"Demo save failed");
             var otherDemo=await Module(b,"save",new{id=(Guid?)null,version=0,data=new{name="Másik demó",isCustomer=true,isActive=true}});
@@ -169,15 +192,15 @@ internal static class HostIntegrationTests
             File.WriteAllText(Path.Combine(dir.Path,"appearance.json"),"megjelenes");
             var registry=File.ReadAllText(Path.Combine(dir.Path,"companies.json"));
             var enablement=File.ReadAllText(Path.Combine(dir.Path,"module-enablement.json"));
-            var cleared=await Send("companies.clear-demo",new{});
+            var cleared=await Send("companies.clear-demo",new{CompanyId=demo});
             Check.True(cleared.Success,cleared.Error??"Clear failed");
-            Check.Equal(2,cleared.Data!.Value.GetProperty("DemoCompanies").GetInt32());
+            Check.Equal(1,cleared.Data!.Value.GetProperty("DemoCompanies").GetInt32());
             Check.True(!Directory.Exists(demoFolder));
-            Check.True(!Directory.Exists(Path.Combine(dir.Path,"companies",b.ToString("N"))));
+            Check.True(Directory.Exists(Path.Combine(dir.Path,"companies",b.ToString("N"))));
             Check.Equal(1,(await Module(a,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
             Check.Equal(1,(await Catalog(a,"products-list",new{})).Data!.Value.GetProperty("total").GetInt32());
             Check.Equal(0,(await Module(demo,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
-            Check.Equal(0,(await Module(b,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
+            Check.Equal(1,(await Module(b,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
             Check.Equal(3,(await Send("companies.list",new{})).Data!.Value.GetArrayLength());
             Check.Equal(registry,File.ReadAllText(Path.Combine(dir.Path,"companies.json")));
             Check.Equal("megjelenes",File.ReadAllText(Path.Combine(dir.Path,"appearance.json")));
@@ -189,7 +212,57 @@ internal static class HostIntegrationTests
             var backupResponse=await Send("companies.backup",new CompanyBackupRequest(a,backupFile));Check.True(backupResponse.Success,backupResponse.Error??"Backup failed");
             var restoreResponse=await Send("companies.restore",new CompanyRestoreRequest(backupFile,"IPC visszaállított cég",false));Check.True(restoreResponse.Success,restoreResponse.Error??"Restore failed");
             var restoredCompany=restoreResponse.Data!.Value.GetProperty("Id").GetGuid();
+            Check.True(!(await Business(restoredCompany,"inventory","list",new{})).Success);
+            await Send("ui.auth.bootstrap",new UiLogin(restoredCompany,"admin","Test-only-password-2026"));
             Check.Equal(10m,(await Business(restoredCompany,"inventory","list",new{})).Data!.Value.GetProperty("rows")[0].GetProperty("quantity").GetDecimal());
+            if(Environment.GetEnvironmentVariable("PCIMPRESSZ_REHEARSAL_BACKUP") is {Length:>0} rehearsalBackup)
+            {
+                var sourceHash=System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(rehearsalBackup));
+                var copyResponse=await Send("companies.restore",new CompanyRestoreRequest(rehearsalBackup,"Másolati üzleti próba",true));Check.True(copyResponse.Success,copyResponse.Error??"Copy restore failed");
+                var copy=copyResponse.Data!.Value.GetProperty("Id").GetGuid();
+                var copyAdmin=(await Send("ui.auth.bootstrap",new UiLogin(copy,"admin","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+                await Send("ui.users.create",new UiCreateUser(copy,copyAdmin.Token,"warehouse","Test-only-password-2026","warehouse"));
+                await Send("ui.users.create",new UiCreateUser(copy,copyAdmin.Token,"seller","Test-only-password-2026","sales"));
+                var copyWarehouse=(await Send("ui.auth.login",new UiLogin(copy,"warehouse","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+                var copySeller=(await Send("ui.auth.login",new UiLogin(copy,"seller","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+                var copiedDatabase=new CompanyDatabase(new CompanyStore(dir.Path).DataDirectory);
+                var masters=copiedDatabase.Execute(copy,tx=>(Products:CompanyReferenceQueries.Products(tx),Partners:CompanyReferenceQueries.Partners(tx)));
+                Console.WriteLine($"Existing backup master data: {masters.Products.Length} products, {masters.Partners.Length} partners.");
+                var existingProduct=masters.Products.FirstOrDefault(p=>p.IsActive&&p.IsSalable&&p.IsPurchaseable);
+                var existingSupplier=masters.Partners.FirstOrDefault(p=>p.IsActive&&p.IsSupplier);
+                if(existingProduct is null)
+                {
+                    var testUnit="PR"+Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+                    var unitResponse=await Send("module.execute",new ModuleCommandRequest(copy,"catalog","units-save",JsonSerializer.SerializeToElement(new{id=(Guid?)null,version=0,data=new{name="Másolati próbadarab",code=testUnit,symbol="db",isActive=true}})));Check.True(unitResponse.Success,unitResponse.Error??"Unit failed");
+                    var productResponse=await Send("module.execute",new ModuleCommandRequest(copy,"catalog","products-save",JsonSerializer.SerializeToElement(new{id=(Guid?)null,version=0,data=new{name="Csak másolati próba",sku="PROBA-"+Guid.NewGuid().ToString("N"),unitCode=testUnit,isActive=true,isSalable=true,isPurchaseable=true}})));Check.True(productResponse.Success,productResponse.Error??"Product failed");
+                    existingProduct=copiedDatabase.Execute(copy,tx=>CompanyReferenceQueries.Products(tx).Single(p=>p.Id==productResponse.Data!.Value.GetProperty("id").GetGuid()));
+                    Console.WriteLine("No eligible source product; created a synthetic test product exclusively in the restored copy.");
+                }
+                if(existingSupplier is null)
+                {
+                    var partnerResponse=await Send("module.execute",new ModuleCommandRequest(copy,"partners","save",JsonSerializer.SerializeToElement(new{id=(Guid?)null,version=0,data=new{name="Csak másolati próbaszállító",isSupplier=true,isCustomer=true,isActive=true}})));Check.True(partnerResponse.Success,partnerResponse.Error??"Partner failed");
+                    existingSupplier=copiedDatabase.Execute(copy,tx=>CompanyReferenceQueries.Partners(tx).Single(p=>p.Id==partnerResponse.Data!.Value.GetProperty("id").GetGuid()));
+                    Console.WriteLine("No active source supplier; created a synthetic supplier exclusively in the restored copy.");
+                }
+                const string rehearsalWarehouse="Jogosultsági próba";
+                Task<LocalResponse> CopyCommand(string module,string command,object input,string token)=>Send("module.execute",new ModuleCommandRequest(copy,module,command,JsonSerializer.SerializeToElement(input)),token);
+                var copyReceipt=await CopyCommand("receiving","save",new{id=(Guid?)null,version=0,draft=new{number="MASOLATI-PROBA-"+Guid.NewGuid().ToString("N"),supplierId=existingSupplier.Id,issuedOn="2026-10-21",warehouse=rehearsalWarehouse,lines=new[]{new{productId=existingProduct.Id,name=existingProduct.Name,sku=existingProduct.Sku,unitCode=existingProduct.UnitCode,quantity=3m,netUnitPrice=100m,vatRate=27m}}}},copyWarehouse.Token);
+                Check.True(copyReceipt.Success,copyReceipt.Error??"Copied receipt failed");var copyReceiptId=copyReceipt.Data!.Value.GetProperty("id").GetGuid();
+                Check.True((await CopyCommand("receiving","classify",new{id=copyReceiptId,version=1,status="bevetelezve"},copyWarehouse.Token)).Success);
+                var copySaleId=Guid.NewGuid();
+                var copySale=await CopyCommand("sales","save",new{operationId=copySaleId,warehouse=rehearsalWarehouse,lines=new[]{new{productId=existingProduct.Id,quantity=2m,netUnitPrice=150m,vatRate=27m}}},copySeller.Token);
+                Check.True(copySale.Success,copySale.Error??"Copied sale failed");
+                Check.True(!(await CopyCommand("receiving","reverse",new{id=copyReceiptId,version=2,reason="Másolati készletvédelem"},copyWarehouse.Token)).Success);
+                Check.True((await CopyCommand("sales","reverse",new{id=copySaleId,version=1},copySeller.Token)).Success);
+                Check.True((await CopyCommand("receiving","reverse",new{id=copyReceiptId,version=2,reason="Másolati próba lezárása"},copyWarehouse.Token)).Success);
+                var copyBalance=await CopyCommand("inventory","list",new{search=rehearsalWarehouse},copySeller.Token);Check.True(copyBalance.Success);
+                Check.True(copyBalance.Data!.Value.GetProperty("rows").EnumerateArray().All(row=>row.GetProperty("quantity").GetDecimal()==0));
+                var copiedDocuments=copiedDatabase.Execute(copy,tx=>string.Join("",tx.List("sales","sale/")));
+                Check.True(copiedDocuments.Contains("/seller",StringComparison.Ordinal));
+                Check.True(sourceHash.SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(rehearsalBackup))));
+                Console.WriteLine($"PASS existing company backup rehearsal: {masters.Products.Length} products, {masters.Partners.Length} partners; warehouse receipt, seller sale, stock protection and both reversals; source unchanged.");
+            }
+
             File.Delete(Path.Combine(dir.Path,"license.jws"));
             var denied=await Module(a,"save",new{id=(Guid?)null,version=0,data=new{name="Nem menthető",isActive=true}});
             Check.True(!denied.Success);Check.Equal("denied",denied.Code);Check.True((await Module(a,"export",new{})).Success);
@@ -216,13 +289,18 @@ internal static class HostIntegrationTests
             File.WriteAllText(Path.Combine(package,"manifest.jws"),crypto.Sign(manifest,ModuleManifest.DocumentType));
         }
         Task<LocalResponse> Business(Guid company,string module,string command,object payload)=>Send("module.execute",new ModuleCommandRequest(company,module,command,JsonSerializer.SerializeToElement(payload)));
-        async Task<LocalResponse> Send(string operation,object payload)
+        async Task<LocalResponse> Send(string operation,object payload,string? overrideToken=null,bool anonymous=false)
         {
             using var connect=CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);connect.CancelAfter(800);
             await using var pipe=new NamedPipeClientStream(".",DiagnosticChannel.ForDirectory(dir.Path)+"-commands",PipeDirection.InOut,PipeOptions.Asynchronous|PipeOptions.CurrentUserOnly);
             await pipe.ConnectAsync(connect.Token);
-            await LocalProtocol.WriteAsync(pipe,new LocalRequest(operation,JsonSerializer.SerializeToElement(payload)),deadline.Token);
-            return await LocalProtocol.ReadAsync<LocalResponse>(pipe,deadline.Token);
+            var json=JsonSerializer.SerializeToElement(payload);
+            Guid? company=json.TryGetProperty("CompanyId",out var id)?id.GetGuid():activeCompany;
+            var token=anonymous?null:overrideToken ?? (company is {} c&&sessionTokens.TryGetValue(c,out var t)?t:null);
+            await LocalProtocol.WriteAsync(pipe,new LocalRequest(operation,json,company,token),deadline.Token);
+            var response=await LocalProtocol.ReadAsync<LocalResponse>(pipe,deadline.Token);
+            if(response.Success&&operation=="ui.auth.bootstrap") {var session=response.Data!.Value.Deserialize<UiSession>()!;sessionTokens[company!.Value]=session.Token;activeCompany ??= company;}
+            return response;
         }
         async Task<HostDiagnostic> Status()
         {

@@ -18,6 +18,7 @@ public interface IWorkspacePage : INotifyPropertyChanged
     bool IsDirty { get; }
     bool IsBusy { get; }
     void CompanyChanged();
+    void PermissionsChanged();
 }
 
 public sealed class EntityFieldViewModel(EntityField definition) : Observable
@@ -96,10 +97,14 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public EntityPageLabels Labels { get; }
     public EntityFilterOption[] Filters { get; }
     public string EditorTitle => (_editId is null ? Labels.NewTitle : Labels.EditTitle) + (IsDirty ? " · nincs mentve" : "");
-    public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); Changed(nameof(CanOpenDossier)); } }
+    public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); PermissionsChanged(); } }
     public bool IsNotBusy => !IsBusy;
+    public bool CanWrite => !IsBusy && _connection.Allows(Definition.ModuleId+".write");
+    public bool CanExport => !IsBusy && _connection.Allows(Definition.ModuleId+".export");
+    public bool CanAdmin => !IsBusy && _connection.Session?.Role=="admin";
+    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanAdmin));Changed(nameof(CanOpenDossier));}
     public bool HasDossier => !string.IsNullOrWhiteSpace(Definition.DossierCommand);
-    public bool CanOpenDossier => HasDossier && _editId is not null && !IsBusy;
+    public bool CanOpenDossier => CanAdmin && HasDossier && _editId is not null && !IsBusy;
     public bool IsDossierOpen { get => _dossierOpen; private set { _dossierOpen = value; Changed(); Changed(nameof(ShowPartnerList)); } }
     public bool ShowPartnerList => !IsDossierOpen;
     public DateTime? PeriodFrom { get => _periodFrom; set { _periodFrom = value; Changed(); } }

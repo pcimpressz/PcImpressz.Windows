@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -20,6 +20,7 @@ public sealed partial class ShellViewModel
     }
     private bool CanMaintain()
     {
+        if(!IsCompanyAdmin){BackupMessage="Cégmentéshez és visszaállításhoz adminbejelentkezés szükséges.";return false;}
         if(!WorkspaceIsIdle) {BackupMessage="Várd meg a folyamatban lévő műveletet.";return false;}
         if(_entityPages.Values.Any(p=>p.IsDirty)) {BackupMessage="Előbb mentsd vagy vesd el a nyitott adatlapok módosításait.";return false;}
         return true;

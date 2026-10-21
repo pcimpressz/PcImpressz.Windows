@@ -59,7 +59,7 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     public bool IsInventory=>Definition.ViewKind=="inventory";
     public bool IsSales=>!IsInventory;
     public string SaveLabel=>IsInventory ? "Készletváltozás rögzítése" : "Eladás véglegesítése";
-    public bool IsBusy {get=>_busy;private set{_busy=value;Changed();Changed(nameof(IsNotBusy));}}
+    public bool IsBusy {get=>_busy;private set{_busy=value;Changed();Changed(nameof(IsNotBusy));PermissionsChanged();}}
     public bool IsNotBusy=>!IsBusy;
     public bool IsDirty {get=>_dirty;private set{_dirty=value;Changed();}}
     public string Message {get=>_message;private set{_message=value;Changed();}}
@@ -93,6 +93,9 @@ internal sealed partial class OperationsPageViewModel:Observable,IWorkspacePage,
     public ICommand ResetCommand {get;}
     public ICommand ExportCommand {get;}
     private void Dirty(){if(!_filling)IsDirty=true;Changed(nameof(BasketTotal));}
+    public bool CanWrite=>!IsBusy&&_connection.Allows(Definition.ModuleId+".write");
+    public bool CanExport=>!IsBusy&&_connection.Allows(Definition.ModuleId+".export");
+    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));}
     public void CompanyChanged()
     {
         _focusedProductId=null;StockScope="Minden termék saját készlete";Changed(nameof(StockScope));_appliedRecordSearch="";_stockWarehouse=null;Changed(nameof(SelectedStockInfo));Details="";ListNotice="";_filling=true;_listing=null;Rows.Clear();Movements.Clear();Basket.Clear();Products.Clear();Customers.Clear();

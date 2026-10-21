@@ -25,6 +25,7 @@ public sealed partial class ShellViewModel
     public async Task LoadNavAsync()
     {
         Changed(nameof(NavCompanyLabel));
+        if(!IsCompanyAdmin) { ClearNav("A NAV-kapcsolatot az admin kezeli."); return; }
         if (SelectedCompany is not { } company) { ClearNav("Először válassz céget."); return; }
         if (NavBusy) return;
         NavBusy = true;
@@ -32,6 +33,7 @@ public sealed partial class ShellViewModel
         {
             var status = await _connection.SendAsync("module.execute", new ModuleCommandRequest(company.Id, "receiving", "nav-status",
                 JsonSerializer.SerializeToElement(new { page = 0, pageSize = 1 })), _shutdown.Token);
+            if(SelectedCompany?.Id!=company.Id||!IsCompanyAdmin)return;
             ShowNav(status);
             NavMessage = NavConfigured ? "A mentett kapcsolat titkosítva van, csak ehhez a Windows-felhasználóhoz." : NavSecretHint;
         }
@@ -51,6 +53,7 @@ public sealed partial class ShellViewModel
                 {
                     taxNumber = NavTaxNumber, userName = NavUserName, password, signKey, exchangeKey, testMode = NavTestMode
                 })), _shutdown.Token);
+            if(SelectedCompany?.Id!=company.Id||!IsCompanyAdmin)return;
             ShowNav(status);
             NavMessage = "A NAV-kapcsolat titkosítva mentve ehhez a céghez. A jelszó és a kulcsok nem jelennek meg újra.";
         }

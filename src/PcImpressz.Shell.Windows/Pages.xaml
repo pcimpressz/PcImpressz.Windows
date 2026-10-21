@@ -3,7 +3,7 @@
  <DataTemplate DataType="{x:Type local:OperationsPageViewModel}"><local:OperationsPageView /></DataTemplate>
  <DataTemplate DataType="{x:Type local:ProductWorkspaceViewModel}">
   <StackPanel>
-   <WrapPanel><Button Content="Feliratok és elrendezés – admin" Command="{Binding Products.EditLayoutCommand}" Margin="0,0,10,10" /><Button Content="Új termék" Command="{Binding NewProductCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,10,10" /><Button Content="Kijelölt termék szerkesztése" Command="{Binding EditProductCommand}" Margin="0,0,10,10" /><Button Content="Kijelölt termék készlete és mozgásai" Command="{Binding SelectedStockCommand}" Margin="0,0,10,10" /><Button Content="Minden termék készlete" Command="{Binding AllStockCommand}" Margin="0,0,0,10" /></WrapPanel>
+   <WrapPanel><Button Content="Feliratok és elrendezés – admin" Command="{Binding Products.EditLayoutCommand}" IsEnabled="{Binding Products.CanAdmin}" Margin="0,0,10,10" /><Button Content="Új termék" Command="{Binding NewProductCommand}" IsEnabled="{Binding Products.CanWrite}" Style="{StaticResource PrimaryButton}" Margin="0,0,10,10" /><Button Content="Kijelölt termék szerkesztése" Command="{Binding EditProductCommand}" IsEnabled="{Binding Products.CanWrite}" Margin="0,0,10,10" /><Button Content="Kijelölt termék készlete és mozgásai" Command="{Binding SelectedStockCommand}" Margin="0,0,10,10" /><Button Content="Minden termék készlete" Command="{Binding AllStockCommand}" Margin="0,0,0,10" /></WrapPanel>
    <TabControl SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource StrokeBrush}" Padding="14">
     <TabControl.Resources>
      <Style TargetType="TabItem">
@@ -97,7 +97,7 @@
        <TextBlock Text="{Binding Id}" Style="{StaticResource SectionTitle}" />
        <TextBlock Text="{Binding Reason}" Style="{StaticResource Muted}" />
        <TextBlock Text="{Binding UsageLabel}" Margin="0,12,0,8" FontWeight="SemiBold" />
-       <CheckBox Content="Használatban" IsChecked="{Binding Enabled}" AutomationProperties.Name="{Binding ToggleName}" HorizontalAlignment="Left" />
+       <CheckBox Content="Használatban" IsChecked="{Binding Enabled}" IsEnabled="{Binding DataContext.IsCompanyAdmin, RelativeSource={RelativeSource AncestorType=Window}}" AutomationProperties.Name="{Binding ToggleName}" HorizontalAlignment="Left" />
       </StackPanel>
       <StackPanel Grid.Column="1" Margin="20,0,0,0"><TextBlock Text="{Binding State}" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" /><TextBlock Text="{Binding Version}" Style="{StaticResource Muted}" Margin="0,8,0,0" /></StackPanel>
      </Grid></Border>
@@ -225,14 +225,14 @@
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
     <TextBlock Text="Cégmentés és visszaállítás" Style="{StaticResource SectionTitle}" />
     <TextBlock Text="Az aktuális cég ellenőrzött mentése és visszaállítása új cégként. A meglévő cégek adatai megmaradnak." Style="{StaticResource Muted}" />
-    <WrapPanel Margin="0,16,0,0" IsEnabled="{Binding WorkspaceIsIdle}"><Button Content="Kiválasztott cég mentése" Command="{Binding BackupCompanyCommand}" Margin="0,0,12,8" /><Button Content="Visszaállítás új cégként" Command="{Binding RestoreCompanyCommand}" Margin="0,0,0,8" /></WrapPanel>
+    <WrapPanel Margin="0,16,0,0" IsEnabled="{Binding WorkspaceIsIdle}"><Button Content="Kiválasztott cég mentése" Command="{Binding BackupCompanyCommand}" IsEnabled="{Binding IsCompanyAdmin}" Margin="0,0,12,8" /><Button Content="Visszaállítás új cégként" Command="{Binding RestoreCompanyCommand}" IsEnabled="{Binding IsCompanyAdmin}" Margin="0,0,0,8" /></WrapPanel>
     <TextBlock Text="{Binding BackupMessage}" Style="{StaticResource Muted}" Margin="0,12,0,0" />
    </StackPanel></Border>
-   <local:NavConnectionCard Margin="0,20,0,0" />
+   <local:NavConnectionCard Margin="0,20,0,0" IsEnabled="{Binding IsCompanyAdmin}" />
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>
     <TextBlock Text="Kísérleti adatbázis" Style="{StaticResource SectionTitle}" />
     <TextBlock Text="A demó cég a kísérleti adatbázis. A törlés a cég moduladatait távolítja el: partnereket, terméktörzset, a mentett NAV-kapcsolatot és minden mást a cég mappájából. A cég bejegyzése megmarad, utána a meglévő képernyőkön üresen lehet új adatot felvinni. A licenc, a megjelenés és a modulok ki-be állapota a helyén marad. Más cég adata nem törlődik." Style="{StaticResource Muted}" />
-    <Button Content="Demó cég adatainak törlése" Command="{Binding ClearDemoDataCommand}" Margin="0,18,0,0" HorizontalAlignment="Left" />
+    <Button Content="Demó cég adatainak törlése" Command="{Binding ClearDemoDataCommand}" IsEnabled="{Binding IsCompanyAdmin}" Margin="0,18,0,0" HorizontalAlignment="Left" />
     <TextBlock Text="{Binding ActionMessage}" Style="{StaticResource Muted}" Margin="0,14,0,0" />
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel>

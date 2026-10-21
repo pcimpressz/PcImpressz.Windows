@@ -1,4 +1,4 @@
-﻿<Window x:Class="PcImpressz.Shell.Windows.MainWindow"
+<Window x:Class="PcImpressz.Shell.Windows.MainWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
@@ -29,7 +29,7 @@
     <Border Width="{DynamicResource NavigationWidth}" Background="{DynamicResource SidebarBrush}"
      BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,0,1,0">
      <DockPanel Margin="14,25,14,18">
-      <StackPanel DockPanel.Dock="Top" Margin="5,0,5,30">
+      <StackPanel DockPanel.Dock="Top" Margin="5,0,5,16">
        <StackPanel Orientation="Horizontal">
         <Border Width="38" Height="38" CornerRadius="11" Background="{DynamicResource AccentBrush}">
          <TextBlock Text="P" FontSize="23" FontWeight="Bold" Foreground="{DynamicResource AccentTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -43,16 +43,19 @@
  <TextBlock Text="AKTÍV CÉG" Style="{StaticResource Eyebrow}" Margin="0,0,0,8" />
  <ComboBox ItemsSource="{Binding Companies}" SelectedItem="{Binding SelectedCompany}" DisplayMemberPath="Name" IsEnabled="{Binding WorkspaceIsIdle}" AutomationProperties.Name="Aktív cég" />
  <TextBlock Text="{Binding CompanyMode}" Style="{StaticResource Eyebrow}" FontSize="9" Margin="0,8,0,8" />
- <Button Content="+ Üres cég létrehozása" Command="{Binding CreateCompanyCommand}" Style="{StaticResource GhostButton}" Padding="0,5" HorizontalContentAlignment="Left" />
+ <Button Content="+ Üres cég létrehozása" Command="{Binding CreateCompanyCommand}" IsEnabled="{Binding CanCreateCompany}" Style="{StaticResource GhostButton}" Padding="0,5" HorizontalContentAlignment="Left" />
 </StackPanel>
-<TextBlock Text="MUNKATERÜLET" Style="{StaticResource Eyebrow}" Margin="8,35,0,0" Visibility="{DynamicResource NavigationLabelVisibility}" />
+<StackPanel Margin="8,0,0,0" Visibility="{DynamicResource NavigationLabelVisibility}">
+ <TextBlock Text="{Binding SignedInLabel}" TextWrapping="Wrap" Margin="0,0,0,8" />
+ <WrapPanel Visibility="{Binding IsSignedIn, Converter={StaticResource BoolVisibility}}">
+  <Button Content="Kijelentkezés" Command="{Binding LogoutCommand}" Padding="8,5" Margin="0,0,5,6" />
+  <Button Content="Jelszócsere" Command="{Binding PasswordCommand}" Padding="8,5" Margin="0,0,5,6" />
+ </WrapPanel>
+ <Button Content="Felhasználók és jogosultságok" Command="{Binding UsersCommand}" Padding="8,5" Visibility="{Binding IsCompanyAdmin, Converter={StaticResource BoolVisibility}}" />
+</StackPanel><TextBlock Text="MUNKATERÜLET" Style="{StaticResource Eyebrow}" Margin="8,16,0,0" Visibility="{DynamicResource NavigationLabelVisibility}" />
       </StackPanel>
       <StackPanel DockPanel.Dock="Bottom">
-       <Border Background="{DynamicResource ElevatedBrush}" CornerRadius="10" Padding="13" Margin="0,0,0,16" Visibility="{DynamicResource NavigationLabelVisibility}">
-        <StackPanel><TextBlock Text="MODULÁRIS ALAP" Style="{StaticResource Eyebrow}" />
-         <TextBlock Text="A rendszer veled bővül." FontWeight="SemiBold" Margin="0,7,0,0" />
-         <TextBlock Text="Csak azokat a modulokat használod, amelyekre szükséged van." Style="{StaticResource Muted}" Margin="0,6,0,0" /></StackPanel>
-       </Border>
+
        <Button Command="{Binding ToggleNavigationCommand}" Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" ToolTip="Oldalsáv összecsukása vagy kinyitása" AutomationProperties.Name="Oldalsáv váltása">
         <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" />
          <TextBlock Text="Oldalsáv" Margin="14,0,0,0" Visibility="{DynamicResource NavigationLabelVisibility}" /></StackPanel>

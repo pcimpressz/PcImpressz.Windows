@@ -9,6 +9,7 @@ public sealed partial class EntityPageViewModel
     public ICommand EditLayoutCommand { get; private set; } = null!;
     public int AppearanceRevision { get; private set; }
     internal Guid LayoutCompanyId => CompanyId;
+    internal UiSession? ApplicationSession => _connection.Session;
     internal string LayoutPageKey => Definition.ModuleId + "." + Definition.Id;
     private int _appearanceGeneration;
     private void InitializeLayoutEditor() => EditLayoutCommand = new RelayCommand(() => _ = EditLayoutAsync());

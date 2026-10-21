@@ -7,7 +7,8 @@ namespace PcImpressz.Contracts;
 public sealed record ModuleDiagnostic(string Id, string? Version, string State, string Reason, bool Enabled = true);
 public sealed record HostDiagnostic(string State, string InstallationId, string DataDirectory,
     string ContractVersion, string LicenseState, string LicenseReason, DateTimeOffset? LicenseValidUntil,
-    DateTimeOffset ObservedAt, int ProcessId, ModuleDiagnostic[] Modules, EntityPageDescriptor[]? Pages = null);
+    DateTimeOffset ObservedAt, int ProcessId, ModuleDiagnostic[] Modules, EntityPageDescriptor[]? Pages = null)
+{ public int CompanyAuthenticationVersion { get; init; } }
 
 public static class DiagnosticChannel
 {

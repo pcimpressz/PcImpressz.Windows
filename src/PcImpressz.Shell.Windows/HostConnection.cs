@@ -9,6 +9,10 @@ namespace PcImpressz.Shell.Windows;
 internal sealed class HostConnection(string directory, string? hostOverride)
 {
     private Process? _ownedHost;
+    internal UiSession? Session {get;private set;}
+    internal Guid? SessionCompany {get;private set;}
+    internal void SetSession(Guid? company,UiSession? session){SessionCompany=company;Session=session;}
+    internal bool Allows(string permission)=>Session is {} s && CompanyRoles.Allows(s.Role,permission);
 
     public async Task<HostDiagnostic> ReadAsync(CancellationToken cancellationToken)
     {
@@ -36,7 +40,7 @@ internal sealed class HostConnection(string directory, string? hostOverride)
         await using var pipe = new NamedPipeClientStream(".", DiagnosticChannel.ForDirectory(directory) + "-commands",
             PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await pipe.ConnectAsync(3000, deadline.Token);
-        await LocalProtocol.WriteAsync(pipe, new LocalRequest(operation, JsonSerializer.SerializeToElement(payload)), deadline.Token);
+        await LocalProtocol.WriteAsync(pipe, new LocalRequest(operation, JsonSerializer.SerializeToElement(payload), SessionCompany, Session?.Token), deadline.Token);
         var result = await LocalProtocol.ReadAsync<LocalResponse>(pipe, deadline.Token);
         if (!result.Success) throw new InvalidOperationException(result.Error ?? "A művelet nem sikerült.");
         return result.Data ?? JsonSerializer.SerializeToElement(new { });

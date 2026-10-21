@@ -79,7 +79,7 @@ public sealed class EntityPageView : UserControl
         var title = new TextBlock { FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new(0,0,0,20) };
         title.SetBinding(TextBlock.TextProperty, new Binding("EditorTitle")); editor.Children.Add(title);
         var fields = new Grid(); fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new());
-        fields.SetBinding(IsEnabledProperty, new Binding("IsNotBusy"));
+        fields.SetBinding(IsEnabledProperty, new Binding("CanWrite"));
         editor.Children.Add(fields);
         var save = new WrapPanel { Margin = new(0,20,0,0) };
         var saveButton = ActionButton("Mentés", "SaveCommand"); saveButton.SetResourceReference(StyleProperty, "PrimaryButton");
@@ -293,7 +293,7 @@ public sealed class EntityPageView : UserControl
     {
         var button = new Button { Content = label, Margin = new(0,0,8,10) };
         button.SetBinding(Button.CommandProperty, new Binding(command));
-        button.SetBinding(IsEnabledProperty, new Binding("IsNotBusy"));
+        button.SetBinding(IsEnabledProperty, new Binding(command is "SaveCommand" or "ArchiveCommand" or "NewCommand" ? "CanWrite" : command=="EditLayoutCommand"?"CanAdmin":command=="ExportCommand"?"CanExport":"IsNotBusy"));
         return button;
     }
 }

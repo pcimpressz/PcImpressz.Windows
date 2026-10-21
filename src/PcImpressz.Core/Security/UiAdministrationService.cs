@@ -7,10 +7,10 @@ namespace PcImpressz.Core.Security;
 
 // Credentials are installation-local and separate from portable company backups.
 // The Windows owner remains a trusted local operator; this is not an OS sandbox.
-public sealed class UiAdministrationService(ICompanyDatabase companies, ICompanyDatabase credentials, TimeProvider clock)
+public sealed partial class UiAdministrationService(ICompanyDatabase companies, ICompanyDatabase credentials, TimeProvider clock)
 {
     private sealed record Owner(string Sid);
-    private sealed record User(string UserName, string Role, string Salt, string Hash);
+    private sealed record User(string UserName, string Role, string Salt, string Hash, bool Disabled = false);
     private sealed record BoundSession(Guid Company, string Sid, UiSession Session);
     private readonly Dictionary<string, BoundSession> _sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, (int Count, DateTimeOffset Until)> _failures = [];
@@ -58,7 +58,7 @@ public sealed class UiAdministrationService(ICompanyDatabase companies, ICompany
             var user = credentials.Execute(input.CompanyId, tx => tx.Read<User>("accounts", "user/" + name));
             var salt = user is null ? new byte[16] : Convert.FromHexString(user.Salt);
             var hash = Hash(input.Password, salt);
-            if (user is null || !CryptographicOperations.FixedTimeEquals(hash, Convert.FromHexString(user.Hash)))
+            if (user is null || user.Disabled || !CryptographicOperations.FixedTimeEquals(hash, Convert.FromHexString(user.Hash)))
             {
                 var count = failure.Until <= now && failure.Count >= 5 ? 1 : failure.Count + 1;
                 _failures[input.CompanyId] = (count, count >= 5 ? now.AddMinutes(1) : DateTimeOffset.MinValue);
@@ -79,20 +79,11 @@ public sealed class UiAdministrationService(ICompanyDatabase companies, ICompany
             _sessions.Add(session.Token, new(company, sid, session)); return session;
         }
     }
-    private string Admin(Guid company, string? token, string sid)
-    {
-        lock (_gate)
-        {
-            if (token is null || !_sessions.TryGetValue(token, out var bound) || bound.Company != company || bound.Sid != sid
-                || bound.Session.Role != "admin" || bound.Session.ExpiresAt <= clock.GetUtcNow())
-                throw new UnauthorizedAccessException("A művelethez érvényes adminisztrátori bejelentkezés szükséges.");
-            return bound.Session.UserName;
-        }
-    }
+    private string Admin(Guid company, string? token, string sid) => RequireAdmin(company, token, sid).UserName;
     public void CreateUser(UiCreateUser input, string sid)
     {
         var actor = Admin(input.CompanyId, input.Token, sid); var name = Name(input.UserName);
-        if (input.Role is not ("admin" or "user")) throw new ArgumentException("Ismeretlen szerepkör.");
+        if (!CompanyRoles.Valid(input.Role)) throw new ArgumentException("Ismeretlen szerepkör.");
         var user = NewUser(name, input.Password, input.Role);
         credentials.Execute(input.CompanyId, tx =>
         {

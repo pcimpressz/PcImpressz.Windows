@@ -11,6 +11,43 @@ internal static class AdministrationTests
         [new("name","Termék neve",Required:true),new("sku","Saját cikkszám"),new("notes","Megjegyzés","multiline")],[],new("list","save","archive","export"));
     public static IEnumerable<(string,Func<Task>)> Cases()
     {
+        yield return Test("role policy separates warehouse sales and viewer permissions",f=>
+        {
+            foreach(var permission in new[]{"partners.read","partners.write","partners.export","catalog.read","catalog.write","catalog.export","inventory.read","inventory.write","inventory.export","receiving.read","receiving.write","receiving.export","sales.read","sales.write","sales.export"})Check.True(CompanyRoles.Allows("admin",permission));
+            Check.True(CompanyRoles.Allows("warehouse","receiving.write"));Check.True(CompanyRoles.Allows("warehouse","catalog.write"));
+            Check.True(!CompanyRoles.Allows("warehouse","sales.write"));Check.True(!CompanyRoles.Allows("warehouse","inventory.write"));
+            Check.True(CompanyRoles.Allows("sales","sales.write"));Check.True(!CompanyRoles.Allows("sales","receiving.read"));Check.True(!CompanyRoles.Allows("sales","catalog.write"));
+            Check.True(CompanyRoles.Allows("user","inventory.read"));Check.True(!CompanyRoles.Allows("user","sales.read"));Check.True(!CompanyRoles.Allows("unknown","catalog.read"));
+        });
+        yield return Test("account updates revoke sessions and protect the last active administrator",f=>
+        {
+            var admin=f.Admin();
+            Check.Throws<ArgumentException>(()=>f.Service.UpdateUser(new(f.Company,admin.Token,"admin","sales",false),Sid));
+            Check.Throws<ArgumentException>(()=>f.Service.UpdateUser(new(f.Company,admin.Token,"admin","admin",true),Sid));
+            f.Service.CreateUser(new(f.Company,admin.Token,"worker",Password,"warehouse"),Sid);
+            var worker=f.Service.Login(new(f.Company,"worker",Password),Sid);
+            Check.Equal("warehouse",f.Service.Authenticate(f.Company,worker.Token,Sid).Role);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.ListUsers(f.Company,worker.Token,Sid));
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.UpdateUser(new(f.Company,worker.Token,"worker","admin",false),Sid));
+            f.Service.UpdateUser(new(f.Company,admin.Token,"worker","sales",true),Sid);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.Authenticate(f.Company,worker.Token,Sid));
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.Login(new(f.Company,"worker",Password),Sid));
+            f.Service.UpdateUser(new(f.Company,admin.Token,"worker","sales",false,"Replacement-password-2026"),Sid);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.Login(new(f.Company,"worker",Password),Sid));
+            Check.Equal("sales",f.Service.Login(new(f.Company,"worker","Replacement-password-2026"),Sid).Role);
+            Check.Equal(2,f.Service.ListUsers(f.Company,admin.Token,Sid).Length);
+        });
+        yield return Test("password change requires current password and invalidates every user session",f=>
+        {
+            var admin=f.Admin();var second=f.Service.Login(new(f.Company,"admin",Password),Sid);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.ChangePassword(new(f.Company,admin.Token,"wrong","Replacement-password-2026"),Sid));
+            f.Service.ChangePassword(new(f.Company,admin.Token,Password,"Replacement-password-2026"),Sid);
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.Authenticate(f.Company,admin.Token,Sid));
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.Authenticate(f.Company,second.Token,Sid));
+            Check.Throws<UnauthorizedAccessException>(()=>f.Service.Login(new(f.Company,"admin",Password),Sid));
+            Check.Equal("admin",f.Service.Login(new(f.Company,"admin","Replacement-password-2026"),Sid).Role);
+        });
+
         yield return Test("offline recovery rejects foreign Windows owners and invalidates old sessions",f=>
         {
             var admin=f.Admin();f.Service.CreateUser(new(f.Company,admin.Token,"reader",Password,"user"),Sid);

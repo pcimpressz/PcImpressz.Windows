@@ -27,7 +27,7 @@ internal sealed class HostDiagnosticSource(HostOptions options, InstallationInfo
         var reported = modules?.Select(module => module with { Enabled = modulesEnabled.IsEnabled(module.Id) }).ToArray();
         return new(modules is null ? "Starting" : "Ready", installation.Id, options.DataDirectory,
             PlatformContract.ApiVersion, license.Status.ToString(), license.Reason, license.ValidUntil,
-            DateTimeOffset.UtcNow, Environment.ProcessId, reported ?? [], modules is null ? [] : _pages);
+            DateTimeOffset.UtcNow, Environment.ProcessId, reported ?? [], modules is null ? [] : _pages) { CompanyAuthenticationVersion = 1 };
     }
 }
 

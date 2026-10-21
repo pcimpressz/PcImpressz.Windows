@@ -17,7 +17,8 @@ internal static class Program
         var directory = Path.Combine(Path.GetTempPath(), "pcimpressz-ui-audit-" + Guid.NewGuid().ToString("N"));
         var definition = new EntityPageDescriptor("partners", "partners", "Partnerek", "", "",
             [new("name", "Név")], [new("name", "Név")], new("list", "save", "archive", "export"));
-        var vm = new EntityPageViewModel(definition, new HostConnection(directory, null), () => null,
+        var connection=new HostConnection(directory,null);connection.SetSession(null,new UiSession("ui-test","admin","admin",DateTimeOffset.UtcNow.AddMinutes(30)));
+        var vm = new EntityPageViewModel(definition, connection, () => null,
             CancellationToken.None, new ListLayoutStore(directory));
         var view = new EntityPageView { DataContext = vm };
         view.Measure(new Size(1000, double.PositiveInfinity));
@@ -60,6 +61,7 @@ internal static class Program
                 UiProductChecks.Render(output,skin.Id);
                 AdminUiChecks.Render(output,skin.Id);
                 WorkflowUiChecks.Render(output,skin.Id);
+                RoleUiChecks.Render(output,skin.Id);
                 foreach(var kind in new[]{"inventory","sales"})
                 {
                     var definition=new EntityPageDescriptor(kind,kind,kind,"","",[new("name","Név")],
@@ -84,7 +86,7 @@ internal static class Program
             }
             PresentationTraceSources.DataBindingSource.Flush();
             if(bindingErrors.ToString().Length>0)throw new InvalidOperationException(bindingErrors.ToString());
-            Console.WriteLine("21/21 WPF renders passed; no binding errors.");return 0;
+            Console.WriteLine("30/30 WPF renders passed; no binding errors.");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }

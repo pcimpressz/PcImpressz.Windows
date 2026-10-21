@@ -38,43 +38,10 @@ internal static class LayoutEditorDialog
     public static async Task ShowAsync(EntityPageViewModel page)
     {
         var company = page.LayoutCompanyId;
-        var status = (await page.SendUiAsync("ui.auth.status", new { CompanyId = company })).Deserialize<UiAuthStatus>()!;
-        var session = await Login(page, company, !status.Configured);
-        if (session is null) return;
-        try
-        {
-            if (session.Role != "admin") { page.Notify("A felületszerkesztéshez adminisztrátori szerepkör szükséges."); return; }
-            var state = (await page.SendUiAsync("ui.layout.read", new UiPageRequest(company,page.LayoutPageKey))).Deserialize<UiLayoutState>()!;
-            page.ApplyAppearance(state);
-            BuildEditor(page,company,session,state).ShowDialog();
-        }
-        finally { await page.SendUiAsync("ui.auth.logout", new { CompanyId = company, session.Token }); }
-    }
-    private static Task<UiSession?> Login(EntityPageViewModel page, Guid company, bool bootstrap)
-    {
-        UiSession? result = null;
-        var window = Window(bootstrap ? "Első céges adminisztrátor létrehozása" : "Adminisztrátori bejelentkezés", 540, 500);
-        var panel = new StackPanel { Margin = new(26) };
-        panel.Children.Add(Note(bootstrap ? "Ehhez a céghez még nincs admin. Hozd létre az első fiókot, és őrizd meg a jelszavát. Nincs beépített mesterjelszó." : "Az elrendezést csak az adott cég adminisztrátora módosíthatja."));
-        var name = new TextBox{MaxLength=40}; var password = new PasswordBox{MaxLength=200}; var confirm = new PasswordBox{MaxLength=200};
-        AddInput(panel,"Felhasználónév (3–40 karakter)",name); AddInput(panel,"Jelszó (legalább 12 karakter)",password);
-        if(bootstrap) AddInput(panel,"Jelszó újra",confirm);
-        var message=Note("");panel.Children.Add(message);
-        var submit=Button(bootstrap?"Admin létrehozása":"Bejelentkezés");submit.IsDefault=true;panel.Children.Add(submit);
-        var loginBusy=false;window.Closing+=(_,e)=>{if(loginBusy)e.Cancel=true;};
-        submit.Click+=async(_,_)=>
-        {
-            loginBusy=true;submit.IsEnabled=false;
-            try
-            {
-                if(bootstrap&&password.Password!=confirm.Password)throw new ArgumentException("A két jelszó nem egyezik.");
-                result=(await page.SendUiAsync(bootstrap?"ui.auth.bootstrap":"ui.auth.login",new UiLogin(company,name.Text,password.Password))).Deserialize<UiSession>();
-                loginBusy=false;window.DialogResult=true;
-            }
-            catch(Exception ex){message.Text=ex.Message;}
-            finally{loginBusy=false;password.Clear();confirm.Clear();submit.IsEnabled=true;}
-        };
-        window.Content=panel;window.ShowDialog();return Task.FromResult(result);
+        var session=page.ApplicationSession;
+        if(session?.Role!="admin"){page.Notify("A felületszerkesztéshez adminisztrátori bejelentkezés szükséges.");return;}
+        var state=(await page.SendUiAsync("ui.layout.read",new UiPageRequest(company,page.LayoutPageKey))).Deserialize<UiLayoutState>()!;
+        page.ApplyAppearance(state);BuildEditor(page,company,session,state).ShowDialog();
     }
     internal static bool MoveField(ObservableCollection<LayoutFieldDraft> fields, LayoutFieldDraft field, int target)
     {
@@ -154,8 +121,8 @@ internal static class LayoutEditorDialog
     private static void CreateUser(EntityPageViewModel page,Guid company,UiSession session,Window owner)
     {
         var window=Window("Új céges felhasználó",520,480);window.Owner=owner;var panel=new StackPanel{Margin=new(24)};
-        var name=new TextBox();var password=new PasswordBox();var role=new ComboBox{ItemsSource=new[]{"user","admin"},SelectedIndex=0};
-        AddInput(panel,"Felhasználónév",name);AddInput(panel,"Jelszó (legalább 12 karakter)",password);AddInput(panel,"Szerepkör: user = normál, admin = felületszerkesztő",role);
+        var name=new TextBox();var password=new PasswordBox();var role=new ComboBox{ItemsSource=new[]{"user","warehouse","sales","admin"},SelectedIndex=0};
+        AddInput(panel,"Felhasználónév",name);AddInput(panel,"Jelszó (legalább 12 karakter)",password);AddInput(panel,"Szerepkör: user = megtekintő; warehouse = raktáros; sales = eladó; admin = teljes hozzáférés",role);
         var message=Note("");panel.Children.Add(message);var save=Button("Létrehozás");panel.Children.Add(save);
         var creating=false;window.Closing+=(_,e)=>{if(creating)e.Cancel=true;};
         save.Click+=async(_,_)=>{creating=true;save.IsEnabled=false;try{await page.SendUiAsync("ui.users.create",new UiCreateUser(company,session.Token,name.Text,password.Password,(string)role.SelectedItem));message.Text="Felhasználó létrehozva.";name.Clear();}catch(Exception ex){message.Text=ex.Message;}finally{creating=false;password.Clear();save.IsEnabled=true;}};

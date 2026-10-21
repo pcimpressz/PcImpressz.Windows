@@ -255,3 +255,6 @@ P1: üzleti használat előtt javítandó. P2: stabilizálás során javítandó
 
 ## 2026-10-21 – 0.4.4
 Bevételezés-visszafordítás és eladási kosár/készlet/export javítások; külön konkrét felhasználói engedéllyel offline admin-helyreállítás. 155/155 teszt, 21/21 WPF-render. Lásd docs/BEVETELEZES-ELADAS.md. Teljes dolgozói műveleti jogosultság és élő NAV/PDF továbbra is nyitott feladat.
+
+## 2026-10-21 – 0.4.5
+Céges alkalmazásbelépés minden üzleti művelethez; admin/raktáros/eladó/megtekintő; közös SID- és céghez kötött munkamenet; felhasználókezelés, tiltás, szerepkörváltás, saját jelszócsere; utolsó aktív admin védelme; üzleti szereplő a bejelentkezett névvel. A régi Host használatát az új felület elutasítja. A demóadat-törlés az aktuális demócégre szűkül. 158/158 teszt, 30/30 WPF-render. Helyi mentés visszaállított másolatán raktáros bevételezés → eladó eladás → készletvédelem → mindkét visszafordítás sikeres. A mentésben 0 termék és 1 partner volt; csak a másolatban létrehozott próba-termékkel ellenőriztük. Az eredeti adatbázis SHA-256 változatlan. Saját éles céges adat és felhasználói átvétel még szükséges. Útmutató: docs/BELEPES-ES-JOGOSULTSAGOK.md.

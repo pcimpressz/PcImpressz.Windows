@@ -211,6 +211,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public ICommand ExportCommand { get; }
     public ICommand SearchCommand { get; }
 
+    public void PermissionsChanged(){}
     public void CompanyChanged()
     {
         _appliedListQuery=null;
