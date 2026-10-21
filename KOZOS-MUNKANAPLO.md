@@ -245,3 +245,10 @@ P1: üzleti használat előtt javítandó. P2: stabilizálás során javítandó
 - A fülváltás megőrzi a szerkesztést. A készlet a harmadik belső fül; a munkaterület példánya megmarad navigációkor.
 - Az admin szerepkör és drag-and-drop/feliratszerkesztő még nincs kész. Következő munkacsomag: docs/ADMIN-FELULETSZERKESZTO.md.
 - Ellenőrzés elkülönített másolatból: 139/139, wheel-ok, 12/12 WPF; listasélesség, mezőszélesség és mentetlen adat fülváltása tesztelve.
+
+### 2026-10-21 – Codex – admin feliratszerkesztő, 0.4.3
+
+- Cégenkénti első admin, admin/user fiókok, PBKDF2 jelszólenyomat, lejáró cég/SID-kötött session; szerkesztési jogosultság ellenőrzése a Hostban.
+- Adatlapmezők húzása/Fel-Le sorrendje, felirat, fél-/teljes sor és opcionális láthatóság, előnézet. Verziózott SQL-mentés és audit, utolsó 10 előzmény, alap-/előző nézet visszaállítása.
+- A szerepek egyelőre a felületszerkesztésre vonatkoznak. Offline admin-helyreállítás nincs a forrásban; külön jóváhagyásra vár.
+- Ellenőrzés: 148/148, wheel-ok, 15/15 WPF; valódi IPC-s szerepkör/cégvédelem, mentés és hitelesítési adatok elkülönítése, UI-előnézet és adatmegőrzés.

@@ -1,18 +1,35 @@
-# Adminisztrátori felületszerkesztő – következő fejlesztési csomag
+# Adminisztrátori felirat- és elrendezésszerkesztő – 0.4.3
 
-## Elkészült: 0.4.2 elrendezés
+## Használat
 
-A terméktörzs három belső fület használ: Terméklista, Termékadatlap, Készlet és mozgások. A lista és az adatlap külön-külön a rendelkezésre álló teljes szélességet kapja. Az Új termék gomb a külön adatlapot nyitja. Kijelölt rekord szerkesztése gombbal vagy a terméksor dupla kattintásával nyitható. A fülváltás nem üríti ki az adatlapot. Az új rekord indítása továbbra is megerősítést kér, ha mentetlen adatot kellene elvetni.
+1. Válaszd ki a céget, majd nyisd meg a Terméktörzset. A **Feliratok és elrendezés – admin** gomb a termék-munkaterület tetején található. Az általános törzsadatlapokon, például a partnereknél, az adatlap műveletei között is elérhető.
+2. Az adott cég első használatakor hozd létre az első adminfiókot. A felhasználónév 3–40 ASCII betű/szám/pont/kötőjel/aláhúzás; a jelszó legalább 12 és legfeljebb 200 karakter. A jelszót kétszer kell megadni. Nincs beépített adminjelszó vagy mesterjelszó.
+3. Később a céghez tartozó admin felhasználónévvel és jelszóval jelentkezz be. A normál `user` szerep nem nyithat szerkesztőt és közvetlen Host-kéréssel sem menthet vagy állíthat vissza elrendezést.
+4. A bal oldali mezőlistában húzd a mezőt a kívánt helyre, vagy használd a **Fel/Le** gombokat. A kijelölt mező felirata átírható, szélessége fél vagy teljes sorra állítható. Nem kötelező mező elrejthető. A kötelező mezők megmaradnak. Jobbra azonnali előnézet látszik; a termék üzleti adatai ettől nem változnak.
+5. A **Mentés** céghez és adatlaphoz kötötten rögzíti a nézetet. Az aktuális adatlap azonnal átveszi, a beírt termék-/partnerértékeket megőrzi. Másik nyitott alkalmazáspéldány cégváltáskor vagy újraindításkor tölti be az új nézetet.
+6. Az **Alapértelmezett visszaállítása** és **Előző elrendezés visszaállítása** új, auditált változatot ment. Az utolsó 10 előző változat megmarad. Két egymásra nyitott szerkesztő közül az elavult mentése elutasításra kerül; az ablakot újra kell nyitni.
+7. A **Felhasználó létrehozása** gombbal az admin új `user` vagy `admin` szerepű fiókot vehet fel az adott céghez. Más céghez külön fiók tartozik. A szerkesztő bezárásakor a munkamenet kijelentkezik; legfeljebb 30 perc után egyébként is lejár.
 
-A terméknév és a többsoros leírás/paraméter/megjegyzés teljes sort kap. A saját és gyártói cikkszám két széles mezőben szerepel. A lista alapértelmezett terméknév-, sajátcikkszám- és gyártóicikkszám-oszlopa is szélesebb. A cella teljes értéke egérrel rámutatva megtekinthető.
+## Mit szerkeszt az első változat?
 
-## Tervezett, még nem megvalósított szerkesztő
+Az általános törzsadatlapok meglévő mezőinek feliratát, sorrendjét, fél-/teljes soros szélességét és a nem kötelező mezők láthatóságát. A belső mezőazonosító, mezőtípus, kötelezőség, üzleti validálás, licenc és műveleti jogosultság nem változtatható. A listafejlécek, teljes menürendszer, tetszőleges panelek és bizonylatszerkesztők átalakítása nem része ennek az első változatnak. Formázott termékleírás-szerkesztés nincs benne.
 
-A felhasználó pontosítása alapján a cél a mezők és panelek elrendezésének, méretének és a felületi feliratoknak a szerkesztése. A formázott termékleírás nem része ennek a munkacsomagnak.
+A terméklista, a termékadatlap és a készlet továbbra is külön belső fül. Az új/szerkesztési munkafolyamat és a teljes szélességű lista a 0.4.2 szerint működik.
 
-1. **Alkalmazásszintű szerepkörök.** Jelenleg a Host ugyanazt a Windows-felhasználót helyi tulajdonosként kezeli. Még nincs admin/normál felhasználó belépés. Ezt először valódi, céges szerepkörrel kell kiegészíteni. A felületszerkesztéshez külön jogosultság kell, amelyet a Host minden mentéskor ellenőriz. A fejlesztői licenc, egy beállításkapcsoló vagy egy elrejtett gomb nem adminhitelesítés. Az első admin kijelöléséhez és helyreállításához külön, ellenőrzött folyamat szükséges.
-2. **Elrendezés szerkesztése.** Csak admin látja a Szerkesztő módot. A meglévő mezők fogóponttal mozgathatók; állítható a sorrend, a csoport, a szélesség, az egy- vagy kéthasábos elrendezés és a felirat. Legyen billentyűzetes Fel/Le mozgatás is. Előnézet, Mentés, Mégse és Alapértelmezett visszaállítása szükséges.
-3. **Korlátozott, verziózott beállítás.** A szerkesztő strukturált mezőazonosítókat és megengedett tulajdonságokat tárol a céges SQL-ben; nem tetszőleges XAML-t vagy futtatható kódot. A felirat nem módosíthat belső mezőazonosítót. Kötelező mező nem tehető használhatatlanná; az üzleti validálás és jogosultság nem szerkeszthető. A mentés verzióellenőrzött, adminhoz kötött auditbejegyzéssel és korábbi elrendezés-visszaállítással történik.
-4. **Kiadási és használati próba.** Normál felhasználó közvetlen IPC-kéréssel sem menthet elrendezést. Hibás vagy régebbi sémájú beállításnál az alapnézet marad használható. Próbák: két admin ütköző módosítása, cégelkülönítés, kötelező mezők, hosszú magyar feliratok, kis kijelző, billentyűzet és 100/125/150% DPI.
+## Jogosultság és tárolás
 
-Ez a dokumentum terv, nem kész adminisztrációs vagy drag-and-drop funkció. A 0.4.2-ben a szélesebb és különválasztott képernyők működnek; tetszőleges feliratszerkesztést és felületmódosítást még nem engedünk.
+A Host ellenőrzi a felhasználót és az adminszerepet minden elrendezésmentéskor/visszaállításkor/fióklétrehozáskor. A véletlenszerű, 30 perces munkamenet céghez és a megbízható IPC-hívó Windows SID-jéhez kötött. A kérésben küldött `Role` vagy `Actor` mező nem ad jogosultságot. A jelszó 16 bájtos véletlen sóval, PBKDF2-SHA256, 210 000 iterációval, 32 bájtos lenyomatként tárolódik. Öt hibás próbálkozás után egyperces tiltás következik. Host-újraindításkor minden munkamenet megszűnik.
+
+Az elrendezés és az előtte/utána auditesemény a céges SQLite-adatbázisban, egy tranzakcióban mentődik. A tárolt beállítás strukturált JSON, nem futtatható XAML vagy kód. Ismeretlen mező, duplikált mező, hibás szélesség, elrejtett kötelező mező vagy túl hosszú felirat nem menthető. Az újabb elrendezésséma alapnézettel jelenik meg és nem írható felül régi programmal.
+
+A fióklenyomatok külön, helyi `.local/security/<cégazonosító>/company.db` adatbázisban vannak. A hordozható cégmentés az elrendezést viszi, a fiókokat és jelszólenyomatokat nem. Új cégként visszaállított mentéshez új első admint kell létrehozni. A teljes helyi biztonsági mentés részeként a security mappát is külön, bizalmasan kell kezelni.
+
+Ez a bejelentkezés jelenleg a felületszerkesztést és fióklétrehozást védi. A napi üzleti műveletek továbbra is a helyi Windows-tulajdonosi pilot módot használják; a raktáros/eladó/beszerző szerepkörök és általános alkalmazásbelépés további fejlesztés. Az adatkönyvtár feletti Windows-hozzáféréssel rendelkező helyi tulajdonossal szemben ez nem külön operációsrendszer-biztonsági határ.
+
+## Hozzáférés megőrzése és nyitott feladatok
+
+Őrizd meg az adminjelszót. Létrehozható második adminfiók. Offline adminjelszó-helyreállító út nincs beépítve; univerzális mesterjelszó sincs. Felhasználó tiltása, jelszócsere és teljes céges szerepkörkezelés későbbi külön csomag.
+
+## Ellenőrzés
+
+148/148 Core/üzleti/valódi Host-teszt; wheel-ok; 15/15 WPF-render mindhárom témában, adatkapcsolási hiba nélkül. Célzott próbák: normál szerep közvetlen IPC-s írási kísérlete és hamis adminmező; cég/SID/lejárat/kijelentkezés/újraindítás; jelszótárolás és próbálkozáskorlát; verzióütközés, alap-/előző nézet, kötelező mező; újabb séma és mentés/visszaállítás; előnézet/átrendezés és a szerkesztett üzleti adatok megőrzése. Teljes kézi drag-and-drop és különböző DPI-s átvétel még szükséges.

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -51,6 +51,8 @@ internal static class Program
             builder.Services.AddSingleton(companies);
             var companyDatabase = new CompanyDatabase(companies.DataDirectory);
             builder.Services.AddSingleton(companyDatabase);
+            var credentials = new CompanyDatabase(company => Path.Combine(options.DataDirectory, "security", company.ToString("N")));
+            builder.Services.AddSingleton(new UiAdministrationService(companyDatabase, credentials, TimeProvider.System));
             builder.Services.AddSingleton(new CompanyBackupService(companies, companyDatabase));
             builder.Services.AddSingleton<ICompanyDatabase>(companyDatabase);
             builder.Services.AddSingleton(moduleEnablement);

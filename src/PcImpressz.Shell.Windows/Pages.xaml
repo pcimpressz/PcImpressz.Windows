@@ -3,7 +3,7 @@
  <DataTemplate DataType="{x:Type local:OperationsPageViewModel}"><local:OperationsPageView /></DataTemplate>
  <DataTemplate DataType="{x:Type local:ProductWorkspaceViewModel}">
   <StackPanel>
-   <WrapPanel><Button Content="Új termék" Command="{Binding NewProductCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,10,10" /><Button Content="Kijelölt termék szerkesztése" Command="{Binding EditProductCommand}" Margin="0,0,10,10" /><Button Content="Kijelölt termék készlete és mozgásai" Command="{Binding SelectedStockCommand}" Margin="0,0,10,10" /><Button Content="Minden termék készlete" Command="{Binding AllStockCommand}" Margin="0,0,0,10" /></WrapPanel>
+   <WrapPanel><Button Content="Feliratok és elrendezés – admin" Command="{Binding Products.EditLayoutCommand}" Margin="0,0,10,10" /><Button Content="Új termék" Command="{Binding NewProductCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,10,10" /><Button Content="Kijelölt termék szerkesztése" Command="{Binding EditProductCommand}" Margin="0,0,10,10" /><Button Content="Kijelölt termék készlete és mozgásai" Command="{Binding SelectedStockCommand}" Margin="0,0,10,10" /><Button Content="Minden termék készlete" Command="{Binding AllStockCommand}" Margin="0,0,0,10" /></WrapPanel>
    <TabControl SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource StrokeBrush}" Padding="14">
     <TabControl.Resources>
      <Style TargetType="TabItem">

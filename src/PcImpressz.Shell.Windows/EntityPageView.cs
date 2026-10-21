@@ -84,6 +84,7 @@ public sealed class EntityPageView : UserControl
         var save = new WrapPanel { Margin = new(0,20,0,0) };
         var saveButton = ActionButton("Mentés", "SaveCommand"); saveButton.SetResourceReference(StyleProperty, "PrimaryButton");
         save.Children.Add(saveButton); save.Children.Add(ActionButton("Archiválás", "ArchiveCommand"));
+        save.Children.Add(ActionButton("Feliratok és elrendezés – admin", "EditLayoutCommand"));
         var dossier = ActionButton("Dosszié", "DossierCommand");
         dossier.SetBinding(VisibilityProperty, new Binding("HasDossier") { Converter = new BooleanToVisibilityConverter() });
         dossier.SetBinding(IsEnabledProperty, new Binding("CanOpenDossier"));
@@ -95,21 +96,13 @@ public sealed class EntityPageView : UserControl
         Content = root;
         var searchHelp = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,10), Visibility = Visibility.Collapsed }; root.Children.Insert(1, searchHelp);
         grid.MouseDoubleClick += (_, args) => { if (ViewMode == "list" && DataContext is EntityPageViewModel page && args.OriginalSource is DependencyObject source && ItemsControl.ContainerFromElement(grid, source) is DataGridRow) page.RequestEditSelected(); };
-        DataContextChanged += (_, _) =>
+        void RenderFields(EntityPageViewModel vm)
         {
-            if (DataContext is not EntityPageViewModel vm) return;
-            search.ToolTip = vm.Labels.SearchHint;
-            searchHelp.Text = vm.Labels.SearchHint;
-            searchHelp.Visibility = ViewMode != "editor" && vm.Definition.ModuleId == "catalog" && vm.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
-            create.Content = vm.Labels.NewLabel;
-            filter.ItemsSource = vm.Filters;
-            if (filter.SelectedValue is null) filter.SelectedValue = vm.Filters[0].Value;
-            ListGrid.Show(grid, vm);
             fields.Children.Clear(); fields.RowDefinitions.Clear();
             var fieldRow = 0; var fieldColumn = 0;
-            foreach (var field in vm.Fields)
+            foreach (var field in vm.Fields.Where(f => f.Visible))
             {
-                var wide = field.Definition.Id == "name" || field.Definition.Kind == "multiline";
+                var wide = field.Span == 2;
                 if (wide && fieldColumn > 0) { fieldRow++; fieldColumn = 0; }
                 while (fields.RowDefinitions.Count <= fieldRow) fields.RowDefinitions.Add(new() { Height = GridLength.Auto });
                 var panel = new StackPanel { Margin = new(fieldColumn == 0 ? 0 : 10,0,wide || fieldColumn == 1 ? 0 : 10,16), DataContext = field };
@@ -128,11 +121,31 @@ public sealed class EntityPageView : UserControl
                 Grid.SetRow(panel,fieldRow); Grid.SetColumn(panel,fieldColumn); Grid.SetColumnSpan(panel,wide ? 2 : 1); fields.Children.Add(panel);
                 if (wide || fieldColumn == 1) { fieldRow++; fieldColumn = 0; } else fieldColumn = 1;
             }
-            vm.PropertyChanged += (_, args) =>
+        }
+        EntityPageViewModel? observed = null;
+        System.ComponentModel.PropertyChangedEventHandler? observer = null;
+        Unloaded += (_, _) => { if (observed is not null && observer is not null) observed.PropertyChanged -= observer; };
+        Loaded += (_, _) => { if (observed is not null && observer is not null) { observed.PropertyChanged -= observer; observed.PropertyChanged += observer; RenderFields(observed); ListGrid.Show(grid, observed); } };
+        DataContextChanged += (_, _) =>
+        {
+            if (observed is not null && observer is not null) observed.PropertyChanged -= observer;
+            observed = null; observer = null;
+            if (DataContext is not EntityPageViewModel vm) return;
+            search.ToolTip = vm.Labels.SearchHint;
+            searchHelp.Text = vm.Labels.SearchHint;
+            searchHelp.Visibility = ViewMode != "editor" && vm.Definition.ModuleId == "catalog" && vm.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
+            create.Content = vm.Labels.NewLabel;
+            filter.ItemsSource = vm.Filters;
+            if (filter.SelectedValue is null) filter.SelectedValue = vm.Filters[0].Value;
+            ListGrid.Show(grid, vm);
+            RenderFields(vm);
+            observer = (_, args) =>
             {
+                if (args.PropertyName == nameof(EntityPageViewModel.AppearanceRevision)) RenderFields(vm);
                 if (args.PropertyName == nameof(EntityPageViewModel.DossierRevision)) RenderDossier(vm);
                 if (args.PropertyName == nameof(EntityPageViewModel.LayoutRevision)) ListGrid.Show(grid, vm);
             };
+            observed = vm; vm.PropertyChanged += observer;
             _applyLayout?.Invoke();
             if (ViewMode != "editor") _ = vm.LoadAsync();
         };

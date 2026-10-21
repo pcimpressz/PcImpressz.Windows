@@ -58,6 +58,7 @@ internal static class Program
             {
                 ThemeManager.Apply(skin,new AppearancePreferences{SkinId=skin.Id});
                 UiProductChecks.Render(output,skin.Id);
+                AdminUiChecks.Render(output,skin.Id);
                 foreach(var kind in new[]{"inventory","sales"})
                 {
                     var definition=new EntityPageDescriptor(kind,kind,kind,"","",[new("name","Név")],
@@ -82,7 +83,7 @@ internal static class Program
             }
             PresentationTraceSources.DataBindingSource.Flush();
             if(bindingErrors.ToString().Length>0)throw new InvalidOperationException(bindingErrors.ToString());
-            Console.WriteLine("12/12 WPF renders passed; no binding errors.");return 0;
+            Console.WriteLine("15/15 WPF renders passed; no binding errors.");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }

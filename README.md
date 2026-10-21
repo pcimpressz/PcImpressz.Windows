@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.2
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.3
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -124,3 +124,7 @@ Gyártói cikkszám, többfeltételes/ékezetfüggetlen keresés, saját készle
 ## 0.4.2 – Széles terméklista és külön adatlap
 
 A Terméklista teljes szélességet kapott. Új termék és kijelölt termék szerkesztése a külön Termékadatlap fülön nyílik; a listában a sor dupla kattintása is megnyitja. A terméknév és a többsoros mezők teljes sorosak, a többi mező szélesebb. A Készlet és mozgások a harmadik belső fül. A fülváltás megőrzi a szerkesztett adatot. Ellenőrzés: 139/139 teszt, wheel-ok, 12/12 WPF-render. Az adminhoz kötött drag-and-drop/feliratszerkesztő következő fejlesztés, még nincs kész: [Felületszerkesztő terve](docs/ADMIN-FELULETSZERKESZTO.md).
+
+## 0.4.3 – Adminhoz kötött felirat- és elrendezésszerkesztő
+
+A törzsadatlapok Feliratok és elrendezés – admin gombja cégenkénti bejelentkezést kér; első használatkor létrehozható az adminfiók. Húzással vagy Fel/Le gombbal átrendezhető mezők, átírható feliratok, fél-/teljes soros szélesség, előnézet, verziózott mentés, alap- és előző nézet visszaállítása. Kötelező mező nem rejthető el. A normál szerep a Hoston sem menthet elrendezést. A szerepkörök most a felületszerkesztésre vonatkoznak; általános üzleti szerepkörök és offline admin-helyreállítás még nincsenek. Ellenőrzés: 148/148 teszt, wheel-ok, 15/15 WPF-render. Használat és korlátok: [Admin felületszerkesztő](docs/ADMIN-FELULETSZERKESZTO.md).

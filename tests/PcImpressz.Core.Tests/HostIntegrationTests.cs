@@ -87,6 +87,22 @@ internal static class HostIntegrationTests
             Check.True(first.Success);Check.Equal(1,first.Data!.Value.GetArrayLength());
             var a=(await Send("companies.create",new CreateCompanyRequest("Teszt cég A",false))).Data!.Value.GetProperty("Id").GetGuid();
             var b=(await Send("companies.create",new CreateCompanyRequest("Teszt cég B",true))).Data!.Value.GetProperty("Id").GetGuid();
+            var adminStatus=await Send("ui.auth.status",new{CompanyId=a});
+            Check.True(!adminStatus.Data!.Value.Deserialize<UiAuthStatus>()!.Configured);
+            var adminSession=(await Send("ui.auth.bootstrap",new UiLogin(a,"admin","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+            Check.True(!(await Send("ui.auth.bootstrap",new UiLogin(a,"other","Test-only-password-2026"))).Success);
+            Check.True((await Send("ui.users.create",new UiCreateUser(a,adminSession.Token,"reader","Test-only-password-2026","user"))).Success);
+            var readerSession=(await Send("ui.auth.login",new UiLogin(a,"reader","Test-only-password-2026"))).Data!.Value.Deserialize<UiSession>()!;
+            var layout=(await Send("ui.layout.read",new UiPageRequest(a,"partners.partners"))).Data!.Value.Deserialize<UiLayoutState>()!;
+            var deniedLayout=await Send("ui.layout.save",new{CompanyId=a,PageKey="partners.partners",Token=readerSession.Token,Revision=0,layout.Fields,Role="admin",Actor="admin"});
+            Check.True(!deniedLayout.Success);Check.Equal("denied",deniedLayout.Code);
+            Check.True(!(await Send("ui.layout.save",new UiLayoutSave(b,"partners.partners",adminSession.Token,0,layout.Fields))).Success);
+            var adminSaved=await Send("ui.layout.save",new UiLayoutSave(a,"partners.partners",adminSession.Token,0,layout.Fields));
+            Check.True(adminSaved.Success,adminSaved.Error??"Admin layout save failed");
+            Check.Equal(1L,adminSaved.Data!.Value.Deserialize<UiLayoutState>()!.Revision);
+            Check.True(!(await Send("ui.layout.save",new UiLayoutSave(a,"partners.partners",adminSession.Token,0,layout.Fields))).Success);
+            Check.True((await Send("ui.layout.restore",new UiLayoutRestore(a,"partners.partners",adminSession.Token,1,-1))).Success);
+
             Check.Equal(0,(await Module(a,"list",new{})).Data!.Value.GetProperty("total").GetInt32());
             var saved=await Module(a,"save",new Dictionary<string,object?>{["CompanyId"]=b,["companyId"]=b,["id"]=null,["version"]=0,["data"]=new{name="IPC partner",isCustomer=true,isSupplier=true,isActive=true},["actor"]="fake-user"});
             Check.True(saved.Success,saved.Error??"Save failed");

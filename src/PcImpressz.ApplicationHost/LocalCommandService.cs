@@ -1,4 +1,4 @@
-﻿using PcImpressz.Core.Storage;
+using PcImpressz.Core.Storage;
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text.Json;
@@ -9,13 +9,14 @@ using PcImpressz.Contracts;
 using PcImpressz.Core.Commands;
 using PcImpressz.Core.Companies;
 using PcImpressz.Core.Modules;
+using PcImpressz.Core.Security;
 
 namespace PcImpressz.ApplicationHost;
 
 // Initial desktop mode: the Host's Windows user owns all local companies.
 // There is no client-supplied identity, permission list or network listener.
 internal sealed class LocalCommandService(HostOptions options, CompanyStore companies, CommandDispatcher commands,
-    ModuleEnablementStore modulesEnabled, CompanyBackupService backups, ILogger<LocalCommandService> logger) : BackgroundService
+    ModuleEnablementStore modulesEnabled, CompanyBackupService backups, UiAdministrationService administration, ModuleRuntime runtime, ILogger<LocalCommandService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -38,6 +39,7 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
                     var request = await LocalProtocol.ReadAsync<LocalRequest>(pipe, deadline.Token);
                     response = await Execute(request, actor, deadline.Token);
                 }
+                catch (UnauthorizedAccessException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
                 catch (CommandDeniedException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
                 { response = new(false, Error: ex.Message, Code: "validation"); }
@@ -56,8 +58,38 @@ internal sealed class LocalCommandService(HostOptions options, CompanyStore comp
         }
     }
 
+    private LocalResponse AdminCommand(LocalRequest request, string sid)
+    {
+        var company = request.Payload.GetProperty("CompanyId").GetGuid();
+        if (!companies.List().Any(c => c.Id == company)) throw new ArgumentException("Ismeretlen cég.");
+        T Read<T>() => request.Payload.Deserialize<T>() ?? throw new ArgumentException("Hiányzó kérésadat.");
+        EntityPageDescriptor Page()
+        {
+            var key = request.Payload.GetProperty("PageKey").GetString();
+            return runtime.Pages.SingleOrDefault(p => p.ModuleId + "." + p.Id == key && p.ViewKind == "entity")
+                ?? throw new ArgumentException("Ismeretlen vagy nem szerkeszthető adatlap.");
+        }
+        object value = request.Operation switch
+        {
+            "ui.auth.status" => administration.Status(company),
+            "ui.auth.bootstrap" => administration.Bootstrap(Read<UiLogin>(), sid),
+            "ui.auth.login" => administration.Login(Read<UiLogin>(), sid),
+            "ui.layout.read" => administration.Read(company, Page()),
+            "ui.layout.save" => administration.Save(Read<UiLayoutSave>(), Page(), sid),
+            "ui.layout.restore" => administration.Restore(Read<UiLayoutRestore>(), Page(), sid),
+            _ => ExecuteOther()
+        };
+        return new(true, JsonSerializer.SerializeToElement(value));
+        object ExecuteOther()
+        {
+            if (request.Operation == "ui.users.create") { administration.CreateUser(Read<UiCreateUser>(), sid); return new { saved = true }; }
+            if (request.Operation == "ui.auth.logout") { administration.Logout(company, request.Payload.GetProperty("Token").GetString() ?? "", sid); return new { loggedOut = true }; }
+            throw new ArgumentException("Ismeretlen adminisztrációs művelet.");
+        }
+    }
     private async Task<LocalResponse> Execute(LocalRequest request, string actor, CancellationToken ct)
     {
+        if (request.Operation.StartsWith("ui.", StringComparison.Ordinal)) return AdminCommand(request, actor);
         switch (request.Operation)
         {
             case "companies.list": return new(true, JsonSerializer.SerializeToElement(companies.List()));

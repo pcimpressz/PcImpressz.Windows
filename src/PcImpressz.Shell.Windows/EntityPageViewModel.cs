@@ -25,7 +25,10 @@ public sealed class EntityFieldViewModel(EntityField definition) : Observable
     private string _text = definition.DefaultText ?? "";
     private bool _checked = definition.DefaultChecked;
     public EntityField Definition => definition;
-    public string Label => definition.Label + (definition.Required ? " *" : "");
+    public string DisplayLabel { get; set; } = definition.Label;
+    public int Span { get; set; } = definition.Id == "name" || definition.Kind == "multiline" ? 2 : 1;
+    public bool Visible { get; set; } = true;
+    public string Label => DisplayLabel + (definition.Required ? " *" : "");
     public string Text { get => _text; set { _text = value; Changed(); Edited?.Invoke(); } }
     public bool Checked { get => _checked; set { _checked = value; Changed(); Edited?.Invoke(); } }
     public Action? Edited { get; set; }
@@ -45,7 +48,7 @@ public sealed class EntityRow
     }
 }
 
-public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnList
+public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IColumnList
 {
     private readonly HostConnection _connection;
     private readonly Func<Guid?> _company;
@@ -177,6 +180,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
         PeriodYearCommand = new RelayCommand(() => SetPeriod(new DateTime(DateTime.Today.Year, 1, 1), DateTime.Today));
         PeriodPreviousYearCommand = new RelayCommand(() => SetPeriod(new DateTime(DateTime.Today.Year - 1, 1, 1), new DateTime(DateTime.Today.Year - 1, 12, 31)));
         PeriodQuarterCommand = new RelayCommand(() => SetPeriod(DateTime.Today.AddDays(-90), DateTime.Today));
+        InitializeLayoutEditor();
         Populate(null);
         _filtersReady = true;
     }
@@ -191,6 +195,7 @@ public sealed class EntityPageViewModel : Observable, IWorkspacePage, IColumnLis
 
     public void CompanyChanged()
     {
+        ResetAppearance(); _ = LoadAppearanceAsync();
         _applied = null; Changed(nameof(AppliedSearchLabel)); Rows.Clear(); _page = 0; _total = 0; _selected = null; Populate(null); _ = LoadAsync();
     }
     private bool CanDiscard() => !IsDirty || MessageBox.Show("Elveted a nem mentett változtatásokat?",
