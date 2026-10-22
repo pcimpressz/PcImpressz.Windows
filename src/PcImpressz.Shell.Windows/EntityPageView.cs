@@ -49,7 +49,7 @@ public sealed class EntityPageView : UserControl
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false,
             CanUserDeleteRows = false, SelectionMode = DataGridSelectionMode.Single,
             SelectionUnit = DataGridSelectionUnit.FullRow, HeadersVisibility = DataGridHeadersVisibility.Column,
-            MinHeight = 360, MaxHeight = 480, GridLinesVisibility = DataGridGridLinesVisibility.None,
+            MinHeight = 0, MaxHeight = double.PositiveInfinity, GridLinesVisibility = DataGridGridLinesVisibility.None,
             BorderThickness = new(0), FontSize = 13, RowHeight = 44, ColumnHeaderHeight = 40 };
         grid.SetResourceReference(Control.FontSizeProperty, "BodySize");
         grid.SetResourceReference(Control.BackgroundProperty, "SurfaceBrush"); grid.SetResourceReference(Control.ForegroundProperty, "TextBrush");
@@ -67,7 +67,7 @@ public sealed class EntityPageView : UserControl
         grid.ColumnHeaderStyle = headerStyle;
         ListGrid.Prepare(grid, () => DataContext as IColumnList);
         ScrollViewer.SetHorizontalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
-        ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
+        ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
         var cellStyle = new Style(typeof(DataGridCell));
         cellStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
         cellStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10,4,10,4)));
@@ -210,17 +210,8 @@ public sealed class EntityPageView : UserControl
             Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,editorOnly ? 0 : narrow ? 1 : 0);
             Grid.SetColumnSpan(listPanel,narrow ? 2 : 1); Grid.SetColumnSpan(editorBorder,narrow ? 2 : 1);
             editorBorder.Margin = separate ? new Thickness(0) : narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);
-            var productList = DataContext is EntityPageViewModel { IsProductMaster: true };
-            if (productList)
-            {
-                grid.MinHeight = 0; grid.MaxHeight = double.PositiveInfinity;
-                ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
-            }
-            else
-            {
-                grid.MinHeight = ViewMode == "list" ? 480 : 360; grid.MaxHeight = ViewMode == "list" ? 680 : 480;
-                ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
-            }
+            grid.MinHeight = 0; grid.MaxHeight = double.PositiveInfinity;
+            ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
             if(partner)
             {
                 var sideBySide=body.ActualWidth>=1000&&ViewMode!="list";
@@ -235,7 +226,7 @@ public sealed class EntityPageView : UserControl
         SizeChanged += (_, _) => _applyLayout();
         body.SizeChanged += (_, _) => _applyLayout();
         _applyLayout();
-        Content=ArrangeableWorkspace.Split(root,body,"workspace","Lista és adatlap");
+        var workspace=ArrangeableWorkspace.Split(root,body,"workspace","Lista és adatlap");workspace.UsePageScrolling=true;Content=workspace;
     }
     private void OpenColumnSearch(string columnId, FrameworkElement anchor)
     {
@@ -375,9 +366,8 @@ public sealed class EntityPageView : UserControl
         notice.SetBinding(TextBlock.TextProperty, new Binding("DossierNotice")); panel.Children.Add(notice);
         cardHost = new WrapPanel(); sectionHost = new StackPanel();
         panel.Children.Add(cardHost); panel.Children.Add(sectionHost);
-        var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        scroll.SetBinding(VisibilityProperty, new Binding("IsDossierOpen") { Converter = new BooleanToVisibilityConverter() });
-        return scroll;
+        panel.SetBinding(VisibilityProperty, new Binding("IsDossierOpen") { Converter = new BooleanToVisibilityConverter() });
+        return panel;
     }
     private static DatePicker DateInput(string path)
     {

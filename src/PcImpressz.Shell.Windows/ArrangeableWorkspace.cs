@@ -25,7 +25,7 @@ public sealed class ArrangeableWorkspace:UserControl
     internal UiPanelPlacement[] Placements=>_cards.Select(c=>new UiPanelPlacement(c.Id,c.DesiredWidth,c.DesiredHeight)).ToArray();
     public ArrangeableWorkspace(string surface="main")
     {
-        _surface=surface;var root=new StackPanel();root.Children.Add(_edit);root.Children.Add(_actions);root.Children.Add(_message);root.Children.Add(_panels);Content=root;
+        _surface=surface;var root=new StackPanel();root.Children.Add(_actions);root.Children.Add(_message);root.Children.Add(_panels);Content=root;
         _message.SetResourceReference(TextBlock.ForegroundProperty,"MutedBrush");
         foreach(var (label,action) in new (string,Action)[]{("Nézet mentése",()=>_=SaveAsync()),("Mégse",Cancel),("Alapnézet",()=>Apply([])),("Előző mentés",()=>Apply(_saved.History.LastOrDefault()?.Panels??[]))})
         {
@@ -61,7 +61,7 @@ public sealed class ArrangeableWorkspace:UserControl
             _company=_context?.WorkspaceCompany;_generation++;_saved=new(0,[],[]);_loading=false;Cancel();Apply([]);_=_company is null?Task.CompletedTask:LoadAsync();
         }
         var can=_context?.CanArrangeWorkspace==true&&_context.WorkspaceBusy==false&&!_saving&&!_loading;
-        _edit.Visibility=!_editing&&_context?.CanArrangeWorkspace==true?Visibility.Visible:Visibility.Collapsed;_edit.IsEnabled=can;
+        _edit.Visibility=Visibility.Collapsed;_edit.IsEnabled=can;
         if(_editing&&!can&&!_saving)Cancel();
     }
     private async Task LoadAsync()
@@ -91,7 +91,7 @@ public sealed class ArrangeableWorkspace:UserControl
         if(!_editing||_context?.CanArrangeWorkspace!=true||!double.IsFinite(width)||!double.IsFinite(height))return;
         var card=_cards.Single(c=>c.Id==id);card.DesiredWidth=width==0?0:Math.Clamp(width,280,1800);card.DesiredHeight=height==0?0:Math.Clamp(height,160,1600);MeasureCards();
     }
-    internal void Cancel(){_editing=false;_actions.Visibility=Visibility.Collapsed;foreach(var c in _cards)c.SetEditing(false);Apply(_saved.Panels);_edit.Visibility=_context?.CanArrangeWorkspace==true?Visibility.Visible:Visibility.Collapsed;_message.Text="";}
+    internal void Cancel(){_editing=false;_actions.Visibility=Visibility.Collapsed;foreach(var c in _cards)c.SetEditing(false);Apply(_saved.Panels);_edit.Visibility=Visibility.Collapsed;_message.Text="";}
     internal async Task SaveAsync()
     {
         if(!_editing||_context?.CanArrangeWorkspace!=true||_context.WorkspaceBusy||_company is not Guid company||_saving)return;

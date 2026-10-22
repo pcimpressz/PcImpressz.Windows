@@ -123,10 +123,10 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public int LayoutRevision => _columns.Revision;
     public string SortColumn => _columns.SortColumn;
     public bool SortDescending => _columns.SortDescending;
-    public int PageSize => IsProductMaster && _columns.PageSize is 10 or 20 or 50 or 100 ? _columns.PageSize : IsProductMaster ? 20 : 50;
+    public int PageSize => _columns.PageSize is 10 or 20 or 50 or 100 ? _columns.PageSize : 20;
     public bool TrySetPageSize(int size)
     {
-        if (!IsProductMaster || size is not (10 or 20 or 50 or 100) || size == PageSize) return size == PageSize;
+        if (size is not (10 or 20 or 50 or 100) || size == PageSize) return size == PageSize;
         _columns.SetPageSize(size);
         _page = 0;
         _ = LoadAsync();
