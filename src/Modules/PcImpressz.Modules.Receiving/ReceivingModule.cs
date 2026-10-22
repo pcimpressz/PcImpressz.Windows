@@ -23,6 +23,19 @@ public sealed class ReceivingModule : IModule
         var repository = new ReceivingRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
         OutgoingInvoiceRegistry Outgoing()=>new(context.Database??throw new InvalidOperationException("A kimenő számlák céges SQL-adatbázist igényelnek."),context.TimeProvider);
         var invoiceService = new OutgoingInvoiceService(context.Database!, context.TimeProvider, id => context.GetCompanyDataDirectory(id));
+        Register(context,"supplier-status","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>{ct.ThrowIfCancellationRequested();var id=input.GetProperty("companyId").GetGuid();return Task.FromResult(ReceivingJson.Element(SupplierConnectionStore.Status(context.GetCompanyDataDirectory(id),id)));});
+        Register(context,"supplier-save","receiving.write",CommandAccess.Licensed,(input,_,ct)=>{ct.ThrowIfCancellationRequested();var request=ReceivingJson.Read<SupplierConnectionSave>(input);return Task.FromResult(ReceivingJson.Element(SupplierConnectionStore.Save(context.GetCompanyDataDirectory(request.CompanyId),request)));});
+        Register(context,"supplier-enrich","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
+        {
+            var id=input.GetProperty("companyId").GetGuid();var tax=ReceivingText.TaxKey(input.GetProperty("supplierTaxNumber").GetString());
+            if(tax!="23126806")return ReceivingJson.Element(new{configured=false,rows=Array.Empty<SupplierInvoiceLine>()});
+            var connection=SupplierConnectionStore.Read(context.GetCompanyDataDirectory(id),id);
+            if(connection is null||!connection.Enabled)return ReceivingJson.Element(new{configured=false,rows=Array.Empty<SupplierInvoiceLine>()});
+            return ReceivingJson.Element(new{configured=true,rows=await SupplierInvoiceClient.ReadAsync(connection,input.GetProperty("number").GetString()??"",ct)});
+        });
+        var preparations=new InvoicePreparationStore(context.Database!,context.TimeProvider);
+        Register(context,"preparation-read","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>{ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(preparations.Read(ReceivingJson.Read<InvoicePreparationRequest>(input))));});
+        Register(context,"preparation-save","receiving.write",CommandAccess.Licensed,(input,actor,ct)=>{ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(preparations.Save(ReceivingJson.Read<InvoicePreparationSave>(input),actor)));});
         Register(context,"nav-list","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
         {
             var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
@@ -192,7 +205,7 @@ public sealed class ReceivingModule : IModule
     {
         var node = JsonSerializer.SerializeToNode(new
         {
-            receipt.Data.Number, receipt.Data.SupplierId, receipt.Data.SupplierName, receipt.Data.SupplierTaxId,
+            receipt.Data.Number, receipt.Data.SupplierId, receipt.Data.SupplierName, receipt.Data.SupplierTaxId,receipt.Data.OriginalNavNumber,receipt.Data.OriginalNavSupplierTaxId,
             receipt.Data.IssuedOn, receipt.Data.DueOn, receipt.Data.Source, receipt.Data.Status, receipt.Data.Net,
             receipt.Data.Vat, receipt.Data.Gross, receipt.Data.StockPosted, receipt.Data.Warehouse, lineCount = receipt.Data.Lines.Length,
             statusLabel = ReceivingText.StatusLabel(receipt.Data.Status), sourceLabel = ReceivingText.SourceLabel(receipt.Data.Source)
@@ -209,7 +222,7 @@ public sealed class ReceivingModule : IModule
         node["lines"] = JsonSerializer.SerializeToNode(receipt.Data.Lines.Select(line => new
         {
             line.Id, line.ProductId, line.Name, line.Sku, line.Barcode, line.UnitCode, line.Quantity, line.NetUnitPrice,
-            line.VatRate, line.Match, line.MatchBy, matchLabel = ReceivingText.MatchLabel(line.Match)
+            line.VatRate, line.StockItem, line.Match, line.MatchBy, matchLabel = ReceivingText.MatchLabel(line.Match)
         }), ReceivingJson.Options);
         return JsonSerializer.SerializeToElement(node);
     }

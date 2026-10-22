@@ -16,6 +16,7 @@ public sealed record ReceiptLine
     public decimal Quantity { get; init; }
     public decimal NetUnitPrice { get; init; }
     public decimal VatRate { get; init; }
+    public bool StockItem {get;init;}=true;
     public string Match { get; init; } = "";
     public string MatchBy { get; init; } = "";
 }
@@ -28,6 +29,8 @@ public sealed record ReceiptData
     public string SupplierTaxId { get; init; } = "";
     public string IssuedOn { get; init; } = "";
     public string DueOn { get; init; } = "";
+    public string? OriginalNavNumber {get;init;}
+    public string? OriginalNavSupplierTaxId {get;init;}
     public string Source { get; init; } = "manual";
     public string Status { get; init; } = "uj";
     public string Notes { get; init; } = "";
@@ -51,9 +54,9 @@ public sealed record ReceiptRecord(Guid Id, long Version, ReceiptData Data, Date
 public sealed record ReceiptAudit(Guid ReceiptId, string Action, long Version, DateTimeOffset At, string Actor);
 public sealed record ReceiptState(int SchemaVersion, long Revision, ReceiptRecord[] Receipts, ReceiptAudit[] Audit);
 public sealed record ReceiptLineDraft(Guid? Id, Guid? ProductId, string? Name, string? Sku, string? Barcode,
-    string? UnitCode, decimal Quantity, decimal NetUnitPrice, decimal VatRate, bool IsService = false);
+    string? UnitCode, decimal Quantity, decimal NetUnitPrice, decimal VatRate, bool IsService = false,bool StockItem=true);
 public sealed record ReceiptDraft(string? Number, Guid SupplierId, string? IssuedOn, string? DueOn, string? Notes,
-    string? Warehouse, ReceiptLineDraft[]? Lines, string? Source = null);
+    string? Warehouse, ReceiptLineDraft[]? Lines, string? Source = null,bool ConvertToManual=false);
 public sealed record ReceiptSave(Guid CompanyId, Guid? Id, long Version, ReceiptDraft? Draft);
 public sealed record ReceiptQuery(Guid CompanyId, string Search = "", string Filter = "uj", int Page = 0, int PageSize = 50,
     string Sort = "", bool Descending = false);
@@ -216,7 +219,7 @@ public static class ReceivingMatching
     internal static ReceiptLine[] Build(ReceiptLineDraft[] drafts, ProductCard[] products)
     {
         if (drafts.Length is < 1 or > 400) throw new ArgumentException("A számlán 1–400 tétel lehet.");
-        var lines = drafts.Select(draft => BuildLine(draft, products)).ToArray();
+        var lines = drafts.Select(draft => BuildLine(draft, products) with{StockItem=draft.StockItem&&!draft.IsService}).ToArray();
         if (lines.Select(line => line.Id).Distinct().Count() != lines.Length)
             throw new ArgumentException("A tételek azonosítója ütközik.");
         return lines;
@@ -234,7 +237,7 @@ public static class ReceivingMatching
     }
     public static void EnsureReceivable(ReceiptLine[] lines)
     {
-        var blocked = lines.Where(line => line.Match != "szolgaltatas" && line.ProductId is null).Select(line => line.Name).ToArray();
+        var blocked = lines.Where(line => line.StockItem && line.Match != "szolgaltatas" && line.ProductId is null).Select(line => line.Name).ToArray();
         if (blocked.Length > 0)
             throw new ArgumentException("Bevételezés előtt párosítsd a készletes tételeket a terméktörzshöz, vagy vegyél fel új terméket: " + string.Join(", ", blocked));
     }
@@ -277,12 +280,11 @@ public static class ReceivingMatching
         if (byBarcode.Length == 1) return FromProduct(draft, byBarcode[0], name, quantity, price, vat, "EAN");
         var bySku = sku.Length == 0 ? [] : products.Where(card => card.IsActive && ReceivingText.Fold(card.Sku) == ReceivingText.Fold(sku)).ToArray();
         if (bySku.Length == 1) return FromProduct(draft, bySku[0], name, quantity, price, vat, "SKU");
-        if (barcode.Length == 0 && sku.Length == 0)
-            return Line(draft, null, name, sku, barcode, unit, quantity, price, vat, "fuggo", "NINCS_AZONOSITO");
         var byName = products.Where(card => card.IsActive && ReceivingText.Compact(card.Name) == ReceivingText.Compact(name)).ToArray();
         if (byName.Length == 1) return FromProduct(draft, byName[0], name, quantity, price, vat, "NEV");
         if (byBarcode.Length > 1 || bySku.Length > 1 || byName.Length > 1)
             return Line(draft, null, name, sku, barcode, unit, quantity, price, vat, "fuggo", "TOBB");
+        if(barcode.Length==0&&sku.Length==0)return Line(draft,null,name,sku,barcode,unit,quantity,price,vat,"fuggo","NINCS_AZONOSITO");
         return Line(draft, null, name, sku, barcode, unit, quantity, price, vat, "uj", "");
     }
     private static ReceiptLine FromProduct(ReceiptLineDraft draft, ProductCard product, string name, decimal quantity, decimal price, decimal vat, string how)

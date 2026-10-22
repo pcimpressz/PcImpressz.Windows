@@ -20,6 +20,7 @@ public sealed class ArrangeableWorkspace:UserControl
     private readonly TextBlock _message=new(){TextWrapping=TextWrapping.Wrap,Margin=new(0,6,0,8)};
     private IWorkspaceLayoutContext? _context;private Guid? _company;private int _generation;private bool _loading,_saving,_editing;
     private UiWorkspaceLayout _saved=new(0,[],[]);
+    public bool UsePageScrolling {get;set;}
     internal bool IsArranging=>_editing;
     internal UiPanelPlacement[] Placements=>_cards.Select(c=>new UiPanelPlacement(c.Id,c.DesiredWidth,c.DesiredHeight)).ToArray();
     public ArrangeableWorkspace(string surface="main")
@@ -113,7 +114,7 @@ public sealed class ArrangeableWorkspace:UserControl
         RenderOrder();
     }
     private void RenderOrder(){_panels.Children.Clear();foreach(var c in _cards)_panels.Children.Add(c);MeasureCards();}
-    private void MeasureCards(){var available=Math.Max(200,ActualWidth-12);foreach(var c in _cards){c.Width=Math.Min(available,c.DesiredWidth==0?available:c.DesiredWidth);c.Body.Height=c.DesiredHeight==0?double.NaN:c.DesiredHeight;}}
+    private void MeasureCards(){var available=Math.Max(200,ActualWidth-12);foreach(var c in _cards){c.Width=Math.Min(available,c.DesiredWidth==0?available:c.DesiredWidth);c.Body.Height=UsePageScrolling||c.DesiredHeight==0?double.NaN:c.DesiredHeight;c.Body.VerticalScrollBarVisibility=UsePageScrolling?ScrollBarVisibility.Disabled:ScrollBarVisibility.Auto;}}
     private sealed class PanelCard:Border
     {
         private readonly ArrangeableWorkspace _owner;private readonly DockPanel _header;private readonly Thumb _resize;private Point _down;

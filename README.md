@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.18
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.19
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -177,3 +177,8 @@ A fő munkafelületeken admin rendezőmód érhető el: fejlécnél húzható pa
 ## NAV-előnézet, állapotszínek és kisker ár – 0.4.18
 
 A NAV-listán a kijelölés automatikusan, szállítófelvétel nélkül megnyitja az alsó tételszerkesztőt. Csak a tényleges készletre vétel zöld; a többi fehér, szöveges állapottal. A színek a Beállítások → Számlák · megjelenítés alatt változtathatók. Fejléces tételtáblázat, bruttó kisker ár, állítható haszonkulcs és eladási áfa; a további termékadatok a közös terméktörzs mezőleírásából épülnek fel. [Használat és korlátok](docs/NAV-BEVETELEZES-0.4.18.md).
+## Gyors NAV-előkészítés és Bluetooth-címke – 0.4.19
+
+Kompakt dátumválasztó, közös XML/lekérési eszköztár, 10/20/50/100 soros listaoldalak. Egyetlen függőleges oldalgörgetés, kattintással nyitható és zárható tételrészletek. Céges SQL-be automatikusan mentett számla-előkészítés; automatikus szállítófelvétel, pontos termékegyezés és hasonló találatok. A NAV mennyisége és beszerzési ára védett; kézi módra váltható, az eredeti NAV-kapcsolat megőrzésével. Soronként állítható készletre vétel, automatikus bruttó ár / haszonkulcs / fedezet, belső vonalkód-javaslat és Niimbot D110-M Bluetooth-címkeküldés. A CompMarket csak olvasási XML-egyeztetése saját, titkosított és proxyhoz kötött beállításokkal használható. [Részletek, használat, korlátok](docs/NAV-GYORS-BEVETELEZES-0.4.19.md).
+
+A grafikus program és felületi teszt Windows 10 2004 (build 19041) vagy újabb rendszert céloz a natív Bluetooth API miatt. A mag és üzleti modulok célkeretrendszere változatlan. A dev.ps1 az új Windows-célkeretrendszerből indítja a grafikus programot.

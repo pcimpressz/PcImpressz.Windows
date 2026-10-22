@@ -13,24 +13,24 @@ public sealed class ReceivingPageView : UserControl
     public ReceivingPageView()
     {
         var root = new StackPanel();
-        root.Children.Add(Text("Számlák",26,true));
+
         var tabs=new WrapPanel{Margin=new(0,0,0,16)};
         tabs.Children.Add(Tab("Bejövő számlák","IncomingCommand","IsIncoming"));
         tabs.Children.Add(Tab("Kimenő számlák","OutgoingCommand","IsOutgoing"));
         root.Children.Add(tabs);
         var incoming=new StackPanel();
         incoming.SetBinding(VisibilityProperty,new Binding("IsIncoming"){Converter=new BooleanToVisibilityConverter()});
-                var incomingWorkspace=new ArrangeableWorkspace("incoming");incomingWorkspace.AddPanel("list","Bejövő számlák listája",(FrameworkElement)Home());incomingWorkspace.AddPanel("nav","NAV-lekérés és számlabevételezés",(FrameworkElement)Intake());incoming.Children.Add(incomingWorkspace);root.Children.Add(incoming);
-        var outgoingWorkspace=new ArrangeableWorkspace("outgoing");outgoingWorkspace.SetBinding(VisibilityProperty,new Binding("IsOutgoing"){Converter=new BooleanToVisibilityConverter()});outgoingWorkspace.AddPanel("list","Kimenő számlák",(FrameworkElement)Outgoing());root.Children.Add(outgoingWorkspace);
-        Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+                var incomingWorkspace=new ArrangeableWorkspace("incoming"){UsePageScrolling=true};incomingWorkspace.AddPanel("list","Bejövő számlák listája",(FrameworkElement)Home());incomingWorkspace.AddPanel("nav","NAV-lekérés és számlabevételezés",(FrameworkElement)Intake());incoming.Children.Add(incomingWorkspace);root.Children.Add(incoming);
+        var outgoingWorkspace=new ArrangeableWorkspace("outgoing"){UsePageScrolling=true};outgoingWorkspace.SetBinding(VisibilityProperty,new Binding("IsOutgoing"){Converter=new BooleanToVisibilityConverter()});outgoingWorkspace.AddPanel("list","Kimenő számlák",(FrameworkElement)Outgoing());root.Children.Add(outgoingWorkspace);
+        Content = root;
         DataContextChanged += (_, _) => Hook();
     }
     private UIElement Home()
     {
         var panel = new StackPanel();
 
-        panel.Children.Add(Text("Bejövő számlák", 22, true));
-        panel.Children.Add(Muted("Válaszd ki, honnan jön a számla. Ami NAV-ról vagy importból érkezik, új állapotba kerül: bevételezed, költségként hagyod, vagy függőben marad."));
+
+
         var modes = new WrapPanel { Margin = new(0, 0, 0, 12) };
         modes.Children.Add(Primary("Kézi bevételezés", "ManualCommand"));
         modes.Children.Add(Button("NAV-számlák lekérése", "NavCommand"));
@@ -59,12 +59,12 @@ public sealed class ReceivingPageView : UserControl
         panel.Children.Add(tools);
         panel.Children.Add(Bound(Muted(""), "Message"));
         _receipts = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, CanUserDeleteRows = false,
-            HeadersVisibility = DataGridHeadersVisibility.Column, MinHeight = 220, MaxHeight = 320, Margin = new(0, 8, 0, 0) };
+            HeadersVisibility = DataGridHeadersVisibility.Column, MinHeight = 80, Margin = new(0, 8, 0, 0) };
         _receipts.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Rows"));
         _receipts.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedRow"));
         _receipts.MouseDoubleClick += (_, _) => { if (DataContext is ReceivingPageViewModel page) page.OpenCommand.Execute(null); };
         ListGrid.Prepare(_receipts, () => DataContext as IColumnList);
-        panel.Children.Add(_receipts);
+        panel.Children.Add(_receipts);var paging=new WrapPanel();paging.Children.Add(Button("Előző oldal","PreviousReceiptPageCommand"));paging.Children.Add(Button("Következő oldal","NextReceiptPageCommand"));paging.Children.Add(PageSizePicker());paging.Children.Add(Bound(Muted(""),"ReceiptPageLabel"));panel.Children.Add(paging);
         return home;
     }
     private UIElement Intake()
@@ -91,16 +91,16 @@ public sealed class ReceivingPageView : UserControl
         panel.Children.Add(Bound(Muted(""), "IntakeHelp"));
         if(nav)
         {
-            var dates=new WrapPanel{Margin=new(0,0,0,12)};dates.Children.Add(Text("Kezdő nap",14,false));var from=new DatePicker{Width=160,Margin=new(10,0,18,0)};from.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavFrom"){Mode=BindingMode.TwoWay});from.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(from);dates.Children.Add(Text("Záró nap",14,false));var to=new DatePicker{Width=160,Margin=new(10,0,18,0)};to.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavTo"){Mode=BindingMode.TwoWay});to.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(to);dates.Children.Add(Primary("Bejövő számlák lekérése","FetchNavCommand"));panel.Children.Add(dates);
-            var invoices=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=100,MaxHeight=250,Margin=new(0,0,0,12)};invoices.HeadersVisibility=DataGridHeadersVisibility.Column;invoices.RowStyle=NavRowStyle();invoices.SetBinding(ItemsControl.ItemsSourceProperty,"NavInvoices");invoices.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedNavInvoice"){Mode=BindingMode.TwoWay});invoices.SetBinding(IsEnabledProperty,"IsNotBusy");foreach(var (title,path) in new[]{("Állapot","State"),("Kelt","IssuedOn"),("Számlaszám","Number"),("Szállító","SupplierName"),("Adószám","SupplierTaxNumber"),("Nettó","Net"),("Pénznem","Currency"),("Művelet","Operation")})invoices.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="SupplierName"?220:path=="Number"?150:path=="Currency"?80:110,Width=path=="SupplierName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path=="Number"?160:path=="Currency"?80:120)});panel.Children.Add(invoices);
+            var dates=new WrapPanel{Margin=new(0,0,0,12)};dates.Children.Add(Text("Kezdő nap",14,false));var from=CompactDatePicker();from.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavFrom"){Mode=BindingMode.TwoWay});from.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(from);dates.Children.Add(Text("Záró nap",14,false));var to=CompactDatePicker();to.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavTo"){Mode=BindingMode.TwoWay});to.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(to);dates.Children.Add(Primary("Bejövő számlák lekérése","FetchNavCommand"));dates.Children.Add(Button("NAV XML megnyitása","PickFileCommand"));dates.Children.Add(PageSizePicker());panel.Children.Add(dates);
+            var invoices=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=65,Margin=new(0,0,0,12)};invoices.HeadersVisibility=DataGridHeadersVisibility.Column;invoices.RowStyle=NavRowStyle();invoices.SetBinding(ItemsControl.ItemsSourceProperty,"NavInvoices");invoices.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedNavInvoice"){Mode=BindingMode.TwoWay});invoices.SetBinding(IsEnabledProperty,"IsNotBusy");foreach(var (title,path) in new[]{("Állapot","State"),("Kelt","IssuedOn"),("Számlaszám","Number"),("Szállító","SupplierName"),("Adószám","SupplierTaxNumber"),("Nettó","Net"),("Pénznem","Currency"),("Művelet","Operation")})invoices.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="SupplierName"?220:path=="Number"?150:path=="Currency"?80:110,Width=path=="SupplierName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path=="Number"?160:path=="Currency"?80:120)});panel.Children.Add(invoices);
             var pages=new WrapPanel();pages.Children.Add(Button("Előző oldal","PreviousNavCommand"));pages.Children.Add(Button("Következő oldal","NextNavCommand"));pages.Children.Add(Bound(Muted(""),"NavPageLabel"));panel.Children.Add(pages);
         }
         if(!nav){panel.Children.Add(Text("Szállító", 14, true));panel.Children.Add(Suppliers());}
         if(!nav)panel.Children.Add(Button("Új szállító a partnertörzsbe", "NewSupplierCommand"));
         if(nav)
         {
-            panel.Children.Add(Button("Előnézet frissítése","DownloadNavCommand"));
-            panel.Children.Add(new Expander{Header="Korábban letöltött NAV XML betöltése",Content=Button("NAV XML megnyitása","PickFileCommand"),Margin=new(0,12,0,12)});
+
+
             panel.Children.Add(Bound(Muted(""),"Message"));return;
         }
         panel.Children.Add(Labeled("Számlaszám (XML-ből kitölthető)", "Number"));
@@ -113,34 +113,37 @@ public sealed class ReceivingPageView : UserControl
     {
         var panel = new StackPanel();
         panel.SetBinding(VisibilityProperty, new Binding("IsEditor") { Converter = new BooleanToVisibilityConverter() });
-        panel.Children.Add(new Separator{Margin=new(0,20,0,16)});
-        panel.Children.Add(Bound(Text("", 22, true), "EditorTitle"));
+        var heading=new DockPanel{Margin=new(0,12,0,8)};var close=Button("×","BackCommand");close.Foreground=System.Windows.Media.Brushes.Firebrick;close.FontSize=20;close.Padding=new(9,0,9,0);close.ToolTip="Szerkesztő bezárása – az előkészítés automatikusan mentődik";DockPanel.SetDock(close,Dock.Right);heading.Children.Add(close);heading.Children.Add(Bound(Text("",18,true),"EditorTitle"));panel.Children.Add(heading);
+        panel.Children.Add(Bound(Muted(""),"PreparationStatus"));
+        var manual=Button("Átváltás kézi bevételezésre","ConvertToManualCommand");manual.SetBinding(VisibilityProperty,new Binding("IsNavReceipt"){Converter=new BooleanToVisibilityConverter()});var editorTools=new WrapPanel();editorTools.Children.Add(manual);var enrich=Button("Szállítói adategyeztetés","EnrichSupplierCommand");enrich.SetBinding(VisibilityProperty,new Binding("IsNavReceipt"){Converter=new BooleanToVisibilityConverter()});editorTools.Children.Add(enrich);panel.Children.Add(editorTools);
         var pdf=new StackPanel();pdf.SetBinding(VisibilityProperty,new Binding("HasPdfPreview"){Converter=new BooleanToVisibilityConverter()});
         pdf.Children.Add(Bound(Text("",14,true),"PdfName"));
         pdf.Children.Add(Muted("PDF-ből kiolvasott szöveg – a számlaadatokat és tételeket ellenőrizve töltsd ki. Az eredeti PDF-et őrizd meg külön."));
         var preview=new TextBox{IsReadOnly=true,TextWrapping=TextWrapping.Wrap,AcceptsReturn=true,MinHeight=140,MaxHeight=280,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new(0,0,0,16)};
         preview.SetBinding(TextBox.TextProperty,new Binding("PdfText"){Mode=BindingMode.OneWay});pdf.Children.Add(preview);panel.Children.Add(pdf);
-        panel.Children.Add(Muted("A szállítási díj és a hasonló sor szolgáltatás: termék nélkül is bevételezhető. Készletes sornál válassz terméket, vagy vegyél fel újat."));
+
         panel.Children.Add(Text("Szállító", 14, true));
         panel.Children.Add(Suppliers());
         panel.Children.Add(Bound(Muted(""),"NavSupplierHint"));
-        var supplierButton = Button("Új szállító", "NewSupplierCommand");
-        supplierButton.SetBinding(VisibilityProperty, new Binding("IsEditable") { Converter = new BooleanToVisibilityConverter() });
-        panel.Children.Add(supplierButton);
-        var mainFields=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};mainFields.Children.Add(Labeled("Számlaszám","Number"));mainFields.Children.Add(Labeled("Kelt","IssuedOn"));panel.Children.Add(mainFields);
+        var mainFields=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};mainFields.Children.Add(Labeled("Számlaszám","Number",true));mainFields.Children.Add(Labeled("Kelt","IssuedOn",true));panel.Children.Add(mainFields);
         var extraFields=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};extraFields.Children.Add(Labeled("Fizetési határidő","DueOn"));extraFields.Children.Add(Labeled("Raktár","Warehouse"));
         var extra=new StackPanel();extra.Children.Add(extraFields);extra.Children.Add(Labeled("Megjegyzés","Notes"));panel.Children.Add(new Expander{Header="További számlaadatok és megjegyzés",Content=extra,Margin=new(0,0,0,10)});
         panel.Children.Add(Text("Tételek", 16, true));
         _lines.AutoGenerateColumns=false;_lines.CanUserAddRows=false;_lines.CanUserDeleteRows=false;_lines.HeadersVisibility=DataGridHeadersVisibility.Column;
-        _lines.MinHeight=180;_lines.MaxHeight=460;_lines.RowDetailsVisibilityMode=DataGridRowDetailsVisibilityMode.VisibleWhenSelected;
+        _lines.MinHeight=60;_lines.RowDetailsVisibilityMode=DataGridRowDetailsVisibilityMode.Collapsed;ScrollViewer.SetVerticalScrollBarVisibility(_lines,ScrollBarVisibility.Disabled);_lines.PreviewMouseLeftButtonDown+=ToggleLineDetails;
         _lines.SetBinding(ItemsControl.ItemsSourceProperty,"Lines");_lines.SetBinding(DataGrid.IsReadOnlyProperty,"IsLocked");
-        foreach(var (title,path,width) in new[]{("Megnevezés","Name",230d),("Mennyiség","QuantityText",95d),("Egység","UnitCode",75d),("Nettó beszerzés","PriceText",120d),("Áfa %","VatText",70d),("Bruttó kisker (Ft)","RetailPrice",140d),("Haszonkulcs %","Markup",125d),("Eladási áfa %","SaleVat",115d),("Párosítás","MatchLabel",150d)})
-            _lines.Columns.Add(new DataGridTextColumn{Header=title,Width=width,IsReadOnly=path=="MatchLabel",Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged}});
+        _lines.Columns.Add(new DataGridCheckBoxColumn{Header="Készletre",Binding=new Binding("StockItem"){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged},Width=75});
+        foreach(var (title,path,width) in new[]{("Megnevezés","Name",230d),("Mennyiség","QuantityText",95d),("Egység","UnitCode",75d),("Nettó beszerzés","PriceText",120d),("Áfa %","VatText",70d),("Bruttó kisker (Ft)","RetailPrice",140d),("Haszonkulcs %","Markup",125d),("Eladási áfa %","SaleVat",115d),("Fedezet","Margin",85d),("Párosítás","MatchLabel",150d)})
+        {
+            var column=new DataGridTextColumn{Header=title,Width=width,IsReadOnly=path is "MatchLabel" or "Margin",Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged}};
+            if(path is "Name" or "QuantityText" or "UnitCode" or "PriceText" or "VatText")column.IsReadOnly=true;
+            _lines.Columns.Add(column);
+        }
         _lines.RowDetailsTemplate=new DataTemplate{VisualTree=new FrameworkElementFactory(typeof(LineDetails))};
-        panel.Children.Add(Muted("Kattints a tételre a termékpárosításhoz és a további adatokhoz. A Termék és ár mentése azonnal ment a terméktörzsbe; a számla Mentés gombja a módosított termékadatokat is elmenti."));
+        panel.Children.Add(Muted("Készletre: csak a jelölt tételeket vesszük készletre. Az ár és a haszonkulcs egymást számolja. Kattintás: részletek megnyitása / bezárása."));
         panel.Children.Add(_lines);
         var add = Button("Új tételsor", "AddLineCommand");
-        add.SetBinding(VisibilityProperty, new Binding("IsEditable") { Converter = new BooleanToVisibilityConverter() });
+        add.SetBinding(VisibilityProperty, new Binding("CanAddInvoiceLine") { Converter = new BooleanToVisibilityConverter() });
         panel.Children.Add(add);
         panel.Children.Add(Bound(Text("", 14, true), "NetLabel"));
         panel.Children.Add(Bound(Text("", 14, true), "GrossLabel"));
@@ -152,7 +155,7 @@ public sealed class ReceivingPageView : UserControl
         actions.Children.Add(Button("Bevételezés visszafordítása", "ReverseReceiptCommand"));
         actions.Children.Add(Classify("Költség", "ExpenseCommand"));
         actions.Children.Add(Classify("Függőben", "PendingCommand"));
-        actions.Children.Add(Button("Szerkesztő bezárása", "BackCommand"));
+
         panel.Children.Add(actions);
         panel.Children.Add(Bound(Muted(""), "Message"));
         return panel;
@@ -169,7 +172,7 @@ public sealed class ReceivingPageView : UserControl
         var nav=new ComboBox{Width=180,Margin=new(0,0,10,10),DisplayMemberPath="Label",SelectedValuePath="Value"};nav.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingNavOptions");nav.SetBinding(ComboBox.SelectedValueProperty,"OutgoingNavStatus");filters.Children.Add(nav);
         filters.Children.Add(Primary("Keresés / frissítés","FetchOutgoingCommand"));filters.Children.Add(Button("Szűrők törlése","ClearOutgoingFiltersCommand"));filters.Children.Add(Button("NAV egyeztetés","ReconcileOutgoingCommand"));panel.Children.Add(filters);
         panel.Children.Add(Bound(Text("",14,true),"OutgoingSummary"));panel.Children.Add(Bound(Muted(""),"OutgoingMessage"));
-        var grid=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=320,MaxHeight=650,HeadersVisibility=DataGridHeadersVisibility.Column};grid.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingInvoices");
+        var grid=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=100,HeadersVisibility=DataGridHeadersVisibility.Column};grid.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingInvoices");
         foreach(var c in new[]{("Kelt","IssuedOn",105d),("Számlaszám","Number",150d),("Vevő","CustomerName",210d),("Adószám","CustomerTaxNumber",120d),("Fizetés","PaymentMethod",110d),("Határidő","DueOn",105d),("Nettó","Net",110d),("ÁFA","Vat",100d),("Bruttó","Gross",110d),("Pénznem","Currency",80d),("Pénzügy","FinancialStatus",120d),("NAV","NavStatus",130d)})grid.Columns.Add(new DataGridTextColumn{Header=c.Item1,Binding=new Binding(c.Item2),Width=c.Item3});
         panel.Children.Add(grid);var paging=new WrapPanel{Margin=new(0,12,0,0)};paging.Children.Add(Button("Előző oldal","PreviousOutgoingCommand"));paging.Children.Add(Button("Következő oldal","NextOutgoingCommand"));paging.Children.Add(Bound(Muted(""),"OutgoingPageLabel"));panel.Children.Add(paging);return panel;
     }
@@ -183,6 +186,7 @@ public sealed class ReceivingPageView : UserControl
         _page = DataContext as ReceivingPageViewModel;
         if (_page is not null)
         {
+            foreach(var column in _lines.Columns.OfType<DataGridTextColumn>())if((column.Binding as Binding)?.Path.Path is "Name" or "QuantityText" or "UnitCode" or "PriceText" or "VatText")BindingOperations.SetBinding(column,DataGridColumn.IsReadOnlyProperty,new Binding("CanEditInvoiceFacts"){Source=_page,Converter=new Negate()});
             _page.Lines.CollectionChanged += LinesChanged;
             _page.PropertyChanged += PageChanged;
             ListGrid.Show(_receipts, _page);
@@ -220,19 +224,28 @@ public sealed class ReceivingPageView : UserControl
     }
     private static ComboBox Suppliers(string selection="SelectedSupplier")
     {
-        var combo = new ComboBox { MinHeight = 36, Margin = new(0, 0, 0, 10), DisplayMemberPath = "Label" };
+        var combo = new ComboBox { Style=new Style(typeof(ComboBox)),IsEditable=true,IsTextSearchEnabled=false,StaysOpenOnEdit=true,MinHeight = 34, Margin = new(0, 0, 0, 10), DisplayMemberPath = "Label" };
+        combo.SetResourceReference(Control.BackgroundProperty,"ElevatedBrush");combo.SetResourceReference(Control.ForegroundProperty,"TextBrush");TextSearch.SetTextPath(combo,"Label");
         combo.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Suppliers"));
         combo.SetBinding(ComboBox.SelectedItemProperty, new Binding(selection));
         combo.SetBinding(IsEnabledProperty, new Binding(selection=="SelectedNavSupplier"?"IsNotBusy":"CanPickSupplier"));
+        combo.AddHandler(TextBox.TextChangedEvent,new TextChangedEventHandler((_,e)=>
+        {
+            if(e.OriginalSource is TextBox box&&box.IsKeyboardFocusWithin&&combo.ItemsSource is not null)
+            {
+                var query=box.Text;var view=CollectionViewSource.GetDefaultView(combo.ItemsSource);view.Filter=item=>item is SupplierOption supplier&&supplier.Label.Contains(query,StringComparison.CurrentCultureIgnoreCase);combo.IsDropDownOpen=true;
+            }
+        }));
+        combo.DropDownClosed+=(_,_)=>{if(combo.ItemsSource is not null)CollectionViewSource.GetDefaultView(combo.ItemsSource).Filter=null;};
         return combo;
     }
-    private static UIElement Labeled(string label, string path)
+    private static UIElement Labeled(string label, string path,bool fact=false)
     {
         var panel = new StackPanel { Margin = new(0, 0, 0, 8) };
         panel.Children.Add(Muted(label));
         var box = Input();
         box.SetBinding(TextBox.TextProperty, new Binding(path) { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
-        box.SetBinding(TextBox.IsReadOnlyProperty, new Binding("IsLocked"));
+        box.SetBinding(TextBox.IsReadOnlyProperty, fact?new Binding("CanEditInvoiceFacts"){Converter=new Negate()}:new Binding("IsLocked"));
         panel.Children.Add(box);
         return panel;
     }
@@ -283,6 +296,27 @@ public sealed class ReceivingPageView : UserControl
     }
 
 
+    private sealed class Negate:IValueConverter
+    {
+        public object Convert(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>value is not true;
+        public object ConvertBack(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>throw new NotSupportedException();
+    }
+    private static DatePicker CompactDatePicker()=>new(){Style=(Style)Application.Current.FindResource("CompactInvoiceDatePicker"),Width=145,Height=34,MinHeight=0,Padding=new(0),VerticalAlignment=VerticalAlignment.Top,Margin=new(8,0,14,0)};
+    private static UIElement PageSizePicker()
+    {
+        var panel=new StackPanel{Orientation=Orientation.Horizontal,Margin=new(8,0,0,0)};panel.Children.Add(new TextBlock{Text="Sor / oldal",VerticalAlignment=VerticalAlignment.Center,Margin=new(0,0,6,10)});
+        var size=new ComboBox{Width=85,MinHeight=34,Padding=new(6),Margin=new(0,0,0,10)};size.SetBinding(ItemsControl.ItemsSourceProperty,"InvoicePageSizes");size.SetBinding(ComboBox.SelectedItemProperty,new Binding("InvoicePageSize"){Mode=BindingMode.TwoWay});panel.Children.Add(size);return panel;
+    }
+    private void ToggleLineDetails(object sender,System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var node=e.OriginalSource as DependencyObject;
+        while(node is not null&&node is not DataGridRow)
+        {
+            if(node is TextBox or System.Windows.Controls.Primitives.ButtonBase or ComboBox)return;
+            node=node is System.Windows.Media.Visual?System.Windows.Media.VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node);
+        }
+        if(node is DataGridRow row&&row.Item is LineEditor line){line.DetailsOpen=!line.DetailsOpen;row.DetailsVisibility=line.DetailsOpen?Visibility.Visible:Visibility.Collapsed;}
+    }
     public sealed class ProductFieldControl:ContentControl
     {
         public ProductFieldControl(){DataContextChanged+=(_,_)=>Build();}
@@ -304,41 +338,26 @@ public sealed class ReceivingPageView : UserControl
             Margin = new(0, 0, 0, 12); Padding = new(12); BorderThickness = new(1); CornerRadius = new(10);
             SetResourceReference(BorderBrushProperty, "StrokeBrush"); SetResourceReference(BackgroundProperty, "SurfaceBrush");
             var panel = new StackPanel();
-            panel.Children.Add(Field("Termék neve", "Name"));
-            var service = new CheckBox { Content = "Szolgáltatás (nem készletes tétel)", Margin = new(0, 0, 0, 10) };
-            service.SetBinding(CheckBox.IsCheckedProperty, new Binding("IsService"));
-            service.SetBinding(IsEnabledProperty, new Binding("DataContext.IsEditable") { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(ReceivingPageView), 1) });
-            panel.Children.Add(service);
+
             var codes = new Grid();
             codes.ColumnDefinitions.Add(new()); codes.ColumnDefinitions.Add(new()); codes.ColumnDefinitions.Add(new());
             codes.Children.Add(Field("Cikkszám", "Sku"));
             var barcode = Field("Vonalkód", "Barcode"); Grid.SetColumn(barcode, 1); codes.Children.Add(barcode);
-            var unit = Field("Egység", "UnitCode"); Grid.SetColumn(unit, 2); codes.Children.Add(unit);
+            var barcodeButtons=new WrapPanel();barcodeButtons.Children.Add(LineButton("⚙ Generálás","GenerateBarcodeCommand"));barcodeButtons.Children.Add(LineButton("▥ Címke","PrintBarcodeCommand"));Grid.SetColumn(barcodeButtons,2);codes.Children.Add(barcodeButtons);
             panel.Children.Add(codes);
             var search = new WrapPanel();
             var box = new TextBox { Width = 220, MinHeight = 34, Margin = new(0, 0, 8, 8) };
             box.SetBinding(TextBox.TextProperty, new Binding("SearchText") { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
             search.Children.Add(box);
             search.Children.Add(LineButton("Keresés a terméktörzsben", "SearchCommand"));
-            search.Children.Add(LineButton("Termék és ár mentése", "SaveProductCommand"));
-            search.Children.Add(LineButton("Ár számítása haszonkulccsal", "CalculateRetailCommand"));
-            search.Children.Add(LineButton("Sor törlése", "RemoveCommand"));
+
+            var newProduct=LineButton("Új termék", "NewProductCommand");newProduct.SetBinding(VisibilityProperty,new Binding("HasNoProduct"){Converter=new BooleanToVisibilityConverter()});search.Children.Add(newProduct);
+
             panel.Children.Add(search);
             var matches = new ComboBox { MinHeight = 34, Margin = new(0, 0, 0, 8), DisplayMemberPath = "Label" };
             matches.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Matches"));
             matches.SetBinding(ComboBox.SelectedItemProperty, new Binding("SelectedMatch"));
             panel.Children.Add(matches);
-            var amounts = new Grid();
-            amounts.ColumnDefinitions.Add(new()); amounts.ColumnDefinitions.Add(new()); amounts.ColumnDefinitions.Add(new());
-            amounts.Children.Add(Field("Mennyiség", "QuantityText"));
-            var price = Field("Nettó egységár", "PriceText"); Grid.SetColumn(price, 1); amounts.Children.Add(price);
-            var vat = Field("Áfa %", "VatText"); Grid.SetColumn(vat, 2); amounts.Children.Add(vat);
-            panel.Children.Add(amounts);
-            var hint = new TextBlock { Margin = new(0, 4, 0, 0) };
-            hint.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
-            hint.SetBinding(TextBlock.TextProperty, new Binding("SuggestedSale"));
-            var retailFields=new System.Windows.Controls.Primitives.UniformGrid{Columns=3};retailFields.Children.Add(Field("Bruttó kisker ár (Ft)","RetailPrice"));retailFields.Children.Add(Field("Haszonkulcs %","Markup"));retailFields.Children.Add(Field("Eladási áfa %","SaleVat"));panel.Children.Add(retailFields);
-            panel.Children.Add(hint);
             var fields=new ItemsControl();fields.SetBinding(ItemsControl.ItemsSourceProperty,"ProductFields");fields.ItemTemplate=new DataTemplate{VisualTree=new FrameworkElementFactory(typeof(ProductFieldControl))};
             panel.Children.Add(new Expander{Header="További termékadatok kitöltése",Content=fields,Margin=new(0,10,0,10)});
             var match = new TextBlock { FontWeight = FontWeights.SemiBold };

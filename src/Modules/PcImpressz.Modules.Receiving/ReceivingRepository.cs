@@ -36,20 +36,20 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
 
     public Task<NavInvoicePage> MarkNavPage(Guid company,NavInvoicePage page,CancellationToken ct=default)=>Locked(company,(_,state)=>page with{Rows=page.Rows.Select(row=>
     {
-        var receipt=state.Receipts.SingleOrDefault(r=>r.Data.Number==row.Number&&ReceivingText.TaxKey(r.Data.SupplierTaxId)==ReceivingText.TaxKey(row.SupplierTaxNumber));
+        var receipt=state.Receipts.SingleOrDefault(r=>NavMatches(r.Data,row.Number,row.SupplierTaxNumber));
         return row with{ReceiptId=receipt?.Id,Received=receipt is not null&&receipt.Data.Status=="bevetelezve"&&receipt.Data.StockPosted};
     }).ToArray()},ct);
     public Task<(ReceiptLine[] Lines,ReceiptRecord? Existing)> PreviewNav(NavInvoiceImport request,ImportedDocument document,CancellationToken ct=default)=>Locked(request.CompanyId,(scope,state)=>
     {
         if(document.Number!=request.Number||ReceivingText.TaxKey(document.SupplierTaxId)!=ReceivingText.TaxKey(request.SupplierTaxNumber))throw new ArgumentException("A NAV-előnézet azonosítója eltér.");
-        var existing=state.Receipts.SingleOrDefault(r=>r.Data.Number==document.Number&&ReceivingText.TaxKey(r.Data.SupplierTaxId)==ReceivingText.TaxKey(document.SupplierTaxId));
+        var existing=state.Receipts.SingleOrDefault(r=>NavMatches(r.Data,document.Number??"",document.SupplierTaxId??""));
         var lines=ReceivingMatching.Build(document.Lines.Select(l=>new ReceiptLineDraft(null,null,l.Name,l.Sku,l.Barcode,l.UnitCode,l.Quantity,l.NetUnitPrice,l.VatRate??throw new ArgumentException("Hiányzó áfakulcs a NAV-tételen."),l.IsService)).ToArray(),MasterIndex.Load(scope.Directory,scope.Transaction).Products);
         return (lines,existing);
     },ct);
     public Task<ReceiptRecord> ImportNav(NavInvoiceImport request,ImportedDocument document,string actor,CancellationToken ct=default)=>Locked(request.CompanyId,(scope,state)=>
     {
         if(document.Number!=request.Number||ReceivingText.TaxKey(document.SupplierTaxId)!=ReceivingText.TaxKey(request.SupplierTaxNumber))throw new ArgumentException("A számla nem egyezik az importkéréssel.");
-        var existing=state.Receipts.SingleOrDefault(r=>r.Data.Source=="nav"&&r.Data.Number==document.Number&&ReceivingText.TaxKey(r.Data.SupplierTaxId)==ReceivingText.TaxKey(document.SupplierTaxId));
+        var existing=state.Receipts.SingleOrDefault(r=>NavMatches(r.Data,document.Number??"",document.SupplierTaxId??""));
         if(existing is not null)return existing;
         return WriteImport(scope,state,new ReceiptImport(request.CompanyId,request.SupplierId,null,null,null,"nav","nav.xml",""),document,actor);
     },ct);
@@ -81,10 +81,11 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var index = MasterIndex.Load(scope.Directory, scope.Transaction);
         var supplier = Supplier(index, draft.SupplierId, null)
             ?? throw new ArgumentException("A szállító nem található az aktív beszállítók között. Vedd fel a partnertörzsben, vagy hozd létre innen.");
+        if(existing?.Data.Source=="nav"&&!draft.ConvertToManual)EnsureNavFacts(existing.Data,draft);
         var data = Compose(draft.Number, supplier, draft.IssuedOn, draft.DueOn, draft.Notes, draft.Warehouse,
-            existing?.Data.Source ?? (draft.Source is null or "manual" or "pdf" ? draft.Source ?? "manual" : throw new ArgumentException("Ismeretlen kézi forrás.")), existing?.Data.Status ?? "uj", existing?.Data.ReceivedAt,
+            draft.ConvertToManual?"manual":existing?.Data.Source ?? (draft.Source is null or "manual" or "pdf" ? draft.Source ?? "manual" : throw new ArgumentException("Ismeretlen kézi forrás.")), existing?.Data.Status ?? "uj", existing?.Data.ReceivedAt,
             ReceivingMatching.Build(draft.Lines ?? throw new ArgumentException("Hiányzó tételek."), index.Products));
-        data = data with { SourceNet=existing?.Data.SourceNet, SourceVat=existing?.Data.SourceVat, SourceGross=existing?.Data.SourceGross };
+        data = data with {OriginalNavNumber=existing?.Data.OriginalNavNumber??(existing?.Data.Source=="nav"?existing.Data.Number:null),OriginalNavSupplierTaxId=existing?.Data.OriginalNavSupplierTaxId??(existing?.Data.Source=="nav"?existing.Data.SupplierTaxId:null), SourceNet=draft.ConvertToManual?null:existing?.Data.SourceNet, SourceVat=draft.ConvertToManual?null:existing?.Data.SourceVat, SourceGross=draft.ConvertToManual?null:existing?.Data.SourceGross };
         RejectDuplicate(state, existing?.Id, data);
         return Store(scope, state, existing, data, actor, existing is null ? "create" : "update");
     }
@@ -106,7 +107,7 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var lines = ReceivingMatching.Build(document.Lines.Select(line => new ReceiptLineDraft(null, null, line.Name, line.Sku, line.Barcode, line.UnitCode,
             line.Quantity, line.NetUnitPrice, line.VatRate ?? throw new ArgumentException("Hiányzó áfakulcs: add meg az importban."), line.IsService)).ToArray(), index.Products);
         var data = Compose(number, supplier, issued, due, "", "Bolt", source, "uj", null, lines);
-        data = data with { SourceNet=document.ExpectedNet, SourceVat=document.ExpectedVat, SourceGross=document.ExpectedGross };
+        data = data with {OriginalNavNumber=source=="nav"?data.Number:null,OriginalNavSupplierTaxId=source=="nav"?data.SupplierTaxId:null, SourceNet=document.ExpectedNet, SourceVat=document.ExpectedVat, SourceGross=document.ExpectedGross };
         CheckSourceTotals(data);
         RejectDuplicate(state, null, data);
         return Store(scope, state, null, data, actor, "import");
@@ -128,10 +129,10 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
             if (scope.Transaction is { } transaction)
             {
                 var products = CompanyReferenceQueries.Products(transaction);
-                foreach (var line in existing.Data.Lines.Where(l => l.ProductId is not null))
+                foreach (var line in existing.Data.Lines.Where(l => l.StockItem && l.ProductId is not null))
                     if (!products.Any(p => p.Id == line.ProductId && p.IsActive && p.UnitCode == line.UnitCode))
                         throw new ArgumentException("A termék vagy a mértékegysége közben megváltozott; ellenőrizd a számlát.");
-                var changes = existing.Data.Lines.Where(l => l.ProductId is not null)
+                var changes = existing.Data.Lines.Where(l => l.StockItem && l.ProductId is not null)
                     .Select(l => new StockChange(l.ProductId!.Value,l.Name,l.UnitCode,existing.Data.Warehouse,l.Quantity)).ToArray();
                 StockLedger.Post(transaction,"receipt:"+existing.Id.ToString("N"),"receiving",existing.Id,changes,
                     "Bevételezés "+existing.Data.Number,actor,time.GetUtcNow());
@@ -140,6 +141,17 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var received = next == "bevetelezve" ? time.GetUtcNow() : (DateTimeOffset?)null;
         var data = existing.Data with { Status = next, ReceivedAt = received, StockPosted = next == "bevetelezve" && scope.Transaction is not null };
         return Store(scope, state, existing, data, actor, "classify");
+    }
+    private static bool NavMatches(ReceiptData data,string number,string tax)=>
+        string.Equals(data.OriginalNavNumber??data.Number,number,StringComparison.Ordinal)&&ReceivingText.TaxKey(data.OriginalNavSupplierTaxId??data.SupplierTaxId)==ReceivingText.TaxKey(tax);
+    private static void EnsureNavFacts(ReceiptData original,ReceiptDraft draft)
+    {
+        if(draft.Number!=original.Number||draft.SupplierId!=original.SupplierId||draft.IssuedOn!=original.IssuedOn||draft.Lines?.Length!=original.Lines.Length)throw new ArgumentException("A NAV-számla eredeti adatai védettek. Előbb válts kézi bevételezésre.");
+        foreach(var row in draft.Lines)
+        {
+            var line=original.Lines.SingleOrDefault(l=>l.Id==row.Id);
+            if(line is null||line.Name!=row.Name||line.Quantity!=row.Quantity||line.NetUnitPrice!=row.NetUnitPrice||line.VatRate!=row.VatRate||line.UnitCode!=row.UnitCode)throw new ArgumentException("A NAV eredeti tételsora nem írható át. Előbb válts kézi bevételezésre.");
+        }
     }
     private static void CheckSourceTotals(ReceiptData data)
     {

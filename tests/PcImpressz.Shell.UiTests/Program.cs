@@ -56,6 +56,7 @@ internal static class Program
             CheckoutUiChecks.VerifyAsync(output).GetAwaiter().GetResult();
             PartnerEditorChecks.VerifyAsync(output).GetAwaiter().GetResult();
             NavInvoiceUiChecks.VerifyAsync(output).GetAwaiter().GetResult();
+            InvoicePagingChecks.VerifyAsync(output).GetAwaiter().GetResult();
             VerifyBusyEditor();
             UiProductChecks.VerifyAppliedQuery();
             foreach(var skin in BuiltInSkins.All)

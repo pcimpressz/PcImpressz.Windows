@@ -129,7 +129,7 @@ public sealed partial class ShellViewModel : Observable
         };
         _connection = new(directory, hostPath);
         _preferences = store.Load();
-        MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;
+        InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;
         Skins = new(store.ReadSkins());
         _selectedSkin = Skins.FirstOrDefault(s => s.Id == _preferences.SkinId) ?? Skins[0];
         _preferences = _preferences with { SkinId = _selectedSkin.Id };
@@ -182,6 +182,9 @@ public sealed partial class ShellViewModel : Observable
     public string LicenseReason => _status?.LicenseReason ?? "A licencállapot a maghoz kapcsolódás után jelenik meg.";
     public string LicenseUntil => _status?.LicenseValidUntil?.ToLocalTime().ToString("yyyy. MM. dd. HH:mm") ?? "Nincs aktív időszak";
     public string LastUpdated => _status?.ObservedAt.ToLocalTime().ToString("HH:mm:ss") ?? "—";
+    public int[] InvoicePageSizes=>[10,20,50,100];
+    public int InvoicePageSize{get=>_preferences.InvoicePageSize;set{if(!InvoicePageSizes.Contains(value))return;_preferences=_preferences with{InvoicePageSize=value};InvoiceListPreferences.PageSize=value;ApplyAndSave();Changed();}}
+    public string LabelPrinter{get=>_preferences.LabelPrinter;set{if(value.Length>200||value.Any(char.IsControl))return;_preferences=_preferences with{LabelPrinter=value};InvoiceListPreferences.LabelPrinter=value;ApplyAndSave();Changed();}}
     public string NavReceivedColor {get=>_preferences.NavReceivedColor;set{if(!SkinValidation.IsColor(value))return;_preferences=_preferences with{NavReceivedColor=value};ApplyAndSave();Changed();}}
     public string NavPendingColor {get=>_preferences.NavPendingColor;set{if(!SkinValidation.IsColor(value))return;_preferences=_preferences with{NavPendingColor=value};ApplyAndSave();Changed();}}
     public bool FormatPartnerNames {get=>_preferences.FormatPartnerNames;set{_preferences=_preferences with{FormatPartnerNames=value};PartnerNameFormatting.Enabled=value;ApplyAndSave();Changed();}}
@@ -364,7 +367,7 @@ public sealed partial class ShellViewModel : Observable
 
     private void ApplyAndSave()
     {
-        MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;
+        InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;
         ThemeManager.Apply(SelectedSkin, _preferences);
         try { _store.Save(_preferences); _notice = "A megjelenési beállítások mentve."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

@@ -36,8 +36,8 @@ internal static class StabilizationTests
             var saved=await f.Receipts.Import(request,document,"operator");Check.Equal(105m,saved.Data.SourceGross);
             await Check.ThrowsAsync<ArgumentException>(async()=>await f.Receipts.Import(request,document with{Number="CHECK-2",ExpectedGross=999},"operator"));
             await Check.ThrowsAsync<ArgumentException>(async()=>await f.Receipts.Import(request,document with{Number="CHECK-3",SupplierTaxId="87654321"},"operator"));
-            var edited=await f.Receipts.Save(new(f.Company.Id,saved.Id,saved.Version,new(saved.Data.Number,partner.Id,"2026-10-20",null,null,"Bolt",[new(null,f.Product.Id,"Egér","","","DB",1,200,5)])),"operator");
-            await Check.ThrowsAsync<ArgumentException>(async()=>await f.Receipts.Classify(new(f.Company.Id,edited.Id,edited.Version,"bevetelezve"),"operator"));
+            await Check.ThrowsAsync<ArgumentException>(async()=>await f.Receipts.Save(new(f.Company.Id,saved.Id,saved.Version,new(saved.Data.Number,partner.Id,"2026-10-20",null,null,"Bolt",[new(saved.Data.Lines[0].Id,f.Product.Id,"Egér","","","DB",1,200,5)])),"operator"));
+            Check.Equal(100m,(await f.Receipts.Snapshot(f.Company.Id)).Receipts.Single(r=>r.Id==saved.Id).Data.Net);
         });
         yield return Case("service is explicit and SKU wins over name fragments",async f=>
         {

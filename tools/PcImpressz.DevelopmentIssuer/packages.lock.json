@@ -54,7 +54,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.13, )",
-          "PcImpressz.Contracts": "[0.4.18, )"
+          "PcImpressz.Contracts": "[0.4.19, )"
         }
       }
     }

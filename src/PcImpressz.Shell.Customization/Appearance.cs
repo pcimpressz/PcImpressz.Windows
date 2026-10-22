@@ -22,6 +22,8 @@ public static class BuiltInSkins
 
 public sealed record AppearancePreferences
 {
+    public int InvoicePageSize {get;init;}=20;
+    public string LabelPrinter {get;init;}="Niimbot D110-M Bluetooth";
     public string NavReceivedColor {get;init;}="#D9F2DC";
     public string NavPendingColor {get;init;}="#FFFFFF";
     public bool FormatPartnerNames {get;init;}=true;
@@ -150,6 +152,7 @@ public sealed class AppearanceStore(string directory)
     private static void ValidatePreferences(AppearancePreferences value)
     {
         if (!SkinValidation.IsColor(value.NavReceivedColor)||!SkinValidation.IsColor(value.NavPendingColor))throw new InvalidDataException("A számlaállapot színe #RRGGBB legyen.");
+        if (!new[]{10,20,50,100}.Contains(value.InvoicePageSize)||value.LabelPrinter.Length>200||value.LabelPrinter.Any(char.IsControl))throw new InvalidDataException("Érvénytelen számlalista vagy nyomtatóbeállítás.");
         if (value.SchemaVersion != 1 || !SkinValidation.IsId(value.SkinId)
             || value.AccentOverride is not null && !SkinValidation.IsColor(value.AccentOverride)
             || value.MoneyDecimals is <0 or >4

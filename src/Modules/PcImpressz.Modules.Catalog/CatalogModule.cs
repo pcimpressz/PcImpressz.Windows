@@ -60,6 +60,25 @@ public sealed partial class CatalogModule : IModule
                 return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p=>ProductRow(p, quantities.GetValueOrDefault(p.Id))), matching.Length);
             });
         });
+        Register(context,"products-suggest","catalog.read",CommandAccess.RecoveryReadOnly,async(input,_,ct)=>
+        {
+            static string Fold(string value)=>new(value.Normalize(System.Text.NormalizationForm.FormD).Where(c=>char.GetUnicodeCategory(c)!=System.Globalization.UnicodeCategory.NonSpacingMark&&char.IsLetterOrDigit(c)).Select(char.ToUpperInvariant).ToArray());
+            var name=input.GetProperty("name").GetString()??"";var sku=input.GetProperty("sku").GetString()??"";var barcode=input.GetProperty("barcode").GetString()??"";
+            if(name.Length>200||sku.Length>80||barcode.Length>80)throw new ArgumentException("Túl hosszú termékkeresés.");
+            var words=name.Split(' ',StringSplitOptions.RemoveEmptyEntries).Select(Fold).Where(w=>w.Length>2).Distinct().ToArray();
+            var products=(await repository.Snapshot(input.GetProperty("companyId").GetGuid(),ct)).Products.Where(p=>p.Data.IsActive).Select(p=>
+            {
+                var exact=barcode.Length>0&&p.Data.Barcode==barcode||sku.Length>0&&(Fold(p.Data.Sku)==Fold(sku)||Fold(p.Data.ManufacturerPartNumber)==Fold(sku))||name.Length>0&&Fold(p.Data.Name)==Fold(name);
+                return new{p.Id,p.Data.Name,p.Data.Sku,p.Data.Barcode,p.Data.UnitCode,exact,score=exact?1000:words.Count(w=>Fold(p.Data.Name).Contains(w,StringComparison.Ordinal))};
+            }).Where(p=>p.score>0).OrderByDescending(p=>p.score).ThenBy(p=>p.Name,StringComparer.Ordinal).Take(10).ToArray();
+            return CatalogJson.Element(new{rows=products});
+        });
+        Register(context,"barcode-propose","catalog.write",CommandAccess.Licensed,async(input,_,ct)=>
+        {
+            var codes=(await repository.Snapshot(input.GetProperty("companyId").GetGuid(),ct)).Products.Select(p=>p.Data.Barcode).ToHashSet(StringComparer.Ordinal);
+            string code;do{var prefix="20"+System.Security.Cryptography.RandomNumberGenerator.GetInt32(0,1_000_000_000).ToString("D9")+System.Security.Cryptography.RandomNumberGenerator.GetInt32(0,10);var sum=prefix.Select((c,i)=>(c-'0')*(i%2==0?1:3)).Sum();code=prefix+((10-sum%10)%10);}while(codes.Contains(code));
+            return CatalogJson.Element(new{barcode=code,kind="internal-ean13"});
+        });
         Register(context, "products-save", "catalog.write", CommandAccess.Licensed, async (input, actor, ct) =>
             ProductRow(await repository.SaveProduct(CatalogJson.Read<ProductSave>(input), actor, ct)));
         Register(context, "products-archive", "catalog.write", CommandAccess.Licensed, async (input, actor, ct) =>

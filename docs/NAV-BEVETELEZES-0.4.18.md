@@ -1,3 +1,5 @@
+Aktuális, 0.4.19-es működés: [gyors NAV-előkészítés, soronkénti készlet, árképzés és Bluetooth-címke](NAV-GYORS-BEVETELEZES-0.4.19.md). Az alábbi szöveg korábbi verziót ír le.
+
 # NAV-bevételezés – 0.4.18
 
 1. Számlák → Bejövő számlák → NAV-számlák lekérése; válassz legfeljebb 35 napot.

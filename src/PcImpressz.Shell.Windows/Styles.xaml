@@ -311,4 +311,21 @@
   <Setter Property="Background" Value="{DynamicResource ElevatedBrush}" />
   <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
  </Style>
+ <Style x:Key="CompactInvoiceDatePicker" TargetType="DatePicker" BasedOn="{StaticResource ThemedDatePicker}">
+  <Setter Property="Height" Value="34"/><Setter Property="MinHeight" Value="0"/>
+  <Setter Property="Template"><Setter.Value>
+   <ControlTemplate TargetType="DatePicker">
+    <Border CornerRadius="6" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+     <Grid x:Name="PART_Root">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="30"/></Grid.ColumnDefinitions>
+      <DatePickerTextBox x:Name="PART_TextBox" Background="Transparent" Foreground="{TemplateBinding Foreground}" BorderThickness="0" Padding="6,0" MinHeight="0" Height="30" VerticalContentAlignment="Center">
+       <DatePickerTextBox.Template><ControlTemplate TargetType="DatePickerTextBox"><ScrollViewer x:Name="PART_ContentHost" Margin="6,0" VerticalAlignment="Center" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Hidden"/></ControlTemplate></DatePickerTextBox.Template>
+      </DatePickerTextBox>
+      <Button x:Name="PART_Button" Grid.Column="1" Content="&#xE787;" FontFamily="Segoe MDL2 Assets" FontSize="15" Padding="0" Margin="0" MinHeight="0" Height="30" Width="28" Focusable="False" ToolTip="Naptár"/>
+      <Popup x:Name="PART_Popup" Placement="Bottom" PlacementTarget="{Binding ElementName=PART_Root}" AllowsTransparency="True" StaysOpen="False"/>
+     </Grid>
+    </Border>
+   </ControlTemplate>
+  </Setter.Value></Setter>
+ </Style>
 </ResourceDictionary>

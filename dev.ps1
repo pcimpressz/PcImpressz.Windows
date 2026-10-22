@@ -37,7 +37,7 @@ try {
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & '.\tests\PcImpressz.Shell.WheelTests\bin\Release\net10.0-windows\PcImpressz.Shell.WheelTests.exe'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & '.\tests\PcImpressz.Shell.UiTests\bin\Release\net10.0-windows\PcImpressz.Shell.UiTests.exe'
+            & '.\tests\PcImpressz.Shell.UiTests\bin\Release\net10.0-windows10.0.19041.0\PcImpressz.Shell.UiTests.exe'
         }
         'Publish' {
             & $dotnetPath publish '.\src\PcImpressz.Shell.Windows\PcImpressz.Shell.Windows.csproj' `
@@ -65,7 +65,7 @@ try {
                 & $dotnetPath '.\tools\PcImpressz.DevelopmentIssuer\bin\Release\net10.0-windows\PcImpressz.DevelopmentIssuer.dll' $projectRoot
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             }
-            $shellPath = Join-Path $projectRoot 'src\PcImpressz.Shell.Windows\bin\Release\net10.0-windows\PcImpressz.Windows.exe'
+            $shellPath = Join-Path $projectRoot 'src\PcImpressz.Shell.Windows\bin\Release\net10.0-windows10.0.19041.0\PcImpressz.Windows.exe'
             $hostPath = Join-Path $projectRoot 'src\PcImpressz.ApplicationHost\bin\Release\net10.0\PcImpressz.ApplicationHost.dll'
             Start-Process -FilePath $shellPath -WindowStyle Normal -ArgumentList @(
                 '--data-dir', ('"' + (Join-Path $projectRoot '.local') + '"'), '--host', ('"' + $hostPath + '"'))

@@ -9,7 +9,7 @@ namespace PcImpressz.Shell.Windows;
 public partial class MainWindow : Window
 {
     private readonly ShellViewModel _viewModel;
-    private bool _checkingClose;
+    private bool _checkingClose,_closeApproved;
     public MainWindow(ShellViewModel viewModel)
     {
         _viewModel = viewModel;
@@ -55,12 +55,22 @@ public partial class MainWindow : Window
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
-    private void OnClosing(object? sender, CancelEventArgs e)
+    private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        e.Cancel=true;
-        if(_checkingClose)return;
-        _checkingClose=true;
-        try{if(!_viewModel.CanClose())return;}finally{_checkingClose=false;}
+        if(!_closeApproved)
+        {
+            e.Cancel=true;if(_checkingClose)return;_checkingClose=true;
+            try
+            {
+                var flush=_viewModel.FlushInvoicePreparationsAsync();var completed=flush.IsCompletedSuccessfully;
+                if(!await flush||!_viewModel.CanClose())return;
+                _closeApproved=true;
+                if(!completed){_=Dispatcher.BeginInvoke(new Action(Close));return;}
+                e.Cancel=false;
+            }
+            finally{_checkingClose=false;}
+            if(e.Cancel)return;
+        }
         e.Cancel=false;
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
         _viewModel.SaveWindow(bounds.Width, bounds.Height);

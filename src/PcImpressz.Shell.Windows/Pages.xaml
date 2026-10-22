@@ -398,6 +398,10 @@
         </StackPanel>
       </Expander>
       <Expander Header="Számlák · megjelenítés" Margin="0,0,0,18"><Border Style="{StaticResource Card}"><StackPanel>
+              <TextBlock Text="Számlák száma egy listaoldalon"/>
+              <ComboBox ItemsSource="{Binding InvoicePageSizes}" SelectedItem="{Binding InvoicePageSize, Mode=TwoWay}" Width="130" HorizontalAlignment="Left"/>
+              <TextBlock Text="Címkenyomtató: Niimbot D110-M Bluetooth vagy Windows-nyomtatónév (üresen választó)" Margin="0,8,0,0"/>
+              <TextBox Text="{Binding LabelPrinter, Mode=TwoWay}" MaxLength="200"/>
               <TextBlock Text="NAV-számlalista színei (#RRGGBB)" Margin="0,12,0,4"/>
               <TextBlock Text="Bevételezett számla"/>
               <TextBox Text="{Binding NavReceivedColor, Mode=TwoWay}" Width="130" HorizontalAlignment="Left"/>
@@ -405,6 +409,7 @@
               <TextBox Text="{Binding NavPendingColor, Mode=TwoWay}" Width="130" HorizontalAlignment="Left"/>
       </StackPanel></Border></Expander>
       <Expander Header="Számlázás · szolgáltató és számlatömbök" Margin="0,0,0,18"><local:InvoicingSettingsCard Margin="0,16,0,0" IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
+      <Expander Header="Beszállítói API-k · CompMarket" Margin="0,0,0,18"><local:SupplierConnectionCard IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
       <Expander Header="NAV-kapcsolat" IsExpanded="True" Margin="0,0,0,18">
         <StackPanel>
           <local:NavConnectionCard Margin="0,20,0,0" IsEnabled="{Binding IsCompanyAdmin}" />
