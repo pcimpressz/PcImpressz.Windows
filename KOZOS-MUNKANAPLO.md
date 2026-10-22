@@ -311,3 +311,13 @@ Orink→SMA számlaváltás: megszüntetve az előző NAV-szállító továbbör
 ## 2026-10-22 – 0.4.22
 
 NAV eredeti sor nettó/áfa/bruttó összegek megőrzése import, előnézet és szerkesztés után; költségként kihagyott sorok továbbra is a teljes számla részei. Negatív mennyiségek és MODIFY/STORNO beolvasás, meglévő tranzakciós és készletellenőrzéssel. Oszlopos számlaszűrés a ListGrid meglévő fejlécfelületén, fejlett szállító/dátum/bruttó tartomány, modul saját élő szűrési kapcsoló. NAV-szűrés minden lekért időszaki oldalon, max. 200 oldal; export és helyi lista azonos backendfeltételekkel. 200/200 üzleti és 70/70 WPF render, új előjeles/fuvar/oldalakon átnyúló szűrési használati próbák. A Cursor terméktörzs- és árkezelési commitjaival együtt ellenőrizve; a folyamatban lévő vizuális szerkesztő nem része a számlás commitnak.
+
+## 2026-10-22 – 0.5.0 gyorsított tárolás és vevői rendelések
+
+A Python-program 87 fájljának teljes AST-leltára (125 664 sor; történeti másolatokkal) és fájlonkénti átvételi jegyzék elkészült. Rekordonként indexelt terméktárolás, FTS5 trigram keresés, SQL-lapozás, célzott termékmentés/lekérés, tranzakciós készletegyenleg, pontos decimal áfaszámítás és választható régi lépcsős árjavaslat. 1/2 → 3-as séma előtt ellenőrzött automatikus adatbázismentés; WAL FULL; natív SQLite 3.53.3 külön ellenőrizve.
+
+Új Eladás / Vevői rendelések oldal: rendelési árpillanatkép, 1–365 napos (alap 7) foglalás, részleges készletlekötés, lejárat, hosszabbítás, feloldás, lemondás és több részátadás. Az átadás és az eladás/készlet/foglalás közös céges tranzakció, tartós kérésazonosítóval. A normál pénztár is védi a foglalt készletet. Saját és másik cég, szerepkörök, verzióütközés, két párhuzamos foglalás, hibás átadás visszagörgetése és válaszvesztés külön ellenőrizve. Teljes aláírt Host/IPC rendelési folyamat is sikeres.
+
+Ellenőrzés az elkülönített munkamásolatban: Release build 0 hiba/0 figyelmeztetés, 222/222 teszt a két benchmarkkal, wheel-ok és 73/73 WPF render kötési hiba nélkül. 50 000 termék + 50 000 mozgás: keresés p95 269,02 → 42,05 ms, első oldal 5,61 ms; termékmentés 9,17 ms; készletkönyvelés 8,62 ms. 20 001 rendelés: keresés p95 8,18 ms, első oldal 7,57 ms. Szintetikus, helyi 10 mintás mérések; nem teljes felületi válaszidők. A tesztek nem írtak az eredeti céges adatokba és nem hívtak külső író API-t.
+
+A teljes Python-port nem kész: árajánlatból rendelés, nagykerkosár/beszerzés, automatikus számla–rendelési sor összerendelés, szerviz/garancia és pénzügy további feladat. Használat: docs/VEVOI-RENDELESEK-0.5.0.md.

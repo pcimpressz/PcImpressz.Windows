@@ -18,6 +18,7 @@ public sealed partial class SalesModule:IModule
     public ValueTask StartAsync(IModuleContext context,CancellationToken cancellationToken)
     {
         RegisterCheckout(context);
+        RegisterOrders(context);
         RegisterReturns(context);
         DomainCommands.Register(context,"list","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>
             DomainCommands.Json(new {total=MatchingRecords(tx,input).Length,rows=MatchingRecords(tx,input).Take(200)
@@ -58,14 +59,14 @@ public sealed partial class SalesModule:IModule
             if(new[]{billing.Name,billing.Country,billing.PostalCode,billing.City,billing.Address}.Any(string.IsNullOrWhiteSpace))throw new ArgumentException("Számlaigényhez a vevő neve és teljes címe szükséges.");
         }
         var warehouse=StockLedger.Warehouse(request.Warehouse);
-        var products=CompanyReferenceQueries.Products(tx);
+        var products=CompanyReferenceQueries.Products(tx,request.Lines.Select(l=>l.ProductId));
         var lines=request.Lines.Select(line=>
         {
             var product=products.SingleOrDefault(p=>p.Id==line.ProductId&&p.IsActive&&p.IsSalable) ?? throw new ArgumentException("A termék nem aktív.");
             if(StockLedger.Quantity(line.Quantity)<=0 || line.NetUnitPrice is <0 or >1_000_000_000 || decimal.Round(line.NetUnitPrice,4)!=line.NetUnitPrice
-                || !new decimal[]{0,5,18,27}.Contains(line.VatRate))throw new ArgumentException("Érvénytelen mennyiség, ár vagy áfakulcs.");
-            var net=decimal.Round(line.Quantity*line.NetUnitPrice,2,MidpointRounding.AwayFromZero);
-            return new SaleLine(product.Id,product.Name,product.UnitCode,line.Quantity,line.NetUnitPrice,line.VatRate,net,decimal.Round(net*line.VatRate/100m,2,MidpointRounding.AwayFromZero));
+                || !VatMath.IsSupportedRate(line.VatRate))throw new ArgumentException("Érvénytelen mennyiség, ár vagy áfakulcs.");
+            var amount=VatMath.Line(line.Quantity,line.NetUnitPrice,line.VatRate);
+            return new SaleLine(product.Id,product.Name,product.UnitCode,line.Quantity,line.NetUnitPrice,line.VatRate,amount.Net,amount.Vat);
         }).ToArray();
         var year=at.Year.ToString(CultureInfo.InvariantCulture);
         var counter=tx.Read<SaleCounter>("sales","counter/"+year)?.Value ?? 0;

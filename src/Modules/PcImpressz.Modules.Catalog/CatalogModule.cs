@@ -46,6 +46,8 @@ public sealed partial class CatalogModule : IModule
         Register(context, "products-list", "catalog.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
         {
             var query = ReadQuery(input);
+            if (repository.IndexedProducts(query, ct) is { } indexed)
+                return Page(indexed.Records.Select(body => JsonSerializer.Deserialize<ProductRecord>(body,CatalogJson.Options)!).Select(p=>ProductRow(p,indexed.Quantities.GetValueOrDefault(p.Id))), indexed.Total);
             var matching = FilterProducts((await repository.Snapshot(query.CompanyId, ct)).Products, query);
             if (context.Database is null)
             {
@@ -144,7 +146,7 @@ public sealed partial class CatalogModule : IModule
         Register(context,"products-schema","catalog.read",CommandAccess.RecoveryReadOnly,(_,_,_)=>Task.FromResult(CatalogJson.Element(productPage.Fields)));
         Register(context,"products-get","catalog.read",CommandAccess.RecoveryReadOnly,async(input,_,ct)=>
         {
-            var product=(await repository.Snapshot(input.GetProperty("companyId").GetGuid(),ct)).Products.SingleOrDefault(p=>p.Id==input.GetProperty("id").GetGuid())??throw new ArgumentException("A termék nem található.");
+            var product=await repository.GetProduct(input.GetProperty("companyId").GetGuid(),input.GetProperty("id").GetGuid(),ct)??throw new ArgumentException("A termék nem található.");
             return ProductRow(product);
         });
         return ValueTask.CompletedTask;

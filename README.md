@@ -1,3 +1,7 @@
+## 0.5.0 – Gyorsított tárolás és vevői rendeléskezelés
+
+Indexelt terméktárolás és trigram keresés, SQL-lapozás, tranzakciós készletegyenleg, egységes decimal áfaszámítás. Eladás → Vevői rendelések: árpillanatkép, lejáró foglalás, részátadás eladási bizonylattal, feloldás és lemondás. A normál pénztár is figyeli a más rendeléshez foglalt készletet. A migráció előtt ellenőrzött adatbázismentés készül. [Használat és korlátok](docs/VEVOI-RENDELESEK-0.5.0.md), [Python-átvételi jegyzék](docs/PYTHON-WINDOWS-ATVETEL.md).
+
 ## 0.4.22 – Előjeles bevételezés és számlaszűrés
 
 A készletre nem vett költségsorok megmaradnak a számlaösszegben és jelölést kapnak. NAV- és kézi bevételezés negatív mennyiséggel, eredeti NAV-sorösszegekkel; oszlopfejléces keresés, szállító/dátum/bruttó összeghatár és modulonként kapcsolható élő számlaszűrés. [Használat](docs/SZAMLASZURES-ES-JOVAIRAS-0.4.22.md).

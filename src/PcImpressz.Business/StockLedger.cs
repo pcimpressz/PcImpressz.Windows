@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PcImpressz.Contracts;
@@ -15,7 +15,7 @@ public static class StockLedger
 {
     public static StockMovement[] Movements(ICompanyTransaction tx) => tx.List("inventory","movement/")
         .Select(body=>JsonSerializer.Deserialize<StockMovement>(body,CompanyDocuments.Json) ?? throw new IOException("Sérült készletmozgás.")).ToArray();
-    public static StockBalance[] Balances(ICompanyTransaction tx) => Movements(tx).GroupBy(m=>(m.ProductId,m.Warehouse))
+    public static StockBalance[] Balances(ICompanyTransaction tx) => tx is IIndexedCompanyTransaction index ? index.StockBalances().Select(b=>new StockBalance(b.ProductId,b.ProductName,b.UnitCode,b.Warehouse,b.Quantity)).OrderBy(b=>b.ProductName,StringComparer.CurrentCultureIgnoreCase).ThenBy(b=>b.Warehouse).ToArray() : Movements(tx).GroupBy(m=>(m.ProductId,m.Warehouse))
         .Select(g=>new StockBalance(g.Key.ProductId,g.Last().ProductName,g.Last().UnitCode,g.Key.Warehouse,g.Sum(m=>m.Quantity)))
         .OrderBy(b=>b.ProductName,StringComparer.CurrentCultureIgnoreCase).ThenBy(b=>b.Warehouse).ToArray();
     public static string Warehouse(string? value)
@@ -46,10 +46,11 @@ public static class StockLedger
             if(previous.Fingerprint!=fingerprint) throw new ArgumentException("Ezzel a műveletazonosítóval már másik készletmozgás készült.");
             return previous.Movements;
         }
-        var balances=Balances(tx).ToDictionary(b=>(b.ProductId,b.Warehouse),b=>b.Quantity);
+        var current=tx is IIndexedCompanyTransaction index ? changes.Select(c=>c.ProductId).Distinct().SelectMany(id=>index.StockBalances(id)).Select(b=>new StockBalance(b.ProductId,b.ProductName,b.UnitCode,b.Warehouse,b.Quantity)).ToArray() : Balances(tx);
+        var balances=current.ToDictionary(b=>(b.ProductId,b.Warehouse),b=>b.Quantity);
         foreach(var group in changes.GroupBy(c=>(c.ProductId,c.Warehouse)))
-            if(balances.GetValueOrDefault(group.Key)+group.Sum(c=>c.Quantity)<0)
-                throw new ArgumentException("Nincs elegendő készlet: "+group.First().ProductName+" · "+group.Key.Warehouse);
+            if(balances.GetValueOrDefault(group.Key)+group.Sum(c=>c.Quantity)<(group.Sum(c=>c.Quantity)<0?StockReservations.Quantity(tx,group.Key.ProductId,group.Key.Warehouse,at):0))
+                throw new ArgumentException("Nincs elegendő szabad készlet (más rendelés foglalását is figyelembe véve): "+group.First().ProductName+" · "+group.Key.Warehouse);
         var movements=changes.Select(c=>new StockMovement(Guid.NewGuid(),operationId,sourceModule,sourceId,c.ProductId,
             c.ProductName,c.UnitCode,c.Warehouse,c.Quantity,reason,at,actor)).ToArray();
         foreach(var movement in movements) tx.Write("inventory","movement/"+movement.Id.ToString("N"),movement);

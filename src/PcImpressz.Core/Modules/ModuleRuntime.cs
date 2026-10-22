@@ -137,7 +137,7 @@ public sealed class ModuleRuntime(
         foreach (var page in pages)
         {
             if (page.ModuleId != moduleId || !Identifiers.IsValid(page.Id) || !ids.Add(page.Id)
-                || page.ViewKind is not ("entity" or "receiving" or "inventory" or "sales")
+                || page.ViewKind is not ("entity" or "receiving" or "inventory" or "sales" or "orders")
                 || (page.DossierCommand is not null && !Identifiers.IsValid(page.DossierCommand))
                 || page.Fields.Length is < 1 or > 40 || page.Columns.Length is < 1 or > 15
                 || page.Fields.Select(f => f.Id).Distinct().Count() != page.Fields.Length

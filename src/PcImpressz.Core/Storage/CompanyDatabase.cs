@@ -1,17 +1,18 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using PcImpressz.Contracts;
 
 namespace PcImpressz.Core.Storage;
 
-public sealed class CompanyDatabase(Func<Guid, string> companyFolder) : ICompanyDatabase
+public sealed partial class CompanyDatabase(Func<Guid, string> companyFolder) : ICompanyDatabase
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 3;
     public string DatabasePath(Guid company) => Path.Combine(companyFolder(company), "company.db");
     public T Execute<T>(Guid companyId, Func<ICompanyTransaction,T> action)
     {
         using var connection=Open(companyId);
+        PreserveBeforeMigration(connection, companyId);
         using var transaction=connection.BeginTransaction(deferred:false);
         var session=new Session(connection,transaction);
         EnsureSchema(session);
@@ -20,7 +21,23 @@ public sealed class CompanyDatabase(Func<Guid, string> companyFolder) : ICompany
         { throw new IOException("A régi cégadat sérült vagy nem támogatott; a migráció visszagörgetve, az eredeti fájlok megmaradtak.",ex); }
         var result=action(session);
         transaction.Commit();
+        _initialized[companyId]=true;
         return result;
+    }
+    private void PreserveBeforeMigration(SqliteConnection source,Guid company)
+    {
+        using var version=source.CreateCommand();version.CommandText="PRAGMA user_version";
+        var old=Convert.ToInt32(version.ExecuteScalar());if(old is <1 or >=SchemaVersion)return;
+        var folder=Path.Combine(companyFolder(company),".migration-backups");Directory.CreateDirectory(folder);RejectLinks(folder);
+        var file=Path.Combine(folder,$"company-v{old}-before-v{SchemaVersion}.db");
+        if(File.Exists(file)){ValidateBackup(file);return;}
+        var temporary=file+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try
+        {
+            using(var target=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=temporary,Pooling=false}.ToString())){target.Open();source.BackupDatabase(target);}
+            ValidateBackup(temporary);File.Move(temporary,file);
+        }
+        finally{if(File.Exists(temporary))File.Delete(temporary);}
     }
     private SqliteConnection Open(Guid company)
     {
@@ -33,10 +50,12 @@ public sealed class CompanyDatabase(Func<Guid, string> companyFolder) : ICompany
         try
         {
             connection.Open();
+            connection.CreateFunction<string?,string>("fold",SearchText.Fold,isDeterministic:true);
+            connection.CreateCollation("HU", (a,b) => System.Globalization.CultureInfo.GetCultureInfo("hu-HU").CompareInfo.Compare(a,b,System.Globalization.CompareOptions.IgnoreCase));
             using var cmd=connection.CreateCommand();
             cmd.CommandText="PRAGMA user_version";
             if(Convert.ToInt32(cmd.ExecuteScalar())>SchemaVersion) throw new IOException("Az adatbázis újabb programverzióval készült.");
-            cmd.CommandText="PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;";
+            cmd.CommandText="PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=10000;";
             cmd.ExecuteNonQuery();
             return connection;
         }
@@ -48,6 +67,15 @@ public sealed class CompanyDatabase(Func<Guid, string> companyFolder) : ICompany
             if((Directory.Exists(item)||File.Exists(item)) && (File.GetAttributes(item)&FileAttributes.ReparsePoint)!=0)
                 throw new IOException("Az adatútvonal hivatkozást tartalmaz.");
     }
+    public T Read<T>(Guid companyId, Func<ICompanyTransaction,T> action)
+    {
+        if (!_initialized.ContainsKey(companyId)) Execute(companyId, _ => true);
+        using var connection=Open(companyId);
+        using var guard=connection.CreateCommand();guard.CommandText="PRAGMA query_only=ON";guard.ExecuteNonQuery();
+        using var transaction=connection.BeginTransaction(deferred:true);
+        var result=action(new Session(connection,transaction));transaction.Commit();return result;
+    }
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid,bool> _initialized=new();
     private static void EnsureSchema(Session session)
     {
         using var cmd=session.Command("PRAGMA user_version");
@@ -58,6 +86,8 @@ public sealed class CompanyDatabase(Func<Guid, string> companyFolder) : ICompany
             using var create=session.Command("CREATE TABLE documents(module TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL CHECK(json_valid(body)), PRIMARY KEY(module,id)); PRAGMA user_version=1;");
             create.ExecuteNonQuery();
         }
+        session.EnsureIndexes();
+        session.EnsureOrderSchema();
     }
     private static void MigrateLegacy(string folder,Session session)
     {
@@ -106,35 +136,43 @@ public sealed class CompanyDatabase(Func<Guid, string> companyFolder) : ICompany
         Execute(company,_=>true);
         using var source=Open(company);
         using var target=new SqliteConnection(new SqliteConnectionStringBuilder { DataSource=destination, Pooling=false }.ToString());
-        target.Open();source.BackupDatabase(target);
+        target.Open();
+        target.CreateCollation("HU", (a,b) => System.Globalization.CultureInfo.GetCultureInfo("hu-HU").CompareInfo.Compare(a,b,System.Globalization.CompareOptions.IgnoreCase));
+        source.BackupDatabase(target);
         using var check=target.CreateCommand(); check.CommandText="PRAGMA integrity_check";
         if(!Equals(check.ExecuteScalar(),"ok")) throw new IOException("A mentés integritásellenőrzése sikertelen.");
     }
     public static void ValidateBackup(string file)
     {
         using var c=new SqliteConnection(new SqliteConnectionStringBuilder {DataSource=file,Mode=SqliteOpenMode.ReadOnly,Pooling=false}.ToString());
-        c.Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA integrity_check";
+        c.Open();c.CreateCollation("HU", (a,b) => System.Globalization.CultureInfo.GetCultureInfo("hu-HU").CompareInfo.Compare(a,b,System.Globalization.CompareOptions.IgnoreCase));using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA integrity_check";
         if(!Equals(cmd.ExecuteScalar(),"ok")) throw new IOException("Sérült adatbázismentés.");
         cmd.CommandText="PRAGMA user_version";
-        if(Convert.ToInt32(cmd.ExecuteScalar())!=SchemaVersion) throw new IOException("Nem támogatott mentésverzió.");
+        if(Convert.ToInt32(cmd.ExecuteScalar()) is <1 or >SchemaVersion) throw new IOException("Nem támogatott mentésverzió.");
         cmd.CommandText="SELECT count(*) FROM documents WHERE NOT json_valid(body)";
         if(Convert.ToInt64(cmd.ExecuteScalar())!=0) throw new IOException("Sérült dokumentum a mentésben.");
     }
-    private sealed class Session(SqliteConnection connection,SqliteTransaction transaction):ICompanyTransaction
+    private sealed partial class Session(SqliteConnection connection,SqliteTransaction transaction):ICompanyTransaction, IIndexedCompanyTransaction
     {
         public SqliteCommand Command(string sql)
         {var c=connection.CreateCommand();c.Transaction=transaction;c.CommandText=sql;return c;}
         public string? Get(string module,string key)
-        {using var c=Command("SELECT body FROM documents WHERE module=$m AND id=$id");c.Parameters.AddWithValue("$m",module);c.Parameters.AddWithValue("$id",key);return c.ExecuteScalar() as string;}
+        {if(module=="catalog"&&key=="state")return CatalogSnapshot();using var c=Command("SELECT body FROM documents WHERE module=$m AND id=$id");c.Parameters.AddWithValue("$m",module);c.Parameters.AddWithValue("$id",key);return c.ExecuteScalar() as string;}
         public void Put(string module,string key,string json)
         {
+            if(module=="catalog"&&key=="state"){ReplaceCatalog(json);return;}
+            if(module=="inventory"&&key.StartsWith("reservation/",StringComparison.Ordinal))IndexReservation(key,json);
+            if(module=="sales"&&key.StartsWith("order/",StringComparison.Ordinal))IndexOrder(key,json);
+            if(module=="inventory"&&key.StartsWith("movement/",StringComparison.Ordinal))UpdateStock(key,json);
             if(string.IsNullOrWhiteSpace(module)||string.IsNullOrWhiteSpace(key)||Encoding.UTF8.GetByteCount(json)>64*1024*1024) throw new ArgumentException("Érvénytelen dokumentum.");
             using var c=Command("INSERT INTO documents(module,id,body) VALUES($m,$id,$body) ON CONFLICT(module,id) DO UPDATE SET body=excluded.body");
             c.Parameters.AddWithValue("$m",module);c.Parameters.AddWithValue("$id",key);c.Parameters.AddWithValue("$body",json);c.ExecuteNonQuery();
         }
         public void Delete(string module,string key)
-        {using var c=Command("DELETE FROM documents WHERE module=$m AND id=$id");c.Parameters.AddWithValue("$m",module);c.Parameters.AddWithValue("$id",key);c.ExecuteNonQuery();}
+        {if(module=="inventory"&&key.StartsWith("reservation/",StringComparison.Ordinal)){using var r=Command("DELETE FROM stock_reservations WHERE document_id=$id");r.Parameters.AddWithValue("$id",key);r.ExecuteNonQuery();}
+        if(module=="sales"&&key.StartsWith("order/",StringComparison.Ordinal))throw new ArgumentException("A rendelés nem törölhető; használd a lemondást.");
+        if(module=="inventory"&&key.StartsWith("movement/",StringComparison.Ordinal))throw new ArgumentException("A készletmozgás nem törölhető; használj ellenmozgást.");using var c=Command("DELETE FROM documents WHERE module=$m AND id=$id");c.Parameters.AddWithValue("$m",module);c.Parameters.AddWithValue("$id",key);c.ExecuteNonQuery();}
         public IReadOnlyList<string> List(string module,string prefix)
-        {using var c=Command("SELECT body FROM documents WHERE module=$m AND substr(id,1,length($prefix))=$prefix ORDER BY id");c.Parameters.AddWithValue("$m",module);c.Parameters.AddWithValue("$prefix",prefix);using var reader=c.ExecuteReader();var rows=new List<string>();while(reader.Read())rows.Add(reader.GetString(0));return rows;}
+        {using var c=Command("SELECT body FROM documents WHERE module=$m AND id >= $prefix AND id < $end ORDER BY id");c.Parameters.AddWithValue("$m",module);c.Parameters.AddWithValue("$prefix",prefix);c.Parameters.AddWithValue("$end",prefix+"\uffff");using var reader=c.ExecuteReader();var rows=new List<string>();while(reader.Read())rows.Add(reader.GetString(0));return rows;}
     }
 }

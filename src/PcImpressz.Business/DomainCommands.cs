@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using PcImpressz.Contracts;
 namespace PcImpressz.Business;
 public static class DomainCommands
@@ -29,7 +29,7 @@ public static class DomainCommands
             ct.ThrowIfCancellationRequested();
             var company=input.GetProperty("companyId").GetGuid();
             var database=context.Database ?? throw new InvalidOperationException("A tranzakciós céges adattár nem elérhető.");
-            return ValueTask.FromResult(database.Execute(company,tx=>execute(tx,input,caller.ActorId)));
+            return ValueTask.FromResult(access==CommandAccess.RecoveryReadOnly ? database.Read(company,tx=>execute(tx,input,caller.ActorId)) : database.Execute(company,tx=>execute(tx,input,caller.ActorId)));
         }
     }
 }

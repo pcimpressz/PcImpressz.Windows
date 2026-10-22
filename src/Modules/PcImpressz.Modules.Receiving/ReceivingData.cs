@@ -234,9 +234,8 @@ public static class ReceivingMatching
         decimal net = 0, vat = 0, gross = 0;
         foreach (var line in lines)
         {
-            var row = line.SourceNetAmount??ReceivingText.Round(line.Quantity * line.NetUnitPrice, 2);
-            var tax=line.SourceVatAmount??ReceivingText.Round(row * line.VatRate / 100m, 2);
-            net += row;vat += tax;gross += line.SourceGrossAmount??row+tax;
+            var amount = PcImpressz.Contracts.VatMath.Line(line.Quantity,line.NetUnitPrice,line.VatRate,line.SourceNetAmount,line.SourceVatAmount,line.SourceGrossAmount);
+            net += amount.Net;vat += amount.Vat;gross += amount.Gross;
         }
         return (net, vat, gross);
     }

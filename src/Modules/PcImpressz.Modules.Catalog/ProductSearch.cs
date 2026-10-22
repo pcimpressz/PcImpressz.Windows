@@ -5,8 +5,8 @@ namespace PcImpressz.Modules.Catalog;
 
 public sealed class ProductSearch
 {
-    private sealed record Term(string Field, string Value, bool Exact);
-    private readonly Term[] _terms;
+
+    private readonly PcImpressz.Contracts.SearchTerm[] _terms;
     public ProductSearch(string? search)
     {
         if (search is null || search.Length > 200 || search.Any(char.IsControl))
@@ -32,7 +32,7 @@ public sealed class ProductSearch
             var exact = value.StartsWith('=');
             if (exact) value = value[1..];
             if (value.Length == 0) throw new ArgumentException("A keresési mező után adj meg értéket.");
-            return new Term(field, Normalize(value), exact);
+            return new PcImpressz.Contracts.SearchTerm(field, Normalize(value), exact);
         }).ToArray();
     }
     public bool Matches(ProductData p) => _terms.All(term => Values(p, term.Field).Any(value =>
@@ -46,10 +46,6 @@ public sealed class ProductSearch
         "egyseg" => [p.UnitCode], "revizio" => [p.Revision],
         _ => [p.Name, p.Sku, p.ManufacturerPartNumber, p.Barcode, p.CategoryCode, p.UnitCode, p.Description, p.Parameters]
     };
-    private static string Normalize(string? value)
-    {
-        var text = (value ?? "").Normalize(NormalizationForm.FormD);
-        return new string(text.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark).ToArray())
-            .Normalize(NormalizationForm.FormC).ToUpperInvariant();
-    }
+    public PcImpressz.Contracts.SearchTerm[] Terms => _terms.ToArray();
+    private static string Normalize(string? value) => PcImpressz.Contracts.SearchText.Fold(value);
 }

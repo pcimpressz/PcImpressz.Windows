@@ -22,7 +22,7 @@ public sealed class InventoryModule:IModule
             if(request.OperationId==Guid.Empty)throw new ArgumentException("Hiányzó műveletazonosító.");
             var reason=(request.Reason??"").Trim();
             if(reason.Length is <2 or >200 || reason.Any(char.IsControl))throw new ArgumentException("A készletváltozás indoklása kötelező (2–200 karakter).");
-            var product=CompanyReferenceQueries.Products(tx).SingleOrDefault(p=>p.Id==request.ProductId&&p.IsActive) ?? throw new ArgumentException("Válassz aktív terméket.");
+            var product=CompanyReferenceQueries.Products(tx,[request.ProductId]).SingleOrDefault(p=>p.Id==request.ProductId&&p.IsActive) ?? throw new ArgumentException("Válassz aktív terméket.");
             return DomainCommands.Json(StockLedger.Post(tx,"manual:"+request.OperationId.ToString("N"),"inventory",request.OperationId,
                 [new(product.Id,product.Name,product.UnitCode,request.Warehouse,request.Quantity)],reason,actor,context.TimeProvider.GetUtcNow()));
         });

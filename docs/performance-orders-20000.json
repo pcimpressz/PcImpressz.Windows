@@ -1,0 +1,7 @@
+{
+  "orders": 20001,
+  "runs": 10,
+  "seedMs": 1968.9672,
+  "firstPageP95Ms": 7.5733,
+  "searchP95Ms": 8.1765
+}

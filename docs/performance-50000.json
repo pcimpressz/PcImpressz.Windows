@@ -1,0 +1,15 @@
+{
+  "products": 50000,
+  "movements": 50000,
+  "runs": 10,
+  "seedMs": 6609.0167,
+  "legacySearchP95Ms": 269.0161,
+  "indexedSearchP95Ms": 42.049,
+  "firstPageP95Ms": 5.6066,
+  "singleSaveP95Ms": 9.1689,
+  "stockPostP95Ms": 8.6169,
+  "speedup": 6.397681276605865,
+  "runtime": "10.0.13",
+  "os": "Microsoft Windows NT 10.0.26300.0",
+  "cpu": 16
+}

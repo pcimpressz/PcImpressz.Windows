@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace PcImpressz.Modules.Catalog;
 
 // One company, one Host, one file for categories, units and products so a reference check stays atomic.
-public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeProvider time, ICompanyDatabase? database = null)
+public sealed partial class CatalogRepository(Func<Guid, string> companyDirectory, TimeProvider time, ICompanyDatabase? database = null)
 {
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
     private async Task<T> Locked<T>(Guid company, Func<ModuleStorageScope, CatalogState, T> action, CancellationToken ct)
@@ -62,7 +62,7 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
     public Task<UnitRecord> SaveUnit(UnitSave request, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (directory, state) => WriteUnit(directory, state, request, actor), ct);
     public Task<ProductRecord> SaveProduct(ProductSave request, string actor, CancellationToken ct = default) =>
-        Locked(request.CompanyId, (directory, state) => WriteProduct(directory, state, request, actor), ct);
+        SaveIndexedOrLegacy(request, actor, ct);
     public Task<CategoryRecord> ArchiveCategory(CatalogArchive request, string actor, CancellationToken ct = default) =>
         Locked(request.CompanyId, (directory, state) =>
         {
@@ -83,8 +83,7 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
         }, ct);
     public async Task<ProductRecord> ArchiveProduct(CatalogArchive request, string actor, CancellationToken ct = default)
     {
-        var snapshot = await Snapshot(request.CompanyId, ct);
-        var product = snapshot.Products.SingleOrDefault(p => p.Id == request.Id)
+        var product = await GetProduct(request.CompanyId, request.Id, ct)
             ?? throw new CatalogConflictException("A termék nem található.");
         if (product.Version != request.Version) throw new CatalogConflictException("A termék közben módosult. Frissítsd a listát, majd nyisd meg újra.");
         return await SaveProduct(new(request.CompanyId, request.Id, request.Version, product.Data with { IsActive = false }), actor, ct);

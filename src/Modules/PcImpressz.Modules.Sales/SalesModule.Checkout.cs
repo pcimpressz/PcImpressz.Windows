@@ -18,7 +18,7 @@ public sealed partial class SalesModule
         {
             var warehouse=input.TryGetProperty("warehouse",out var wh)?StockLedger.Warehouse(wh.GetString()):"Bolt";
             var quantities=StockLedger.Balances(tx).Where(b=>b.Warehouse==warehouse).ToDictionary(b=>b.ProductId,b=>b.Quantity);
-            var search=DomainCommands.Search(input);var products=CompanyReferenceQueries.Products(tx).Where(p=>p.IsActive&&p.IsSalable).ToArray();
+            var search=DomainCommands.Search(input);var products=CompanyReferenceQueries.SearchProducts(tx,search,"salable",checkout:true);
             var exact=search.Length>0?products.Where(p=>p.Barcode.Length>0&&p.Barcode.Equals(search,StringComparison.OrdinalIgnoreCase)).ToArray():[];
             var matching=exact.Length>0?exact:products.Where(p=>Match(p.Name+" "+p.Sku+" "+p.Barcode+" "+p.ManufacturerPartNumber,search)).ToArray();
             var demo=tx.Get("demo",DemoDataset.Marker) is not null||tx.Get("demo",DemoDataset.LegacyMarker) is not null;
@@ -31,7 +31,7 @@ public sealed partial class SalesModule
                         var entry=p.Parameters.Split('\n').Select(line=>line.Split('=',2)).FirstOrDefault(pair=>pair.Length==2&&pair[0].Trim()=="névleges tesztár");
                         if(entry is not null&&decimal.TryParse(entry[1].Replace(',','.'),NumberStyles.AllowDecimalPoint,CultureInfo.InvariantCulture,out var demoPrice)&&demoPrice is >=0 and <=1_000_000_000){price=demoPrice;source="Demó tesztár";}
                     }
-                    return new{p.Id,p.Name,p.Sku,p.Barcode,p.ManufacturerPartNumber,p.UnitCode,availableQuantity=quantities.GetValueOrDefault(p.Id),netUnitPrice=price,vatRate=p.SaleVatRate,priceSource=source};
+                    return new{p.Id,p.Name,p.Sku,p.Barcode,p.ManufacturerPartNumber,p.UnitCode,availableQuantity=StockReservations.Free(tx,p.Id,warehouse,context.TimeProvider.GetUtcNow()),physicalQuantity=quantities.GetValueOrDefault(p.Id),reservedQuantity=StockReservations.Quantity(tx,p.Id,warehouse,context.TimeProvider.GetUtcNow()),netUnitPrice=price,vatRate=p.SaleVatRate,priceSource=source};
                 }),
                 customers=CompanyReferenceQueries.BillingCustomers(tx).Where(p=>p.IsActive&&(p.IsCustomer||input.TryGetProperty("allPartners",out var all)&&all.ValueKind==JsonValueKind.True)&&Match(p.Name+" "+p.TaxId,DomainCommands.Search(input,"customerSearch"))).Take(50)});
         });

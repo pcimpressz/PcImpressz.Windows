@@ -7,10 +7,10 @@ public sealed record ProductSalePrice(string Name, string Kind, decimal Value);
 public static class SalePriceMath
 {
     public static decimal GrossFromNet(decimal net, decimal vat) =>
-        decimal.Round(net * (1 + vat / 100m), 2, MidpointRounding.AwayFromZero);
+        VatMath.Round(net * (1 + vat / 100m));
 
     public static decimal NetFromGross(decimal gross, decimal vat) =>
-        decimal.Round(gross / (1 + vat / 100m), 4, MidpointRounding.AwayFromZero);
+        VatMath.Round(gross / (1 + vat / 100m), 4);
 
     public static decimal? ResolveNet(ProductSalePrice price, decimal? baseNet, decimal vat) => price.Kind switch
     {

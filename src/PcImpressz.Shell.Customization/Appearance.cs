@@ -29,6 +29,7 @@ public sealed record AppearancePreferences
     public string NavReceivedColor {get;init;}="#D9F2DC";
     public string NavPendingColor {get;init;}="#FFFFFF";
     public bool FormatPartnerNames {get;init;}=true;
+    public bool LegacyTieredPrices {get;init;}
     public int MoneyDecimals { get; init; } = 0;
     public int SchemaVersion { get; init; } = 1;
     public string SkinId { get; init; } = "midnight";

@@ -130,7 +130,7 @@ public sealed partial class ShellViewModel : Observable
         };
         _connection = new(directory, hostPath);
         _preferences = store.Load();
-        InvoiceListPreferences.LiveFiltering=_preferences.InvoiceLiveFilter;InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;ListSearch.Live=!_preferences.SearchOnEnter;
+        InvoiceListPreferences.LiveFiltering=_preferences.InvoiceLiveFilter;InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;RetailPricing.UseTieredRounding=_preferences.LegacyTieredPrices;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;ListSearch.Live=!_preferences.SearchOnEnter;
         Skins = new(store.ReadSkins());
         _selectedSkin = Skins.FirstOrDefault(s => s.Id == _preferences.SkinId) ?? Skins[0];
         _preferences = _preferences with { SkinId = _selectedSkin.Id };
@@ -191,6 +191,7 @@ public sealed partial class ShellViewModel : Observable
     public string NavPendingColor {get=>_preferences.NavPendingColor;set{if(!SkinValidation.IsColor(value))return;_preferences=_preferences with{NavPendingColor=value};ApplyAndSave();Changed();}}
     public bool FormatPartnerNames {get=>_preferences.FormatPartnerNames;set{_preferences=_preferences with{FormatPartnerNames=value};PartnerNameFormatting.Enabled=value;ApplyAndSave();Changed();}}
     public int[] MoneyDecimalChoices {get;}=[0,1,2,3,4];
+    public bool LegacyTieredPrices {get=>_preferences.LegacyTieredPrices;set{_preferences=_preferences with{LegacyTieredPrices=value};RetailPricing.UseTieredRounding=value;ApplyAndSave();Changed();}}
     public int MoneyDecimals {get=>_preferences.MoneyDecimals;set{if(value is <0 or >4)return;_preferences=_preferences with{MoneyDecimals=value};MoneyDisplay.Decimals=value;ApplyAndSave();Changed();}}
     public double InitialWidth => _preferences.WindowWidth;
     public double InitialHeight => _preferences.WindowHeight;
@@ -370,7 +371,7 @@ public sealed partial class ShellViewModel : Observable
 
     private void ApplyAndSave()
     {
-        InvoiceListPreferences.LiveFiltering=_preferences.InvoiceLiveFilter;InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;ListSearch.Live=!_preferences.SearchOnEnter;
+        InvoiceListPreferences.LiveFiltering=_preferences.InvoiceLiveFilter;InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;RetailPricing.UseTieredRounding=_preferences.LegacyTieredPrices;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;ListSearch.Live=!_preferences.SearchOnEnter;
         ThemeManager.Apply(SelectedSkin, _preferences);
         try { _store.Save(_preferences); _notice = "A megjelenési beállítások mentve."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

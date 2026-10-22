@@ -6,6 +6,7 @@ namespace PcImpressz.Contracts;
 public interface ICompanyDatabase
 {
     T Execute<T>(Guid companyId, Func<ICompanyTransaction, T> action);
+    T Read<T>(Guid companyId, Func<ICompanyTransaction, T> action) => Execute(companyId, action);
 }
 public interface ICompanyTransaction
 {
@@ -56,12 +57,31 @@ public static class CompanyReferenceQueries
 {
     public static PartnerReference[] Partners(ICompanyTransaction tx) => Rows(tx, "partners", "partners", (id, d) =>
         new PartnerReference(id, Text(d,"name"), Text(d,"taxId"), Flag(d,"isSupplier"), Flag(d,"isCustomer"), Flag(d,"isActive")));
-    public static ProductReference[] Products(ICompanyTransaction tx) => Rows(tx, "catalog", "products", (id,d) =>
-        new ProductReference(id, Text(d,"name"), Text(d,"sku"), Text(d,"barcode"), Text(d,"unitCode"), Flag(d,"isActive"), Flag(d,"isSalable"), Flag(d,"isPurchaseable"), Text(d,"manufacturerPartNumber"),d.TryGetProperty("saleNetUnitPrice",out var price)&&price.ValueKind==JsonValueKind.Number?price.GetDecimal():null,d.TryGetProperty("saleVatRate",out var vat)&&vat.ValueKind==JsonValueKind.Number?vat.GetDecimal():27,Text(d,"parameters"),SalePrices(d)));
+    public static ProductReference[] Products(ICompanyTransaction tx) => Rows(tx, "catalog", "products", MapProduct);
+    private static ProductReference MapProduct(Guid id,JsonElement d) => new ProductReference(id, Text(d,"name"), Text(d,"sku"), Text(d,"barcode"), Text(d,"unitCode"), Flag(d,"isActive"), Flag(d,"isSalable"), Flag(d,"isPurchaseable"), Text(d,"manufacturerPartNumber"),d.TryGetProperty("saleNetUnitPrice",out var price)&&price.ValueKind==JsonValueKind.Number?price.GetDecimal():null,d.TryGetProperty("saleVatRate",out var vat)&&vat.ValueKind==JsonValueKind.Number?vat.GetDecimal():27,Text(d,"parameters"),SalePrices(d));
+    public static ProductReference[] Products(ICompanyTransaction tx, IEnumerable<Guid> ids)
+    {
+        var keys=ids.Distinct().ToArray();
+        if(tx is not IIndexedCompanyTransaction index)return Products(tx).Where(p=>keys.Contains(p.Id)).ToArray();
+        return keys.Select(id=>index.Product(id)).Where(body=>body is not null).Select(body=>{using var doc=JsonDocument.Parse(body!);var row=doc.RootElement;return MapProduct(row.GetProperty("id").GetGuid(),row.GetProperty("data"));}).ToArray();
+    }
+    public static ProductReference[] SearchProducts(ICompanyTransaction tx,string search,string filter="all",bool checkout=false)
+    {
+        if(tx is not IIndexedCompanyTransaction index)return Products(tx).Where(p=>p.IsActive&&(filter!="salable"||p.IsSalable)).Where(p=>SearchText.Fold(search).Split(' ',StringSplitOptions.RemoveEmptyEntries).All(term=>SearchText.Fold(p.Name+" "+p.Sku+" "+p.Barcode+" "+p.ManufacturerPartNumber).Contains(term,StringComparison.Ordinal))).Take(200).ToArray();
+        var terms=search.Split(' ',StringSplitOptions.RemoveEmptyEntries).Select(term=>new SearchTerm("checkout",SearchText.Fold(term),false)).ToArray();
+        ProductIndexPage page;
+        if(checkout&&search.Length>0)
+        {
+            page=index.Products(new([new("vonalkod",SearchText.Fold(search),true)],filter,"",false,0,200));
+            if(page.Total>0)return page.Records.Select(body=>{using var doc=JsonDocument.Parse(body);var row=doc.RootElement;return MapProduct(row.GetProperty("id").GetGuid(),row.GetProperty("data"));}).ToArray();
+        }
+        page=index.Products(new(terms,filter,"",false,0,200));
+        return page.Records.Select(body=>{using var doc=JsonDocument.Parse(body);var row=doc.RootElement;return MapProduct(row.GetProperty("id").GetGuid(),row.GetProperty("data"));}).ToArray();
+    }
     public static BillingCustomer[] BillingCustomers(ICompanyTransaction tx)=>Rows(tx,"partners","partners",(id,d)=>new BillingCustomer(id,Text(d,"name"),Text(d,"taxId"),Text(d,"country"),Text(d,"postalCode"),Text(d,"city"),Text(d,"address"),Flag(d,"isActive"),Flag(d,"isCustomer")));
-    public static IReadOnlyDictionary<Guid,decimal> StockQuantities(ICompanyTransaction tx) => StockRows(tx).GroupBy(row=>row.GetProperty("productId").GetGuid()).ToDictionary(g=>g.Key,g=>g.Sum(row=>row.GetProperty("quantity").GetDecimal()));
-    public static decimal StockQuantity(ICompanyTransaction tx, Guid productId) => StockQuantities(tx).GetValueOrDefault(productId);
-    public static bool HasStockHistory(ICompanyTransaction tx, Guid productId) => StockRows(tx).Any(row=>row.GetProperty("productId").GetGuid()==productId);
+    public static IReadOnlyDictionary<Guid,decimal> StockQuantities(ICompanyTransaction tx) => tx is IIndexedCompanyTransaction index ? index.StockBalances().GroupBy(b=>b.ProductId).ToDictionary(g=>g.Key,g=>g.Sum(b=>b.Quantity)) : StockRows(tx).GroupBy(row=>row.GetProperty("productId").GetGuid()).ToDictionary(g=>g.Key,g=>g.Sum(row=>row.GetProperty("quantity").GetDecimal()));
+    public static decimal StockQuantity(ICompanyTransaction tx, Guid productId) => tx is IIndexedCompanyTransaction index ? index.StockBalances(productId).Sum(b=>b.Quantity) : StockQuantities(tx).GetValueOrDefault(productId);
+    public static bool HasStockHistory(ICompanyTransaction tx, Guid productId) => tx is IIndexedCompanyTransaction index ? index.HasStockHistory(productId) : StockRows(tx).Any(row=>row.GetProperty("productId").GetGuid()==productId);
     private static JsonElement[] StockRows(ICompanyTransaction tx) => tx.List("inventory","movement/").Select(body=>JsonSerializer.Deserialize<JsonElement>(body)).ToArray();
     public static IncomingReceiptReference[] Receipts(ICompanyTransaction tx)
     {
