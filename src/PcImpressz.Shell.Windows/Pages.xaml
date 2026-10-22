@@ -339,7 +339,9 @@
           <Border Style="{StaticResource Card}" Margin="0,20,0,0">
             <StackPanel>
               <TextBlock Text="Listák" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Minden törzs- és listaoldalon a kereső névrészletre szűkít, a találatok darabszáma mellette látszik. A fejléc kattintása rendezi az egész listát. Az oszlopokat itt, vagy az oldalon a kis fogaskerékkel kapcsolhatod. A terméktörzs Darabszám oszlopa az összes raktár készletét mutatja. Raktárankénti bontás a Készlet oldalon." Style="{StaticResource Muted}" />
+              <TextBlock Text="A találatok darabszáma a lista mellett látszik. A terméktörzsben az oszlopfejlécre kattintva abban a mezőben keresel, a jobb szélen lévő nyíl rendez. A többi listán a felső kereső működik. Az oszlopokat itt, vagy az oldalon a kis fogaskerékkel kapcsolhatod. A fogaskeréknél állítható, hány termék jelenjen meg egyszerre; a lista nem görget külön ablakban." Style="{StaticResource Muted}" />
+              <CheckBox Content="Keresés gépelés közben" IsChecked="{Binding LiveListSearch, Mode=TwoWay}" Margin="0,14,0,4" />
+              <TextBlock Text="Bekapcsolva a beírt karakterek azonnal szűkítik a listát. Kikapcsolva az Enter vagy a Keresés gomb indítja." Style="{StaticResource Muted}" />
               <ComboBox ItemsSource="{Binding ListPages}" SelectedItem="{Binding SelectedListPage}" DisplayMemberPath="Title" Margin="0,16,0,12" MinHeight="36" />
               <ItemsControl ItemsSource="{Binding ColumnChoices}">
                 <ItemsControl.ItemTemplate>

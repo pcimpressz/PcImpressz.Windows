@@ -129,7 +129,7 @@ public sealed partial class ShellViewModel : Observable
         };
         _connection = new(directory, hostPath);
         _preferences = store.Load();
-        InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;
+        InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;ListSearch.Live=!_preferences.SearchOnEnter;
         Skins = new(store.ReadSkins());
         _selectedSkin = Skins.FirstOrDefault(s => s.Id == _preferences.SkinId) ?? Skins[0];
         _preferences = _preferences with { SkinId = _selectedSkin.Id };
@@ -184,6 +184,7 @@ public sealed partial class ShellViewModel : Observable
     public string LastUpdated => _status?.ObservedAt.ToLocalTime().ToString("HH:mm:ss") ?? "—";
     public int[] InvoicePageSizes=>[10,20,50,100];
     public int InvoicePageSize{get=>_preferences.InvoicePageSize;set{if(!InvoicePageSizes.Contains(value))return;_preferences=_preferences with{InvoicePageSize=value};InvoiceListPreferences.PageSize=value;ApplyAndSave();Changed();}}
+    public bool LiveListSearch{get=>!_preferences.SearchOnEnter;set{_preferences=_preferences with{SearchOnEnter=!value};ListSearch.Live=value;ApplyAndSave();Changed();}}
     public string LabelPrinter{get=>_preferences.LabelPrinter;set{if(value.Length>200||value.Any(char.IsControl))return;_preferences=_preferences with{LabelPrinter=value};InvoiceListPreferences.LabelPrinter=value;ApplyAndSave();Changed();}}
     public string NavReceivedColor {get=>_preferences.NavReceivedColor;set{if(!SkinValidation.IsColor(value))return;_preferences=_preferences with{NavReceivedColor=value};ApplyAndSave();Changed();}}
     public string NavPendingColor {get=>_preferences.NavPendingColor;set{if(!SkinValidation.IsColor(value))return;_preferences=_preferences with{NavPendingColor=value};ApplyAndSave();Changed();}}
@@ -367,7 +368,7 @@ public sealed partial class ShellViewModel : Observable
 
     private void ApplyAndSave()
     {
-        InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;
+        InvoiceListPreferences.PageSize=_preferences.InvoicePageSize;InvoiceListPreferences.LabelPrinter=_preferences.LabelPrinter;MoneyDisplay.Decimals=_preferences.MoneyDecimals;PartnerNameFormatting.Enabled=_preferences.FormatPartnerNames;ListSearch.Live=!_preferences.SearchOnEnter;
         ThemeManager.Apply(SelectedSkin, _preferences);
         try { _store.Save(_preferences); _notice = "A megjelenési beállítások mentve."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

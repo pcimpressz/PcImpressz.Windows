@@ -59,7 +59,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     private readonly TypedSearch _typed;
     private readonly ListLoader _loader;
     private sealed record AppliedQuery(string Search, string Filter, string Sort, bool Descending, int Page,
-        decimal? MinPrice = null, decimal? MaxPrice = null, decimal? MinStock = null, decimal? MaxStock = null, string[]? CategoryCodes = null);
+        decimal? MinPrice = null, decimal? MaxPrice = null, decimal? MinStock = null, decimal? MaxStock = null, string[]? CategoryCodes = null, bool NoCategoryMatch = false);
     private AppliedQuery? _applied;
     public string AppliedSearchLabel => IsProductMaster ? ActiveFiltersLabel : _applied is null ? "Még nincs betöltött lista." : "Megjelenített keresés: " + (_applied.Search.Length == 0 ? "minden találat" : _applied.Search) + " · " + (Filters.FirstOrDefault(f => f.Value == _applied.Filter)?.Label ?? _applied.Filter);
     private bool _filtersReady;
@@ -84,7 +84,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public EntityPageDescriptor Definition { get; }
     public ObservableCollection<EntityRow> Rows { get; } = [];
     public ObservableCollection<EntityFieldViewModel> Fields { get; } = [];
-    public string Search { get => _search; set { if (_search == value) return; _search = value; Changed(); _typed.Schedule(); } }
+    public string Search { get => _search; set { if (_search == value) return; _search = value; Changed(); if (ListSearch.Live) _typed.Schedule(); } }
     public string Filter
     {
         get => _filter;
@@ -104,7 +104,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public bool CanWrite => !IsBusy && _connection.Allows(Definition.ModuleId+".write");
     public bool CanExport => !IsBusy && _connection.Allows(Definition.ModuleId+".export");
     public bool CanAdmin => !IsBusy && _connection.Session?.Role=="admin";
-    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanAdmin));Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));if(_connection.Session?.Role!="admin")ClearPartnerOverviewCards();}
+    public void PermissionsChanged(){Changed(nameof(CanWrite));Changed(nameof(CanExport));Changed(nameof(CanAdmin));Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));if(!IsProductMaster&&_connection.Session?.Role!="admin")ClearPartnerOverviewCards();}
     public bool HasDossier => !string.IsNullOrWhiteSpace(Definition.DossierCommand);
     public bool CanOpenDossier => CanAdmin && HasDossier && _editId is not null && !IsBusy;
     public bool IsDossierOpen { get => _dossierOpen; private set { _dossierOpen = value; Changed(); Changed(nameof(ShowPartnerList)); } }
@@ -123,6 +123,15 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public int LayoutRevision => _columns.Revision;
     public string SortColumn => _columns.SortColumn;
     public bool SortDescending => _columns.SortDescending;
+    public int PageSize => IsProductMaster && _columns.PageSize is 10 or 20 or 50 or 100 ? _columns.PageSize : IsProductMaster ? 20 : 50;
+    public bool TrySetPageSize(int size)
+    {
+        if (!IsProductMaster || size is not (10 or 20 or 50 or 100) || size == PageSize) return size == PageSize;
+        _columns.SetPageSize(size);
+        _page = 0;
+        _ = LoadAsync();
+        return true;
+    }
     public IReadOnlyList<EntityColumn> VisibleColumns => _columns.VisibleColumns;
     public EntityRow? SelectedRow
     {
@@ -178,7 +187,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
         ArchiveCommand = new RelayCommand(() => _ = ArchiveAsync());
         ExportCommand = new RelayCommand(() => _ = ExportAsync());
-        NextCommand = new RelayCommand(() => { if ((_page + 1) * 50 < _total && CanDiscard()) { _page++; _ = LoadAsync(); } });
+        NextCommand = new RelayCommand(() => { if ((_page + 1) * PageSize < _total && CanDiscard()) { _page++; _ = LoadAsync(); } });
         PreviousCommand = new RelayCommand(() => { if (_page > 0 && CanDiscard()) { _page--; _ = LoadAsync(); } });
         DossierCommand = new RelayCommand(() => _ = LoadDossierAsync());
         DossierBackCommand = new RelayCommand(() => IsDossierOpen = false);
@@ -284,12 +293,13 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
         try
         {
             var query = new AppliedQuery(IsProductMaster ? ComposeColumnSearch() : Search, Filter, SortColumn, SortDescending, _page,
-                _minPrice, _maxPrice, _minStock, _maxStock, _categoryCodes);
+                _minPrice, _maxPrice, _minStock, _maxStock, _categoryCodes, _noCategoryMatch);
             var result = await ExecuteAsync(Definition.Commands.List, new
             {
-                search = query.Search, filter = query.Filter, page = query.Page, pageSize = 50,
-                sort = query.Sort, descending = query.Descending, minPrice = query.MinPrice, maxPrice = query.MaxPrice,
-                minStock = query.MinStock, maxStock = query.MaxStock, categoryCodes = query.CategoryCodes
+                search = query.Search, filter = query.Filter, page = query.Page, pageSize = PageSize,
+                sort = query.Sort, descending = query.Descending,                 minPrice = query.MinPrice, maxPrice = query.MaxPrice,
+                minStock = query.MinStock, maxStock = query.MaxStock, categoryCodes = query.CategoryCodes,
+                noCategoryMatch = _noCategoryMatch
             });
             if (!_loader.IsCurrent(generation)) return;
             var receivedRows = result.GetProperty("rows").EnumerateArray().Select(row => new EntityRow(row)).ToArray();
@@ -366,7 +376,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
             {
                 search = query.Search, filter = query.Filter, sort = query.Sort, descending = query.Descending,
                 minPrice = query.MinPrice, maxPrice = query.MaxPrice, minStock = query.MinStock, maxStock = query.MaxStock,
-                categoryCodes = query.CategoryCodes
+                categoryCodes = query.CategoryCodes, noCategoryMatch = query.NoCategoryMatch
             });
             await AtomicExport.WriteAsync(dialog.FileName, result.GetProperty("csv").GetString() ?? "", _shutdown);
             Message = Labels.ExportedMessage;

@@ -23,6 +23,7 @@ public static class BuiltInSkins
 public sealed record AppearancePreferences
 {
     public int InvoicePageSize {get;init;}=20;
+    public bool SearchOnEnter { get; init; }
     public string LabelPrinter {get;init;}="Niimbot D110-M Bluetooth";
     public string NavReceivedColor {get;init;}="#D9F2DC";
     public string NavPendingColor {get;init;}="#FFFFFF";

@@ -123,9 +123,10 @@ public sealed partial class CatalogModule : IModule
              new("description", "Leírás", "multiline"), new("parameters", "Paraméterek (név=érték)", "multiline"),
              new("isPurchaseable", "Beszerzésre jelölhető", "boolean"), new("isSalable", "Eladásra jelölhető", "boolean"),
              new("isActive", "Aktív", "boolean", DefaultChecked: true), new("notes", "Megjegyzés", "multiline")],
-            [new("name", "Termék", 340), new("sku", "Saját cikkszám", 180), new("manufacturerPartNumber", "Gyártói cikkszám", 210), new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90),
-             new("quantity", "Saját készlet", 110), new("revision", "Revízió", 90, false), new("barcode", "Vonalkód", 140, false),
-             new("isPurchaseable", "Beszerzés", 110, false), new("isSalable", "Eladás", 100, false)],
+            [new("name", "Termék", 280), new("sku", "Saját cikkszám", 140), new("quantity", "Saját készlet", 120),
+             new("saleNet", "Nettó eladási ár", 140), new("saleGross", "Bruttó eladási ár", 150), new("barcode", "Vonalkód", 140),
+             new("categoryCode", "Kategória", 120), new("unitCode", "Egység", 90), new("manufacturerPartNumber", "Gyártói cikkszám", 180, false),
+             new("revision", "Revízió", 90, false), new("isPurchaseable", "Beszerzés", 110, false), new("isSalable", "Eladás", 100, false)],
             new("products-list", "products-save", "products-archive", "products-export"),
             new EntityPageLabels
             {
@@ -206,7 +207,15 @@ public sealed partial class CatalogModule : IModule
     {
         var node = JsonSerializer.SerializeToNode(record.Data, CatalogJson.Options)!;
         node["id"] = record.Id; node["version"] = record.Version; node["quantity"] = quantity is null ? JsonSerializer.SerializeToNode("—") : JsonSerializer.SerializeToNode(quantity.Value);
+        node["saleNet"] = JsonSerializer.SerializeToNode(Money(record.Data.SaleNetUnitPrice));
+        node["saleGross"] = JsonSerializer.SerializeToNode(record.Data.SaleNetUnitPrice is null ? "—" : Money(decimal.Round(record.Data.SaleNetUnitPrice.Value * (1 + record.Data.SaleVatRate / 100m), 2, MidpointRounding.AwayFromZero)));
         return JsonSerializer.SerializeToElement(node);
+    }
+    private static string Money(decimal? value)
+    {
+        if (value is null) return "—";
+        var culture = System.Globalization.CultureInfo.GetCultureInfo("hu-HU");
+        return value.Value.ToString(value.Value == decimal.Round(value.Value, 0) ? "N0" : "N2", culture) + " Ft";
     }
     private static JsonElement Row<T>(T data, Guid id, long version)
     {
@@ -249,7 +258,7 @@ public static class CatalogListing
         var rows = source.OrderBy(p => p.Id).Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
             .Where(p => query.Filter switch
             { "purchaseable" => p.Data.IsPurchaseable, "salable" => p.Data.IsSalable, _ => true })
-            .Where(p => categories is null || categories.Count == 0 || categories.Contains(p.Data.CategoryCode))
+            .Where(p => !query.NoCategoryMatch && (categories is null || categories.Count == 0 || categories.Contains(p.Data.CategoryCode)))
             .Where(p => query.MinPrice is null && query.MaxPrice is null || p.Data.SaleNetUnitPrice is { } price
                 && (query.MinPrice is null || price >= query.MinPrice) && (query.MaxPrice is null || price <= query.MaxPrice))
             .Where(p => search.Matches(p.Data)).ToArray();
@@ -279,6 +288,8 @@ public static class CatalogListing
     {
         ["name"] = p => p.Data.Name, ["sku"] = p => p.Data.Sku, ["manufacturerPartNumber"] = p => p.Data.ManufacturerPartNumber, ["categoryCode"] = p => p.Data.CategoryCode,
         ["unitCode"] = p => p.Data.UnitCode, ["revision"] = p => p.Data.Revision, ["barcode"] = p => p.Data.Barcode,
-        ["quantity"] = _ => "—", ["isPurchaseable"] = p => Yes(p.Data.IsPurchaseable), ["isSalable"] = p => Yes(p.Data.IsSalable)
+        ["quantity"] = _ => "—", ["saleNet"] = p => (p.Data.SaleNetUnitPrice ?? -1m).ToString("0000000000.0000", System.Globalization.CultureInfo.InvariantCulture),
+        ["saleGross"] = p => (p.Data.SaleNetUnitPrice is null ? -1m : decimal.Round(p.Data.SaleNetUnitPrice.Value * (1 + p.Data.SaleVatRate / 100m), 2, MidpointRounding.AwayFromZero)).ToString("0000000000.0000", System.Globalization.CultureInfo.InvariantCulture),
+        ["isPurchaseable"] = p => Yes(p.Data.IsPurchaseable), ["isSalable"] = p => Yes(p.Data.IsSalable)
     };
 }

@@ -13,6 +13,8 @@ public interface IColumnList
     bool IsColumnVisible(string id);
     bool SetColumnVisible(string id, bool visible);
     void ToggleSort(string columnId);
+    int PageSize => 50;
+    bool TrySetPageSize(int size) => false;
 }
 
 internal sealed class ColumnList
@@ -22,6 +24,7 @@ internal sealed class ColumnList
     public string Key { get; }
     public string SortColumn { get; private set; } = "";
     public bool SortDescending { get; private set; }
+    public int PageSize { get; private set; }
     public int Revision { get; private set; }
     public event Action? Changed;
     public event Action? SortChanged;
@@ -40,6 +43,7 @@ internal sealed class ColumnList
         _store.For(Key, Definition.Columns).Columns.FirstOrDefault(column => column.Id == id)?.Visible ?? false;
     public bool SetColumnVisible(string id, bool visible) => _store.TrySetVisible(Key, Definition.Columns, id, visible);
     public void ToggleSort(string id) => _store.ToggleSort(Key, Definition.Columns, id);
+    public void SetPageSize(int size) => _store.SetPageSize(Key, Definition.Columns, size);
 
     private void OnStore(string key)
     {
@@ -55,6 +59,7 @@ internal sealed class ColumnList
         var page = _store.For(Key, Definition.Columns);
         SortColumn = page.SortColumn;
         SortDescending = page.SortDescending;
+        PageSize = page.PageSize;
         Revision++;
     }
 }

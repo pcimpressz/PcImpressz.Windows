@@ -49,7 +49,7 @@ public sealed record UnitSave(Guid CompanyId, Guid? Id, long Version, UnitData D
 public sealed record ProductSave(Guid CompanyId, Guid? Id, long Version, ProductData Data);
 public sealed record CatalogQuery(Guid CompanyId, string Search = "", string Filter = "all", int Page = 0, int PageSize = 50,
     string Sort = "", bool Descending = false, decimal? MinPrice = null, decimal? MaxPrice = null,
-    decimal? MinStock = null, decimal? MaxStock = null, string[]? CategoryCodes = null);
+    decimal? MinStock = null, decimal? MaxStock = null, string[]? CategoryCodes = null, bool NoCategoryMatch = false);
 public sealed record CatalogArchive(Guid CompanyId, Guid Id, long Version);
 public sealed class CatalogConflictException(string message) : Exception(message);
 

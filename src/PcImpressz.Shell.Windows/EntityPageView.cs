@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using PcImpressz.Shell.Customization;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -198,7 +199,7 @@ public sealed class EntityPageView : UserControl
             toolbar.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
             create.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
             applied.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
-            searchHelp.Visibility = !editorOnly && DataContext is EntityPageViewModel page && page.Definition.ModuleId == "catalog" && page.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
+            searchHelp.Visibility = Visibility.Collapsed;
             listPanel.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
             editorBorder.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
             var partner=DataContext is EntityPageViewModel {IsCompactMaster:true};
@@ -208,7 +209,17 @@ public sealed class EntityPageView : UserControl
             Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,editorOnly ? 0 : narrow ? 1 : 0);
             Grid.SetColumnSpan(listPanel,narrow ? 2 : 1); Grid.SetColumnSpan(editorBorder,narrow ? 2 : 1);
             editorBorder.Margin = separate ? new Thickness(0) : narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);
-            grid.MinHeight = ViewMode == "list" ? 480 : 360; grid.MaxHeight = ViewMode == "list" ? 680 : 480;
+            var productList = DataContext is EntityPageViewModel { IsProductMaster: true };
+            if (productList)
+            {
+                grid.MinHeight = 0; grid.MaxHeight = double.PositiveInfinity;
+                ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
+            }
+            else
+            {
+                grid.MinHeight = ViewMode == "list" ? 480 : 360; grid.MaxHeight = ViewMode == "list" ? 680 : 480;
+                ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
+            }
             if(partner)
             {
                 var sideBySide=body.ActualWidth>=1000&&ViewMode!="list";
@@ -243,10 +254,14 @@ public sealed class EntityPageView : UserControl
         };
         var apply = new Button { Content = "Keresés", Margin = new(0, 0, 8, 0) };
         var clear = new Button { Content = "Törlés" };
-        var popup = ColumnPopup(anchor, title, box, apply, clear);
+        var hint = new TextBlock { Text = ListSearch.Live ? "Gépelés közben szűr. A kapcsoló a Beállítások listáinál van." : "Az Enter vagy a Keresés gomb indítja a szűrést.", TextWrapping = TextWrapping.Wrap, Margin = new(0, 8, 0, 0), FontSize = 12 };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        var popup = ColumnPopup(anchor, title, box, apply, clear, extra: hint);
         apply.Click += (_, _) => { page.ApplyColumnText(columnId, box.Text); popup.IsOpen = false; };
         clear.Click += (_, _) => { page.ApplyColumnText(columnId, ""); popup.IsOpen = false; };
+        box.TextChanged += (_, _) => page.ScheduleColumnText(columnId, box.Text);
         box.KeyDown += (_, args) => { if (args.Key == System.Windows.Input.Key.Enter) { page.ApplyColumnText(columnId, box.Text); popup.IsOpen = false; } };
+        popup.Closed += (_, _) => page.RefreshFilterHeaders();
         popup.IsOpen = true; box.Focus();
     }
     private static void ShowCategorySearch(EntityPageViewModel page, FrameworkElement anchor)
@@ -265,10 +280,11 @@ public sealed class EntityPageView : UserControl
             if (chosen is not null) popup.IsOpen = false;
         };
         clear.Click += (_, _) => { page.ClearCategory(); popup.IsOpen = false; };
+        popup.Closed += (_, _) => page.RefreshFilterHeaders();
         popup.Opened += async (_, _) => await page.LoadCategoryChoicesAsync();
         popup.IsOpen = true; box.Focus();
     }
-    private static Popup ColumnPopup(FrameworkElement anchor, string title, TextBox box, Button apply, Button clear, ListBox? list = null)
+    private static Popup ColumnPopup(FrameworkElement anchor, string title, TextBox box, Button apply, Button clear, ListBox? list = null, TextBlock? extra = null)
     {
         var stack = new StackPanel();
         stack.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Margin = new(0, 0, 0, 8) });
@@ -276,6 +292,7 @@ public sealed class EntityPageView : UserControl
         if (list is not null) stack.Children.Add(list);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal };
         buttons.Children.Add(apply); buttons.Children.Add(clear); stack.Children.Add(buttons);
+        if (extra is not null) stack.Children.Add(extra);
         var border = new Border { Child = stack, Padding = new(12), BorderThickness = new(1), MaxWidth = 320 };
         border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         border.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");

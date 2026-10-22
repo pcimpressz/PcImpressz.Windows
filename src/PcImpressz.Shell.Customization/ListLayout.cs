@@ -5,7 +5,7 @@ using PcImpressz.Contracts;
 namespace PcImpressz.Shell.Customization;
 
 public sealed record ColumnPreference(string Id, bool Visible);
-public sealed record PageListPreference(string Key, string SortColumn, bool SortDescending, ColumnPreference[] Columns);
+public sealed record PageListPreference(string Key, string SortColumn, bool SortDescending, ColumnPreference[] Columns, int PageSize = 0);
 public sealed record ListLayoutDocument(int SchemaVersion, PageListPreference[] Pages);
 
 public sealed class ListLayoutStore(string directory)
@@ -38,6 +38,14 @@ public sealed class ListLayoutStore(string directory)
         if (columns.All(column => column.Id != columnId)) return;
         var descending = current.SortColumn == columnId && !current.SortDescending;
         WritePage(current with { SortColumn = columnId, SortDescending = descending });
+    }
+
+    public void SetPageSize(string key, IReadOnlyList<EntityColumn> columns, int pageSize)
+    {
+        if (pageSize is not (10 or 20 or 50 or 100)) throw new ArgumentException("A listaoldal 10, 20, 50 vagy 100 sor lehet.");
+        var current = For(key, columns);
+        if (current.PageSize == pageSize) return;
+        WritePage(current with { PageSize = pageSize });
     }
 
     public void Reset(string key)
@@ -105,7 +113,9 @@ public sealed class ListLayoutStore(string directory)
         if (chosen.All(column => !column.Visible)) chosen[0] = chosen[0] with { Visible = true };
         var sort = saved?.SortColumn ?? "";
         if (sort.Length > 0 && columns.All(column => column.Id != sort)) sort = "";
-        return new(key, sort, sort.Length > 0 && (saved?.SortDescending ?? false), chosen);
+        var pageSize = saved?.PageSize ?? 0;
+        if (pageSize is not (0 or 10 or 20 or 50 or 100)) pageSize = 0;
+        return new(key, sort, sort.Length > 0 && (saved?.SortDescending ?? false), chosen, pageSize);
     }
 
     private static void Validate(PageListPreference page)
@@ -116,7 +126,8 @@ public sealed class ListLayoutStore(string directory)
             || page.Columns.Select(column => column.Id).Distinct(StringComparer.Ordinal).Count() != page.Columns.Length
             || page.Columns.Any(column => !IsColumnId(column.Id))
             || page.SortColumn.Length > 0 && !IsColumnId(page.SortColumn)
-            || page.Columns.All(column => !column.Visible))
+            || page.Columns.All(column => !column.Visible)
+            || page.PageSize is not (0 or 10 or 20 or 50 or 100))
             throw new InvalidDataException("Érvénytelen listaoszlop.");
     }
 

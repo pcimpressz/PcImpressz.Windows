@@ -156,7 +156,9 @@ internal static class CatalogTests
             var products = probe.Pages.Single(page => page.Id == "products");
             Check.True(products.Columns.Single(column => column.Id == "quantity").Visible);
             Check.True(products.Columns.Single(column => column.Id == "sku").Visible);
-            Check.True(!products.Columns.Single(column => column.Id == "barcode").Visible);
+            Check.True(products.Columns.Single(column => column.Id == "saleNet").Visible);
+            Check.True(products.Columns.Single(column => column.Id == "saleGross").Visible);
+            Check.True(products.Columns.Single(column => column.Id == "barcode").Visible);
             return Task.CompletedTask;
         });
     }

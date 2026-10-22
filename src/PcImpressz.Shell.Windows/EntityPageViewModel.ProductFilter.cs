@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
+using PcImpressz.Shell.Customization;
 
 namespace PcImpressz.Shell.Windows;
 
@@ -14,7 +15,12 @@ public sealed partial class EntityPageViewModel
     private readonly Dictionary<string, string> _columnText = new(StringComparer.Ordinal);
     private readonly List<CategoryPick> _categories = [];
     private string[]? _categoryCodes;
+    private bool _noCategoryMatch;
     private string _categoryLabel = "";
+    private TypedSearch? _columnTyping;
+    private TypedSearch? _categoryTyping;
+    private string _pendingColumn = "";
+    private string _pendingText = "";
     private string _categoryLookup = "";
     private decimal? _minPrice, _maxPrice, _minStock, _maxStock;
     private string _priceFrom = "", _priceTo = "", _stockFrom = "", _stockTo = "";
@@ -27,7 +33,7 @@ public sealed partial class EntityPageViewModel
     public string PriceToText { get => _priceTo; set { _priceTo = value; Changed(); } }
     public string StockFromText { get => _stockFrom; set { _stockFrom = value; Changed(); } }
     public string StockToText { get => _stockTo; set { _stockTo = value; Changed(); } }
-    public string CategoryLookup { get => _categoryLookup; set { _categoryLookup = value; Changed(); RefreshCategoryChoices(); } }
+    public string CategoryLookup { get => _categoryLookup; set { _categoryLookup = value; Changed(); RefreshCategoryChoices(); if (ListSearch.Live) ScheduleCategory(); } }
     public ICommand ToggleFilterPanelCommand => new RelayCommand(() => FilterPanelOpen = !FilterPanelOpen);
     public ICommand ApplyDetailFilterCommand => new RelayCommand(ApplyDetailFilter);
     public ICommand ClearProductFiltersCommand => new RelayCommand(() => ClearProductFilters(reload: true));
@@ -50,14 +56,25 @@ public sealed partial class EntityPageViewModel
         }
     }
 
-    public void ApplyColumnText(string id, string text)
+    public void ScheduleColumnText(string id, string text)
+    {
+        if (!ListSearch.Live) return;
+        _pendingColumn = id; _pendingText = text;
+        (_columnTyping ??= new TypedSearch(() => ApplyColumnText(_pendingColumn, _pendingText, refreshHeaders: false), _shutdown)).Schedule();
+    }
+
+    public void RefreshFilterHeaders() => TouchFilters(headers: true, reload: false);
+
+    public void ApplyColumnText(string id, string text, bool refreshHeaders = true)
     {
         text = text.Trim();
         if (text.Length > 80 || text.Any(char.IsControl) || text.Contains('"'))
         { Message = "A keresőszó legfeljebb 80 karakter, idézőjel nélkül."; return; }
+        var current = _columnText.GetValueOrDefault(id) ?? "";
+        if (current == text) return;
         if (text.Length == 0) _columnText.Remove(id);
         else _columnText[id] = text;
-        ReloadFilters();
+        ReloadFilters(refreshHeaders);
     }
 
     public void ClearCategory()
@@ -80,8 +97,47 @@ public sealed partial class EntityPageViewModel
                 if (codes.Contains(item.ParentCode) && codes.Add(item.Code)) grew = true;
         }
         _categoryCodes = codes.Select(code => code.ToUpperInvariant()).ToArray();
+        _noCategoryMatch = false;
         _categoryLabel = category.Name;
         ReloadFilters();
+    }
+
+    private void ScheduleCategory() =>
+        (_categoryTyping ??= new TypedSearch(ApplyTypedCategory, _shutdown)).Schedule();
+
+    private void ApplyTypedCategory()
+    {
+        var needle = _categoryLookup.Trim();
+        if (needle.Length == 0)
+        {
+            if (_categoryCodes is null && !_noCategoryMatch) return;
+            _categoryCodes = null; _noCategoryMatch = false; _categoryLabel = "";
+            ReloadFilters(refreshHeaders: false);
+            return;
+        }
+        var matches = _categories.Where(item => item.Name.Contains(needle, StringComparison.OrdinalIgnoreCase)
+            || item.Code.Contains(needle, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length == 0)
+        {
+            if (_noCategoryMatch && _categoryLabel == needle) return;
+            _categoryCodes = null; _noCategoryMatch = true; _categoryLabel = needle;
+            ReloadFilters(refreshHeaders: false);
+            return;
+        }
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var match in matches) codes.Add(match.Code);
+        var grew = true;
+        while (grew)
+        {
+            grew = false;
+            foreach (var item in _categories)
+                if (codes.Contains(item.ParentCode) && codes.Add(item.Code)) grew = true;
+        }
+        var next = codes.Select(code => code.ToUpperInvariant()).OrderBy(code => code, StringComparer.Ordinal).ToArray();
+        var label = matches.Length == 1 ? matches[0].Name : needle;
+        if (!_noCategoryMatch && _categoryLabel == label && _categoryCodes is not null && _categoryCodes.SequenceEqual(next)) return;
+        _categoryCodes = next; _noCategoryMatch = false; _categoryLabel = label;
+        ReloadFilters(refreshHeaders: false);
     }
 
     public async Task LoadCategoryChoicesAsync()
@@ -118,29 +174,29 @@ public sealed partial class EntityPageViewModel
 
     private void ClearProductFilters(bool reload = false)
     {
-        _columnText.Clear(); _categoryCodes = null; _categoryLabel = ""; _categoryLookup = "";
+        _columnText.Clear(); _categoryCodes = null; _noCategoryMatch = false; _categoryLabel = ""; _categoryLookup = "";
         _minPrice = _maxPrice = _minStock = _maxStock = null;
         _priceFrom = _priceTo = _stockFrom = _stockTo = "";
         if (_filter != "all") { _filter = "all"; Changed(nameof(Filter)); }
         Changed(nameof(PriceFromText)); Changed(nameof(PriceToText)); Changed(nameof(StockFromText)); Changed(nameof(StockToText)); Changed(nameof(CategoryLookup));
         RefreshCategoryChoices();
         if (reload) ReloadFilters();
-        else TouchFilters();
+        else TouchFilters(headers: true, reload: false);
     }
 
-    private void ReloadFilters()
+    private void ReloadFilters(bool refreshHeaders = true)
     {
-        TouchFilters();
+        TouchFilters(refreshHeaders, reload: false);
         _page = 0;
         _ = LoadAsync();
     }
 
-    private void TouchFilters()
+    private void TouchFilters(bool headers, bool reload)
     {
-        _columnFilterRevision++;
-        Changed(nameof(ColumnFilterRevision));
+        if (headers) { _columnFilterRevision++; Changed(nameof(ColumnFilterRevision)); }
         Changed(nameof(ActiveFiltersLabel));
         Changed(nameof(AppliedSearchLabel));
+        if (reload) { _page = 0; _ = LoadAsync(); }
     }
 
     private string ComposeColumnSearch()
