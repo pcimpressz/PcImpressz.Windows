@@ -19,7 +19,7 @@ internal sealed partial class ReceivingPageViewModel
     private void ConvertToManual()
     {
         if(!IsEditable)return;
-        _editorKind="manual";_convertToManual=true;Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));Changed(nameof(CanClassify));Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));NotifyEditorKind();PreparationStatus="Kézi bevételezés: az eredeti NAV-adatoktól eltérő szerkesztés.";
+        foreach(var line in Lines){line.SourceNetAmount=null;line.SourceVatAmount=null;line.SourceGrossAmount=null;}_editorKind="manual";_convertToManual=true;Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));Changed(nameof(CanClassify));Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));NotifyEditorKind();PreparationStatus="Kézi bevételezés: az eredeti NAV-adatoktól eltérő szerkesztés.";
     }
     private void SchedulePreparation()
     {

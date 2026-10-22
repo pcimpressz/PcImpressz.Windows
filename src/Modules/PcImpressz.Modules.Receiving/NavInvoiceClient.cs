@@ -31,7 +31,7 @@ public static class NavInvoiceClient
     {
         if(string.IsNullOrWhiteSpace(input.Number)||input.Number.Length>100||input.BatchIndex is <1)throw new ArgumentException("Érvénytelen számlaazonosító.");
         var supplier=NavTaxpayerClient.TaxNumber(input.SupplierTaxNumber);var key=new XElement(Api+"invoiceNumberQuery",new XElement(Api+"invoiceNumber",input.Number),new XElement(Api+"invoiceDirection","INBOUND"));if(input.BatchIndex is int batch)key.Add(new XElement(Api+"batchIndex",batch));key.Add(new XElement(Api+"supplierTaxNumber",supplier));
-        var response=await Request(secrets,"queryInvoiceData",new[]{key},ct,client);var operation=Value(response,"invoiceOperation");if(operation.Length>0&&operation!="CREATE")throw new ArgumentException("Módosító vagy érvénytelenített számla külön ellenőrzést igényel.");var encoded=Value(response,"invoiceData");if(encoded.Length==0)throw new ArgumentException("A NAV nem adott vissza számlaadatot.");
+        var response=await Request(secrets,"queryInvoiceData",new[]{key},ct,client);var operation=Value(response,"invoiceOperation");if(operation.Length>0&&operation is not ("CREATE" or "MODIFY" or "STORNO"))throw new ArgumentException("Ismeretlen NAV-számlaművelet.");var encoded=Value(response,"invoiceData");if(encoded.Length==0)throw new ArgumentException("A NAV nem adott vissza számlaadatot.");
         byte[] bytes;try{bytes=Convert.FromBase64String(encoded);}catch(FormatException){throw new ArgumentException("Hibás NAV-számlakódolás.");}
         var compressed=Value(response,"compressedContentIndicator");if(compressed is not ("true" or "false" or "1" or "0"))throw new ArgumentException("Hiányzó NAV-tömörítési jelző.");
         if(compressed is "true" or "1"){using var source=new MemoryStream(bytes);using var gzip=new GZipStream(source,CompressionMode.Decompress);bytes=await ReadLimited(gzip,ct,4*1024*1024);}
@@ -39,8 +39,7 @@ public static class NavInvoiceClient
         var text=Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');var document=Parse(text);if(document.Root?.Name.LocalName!="InvoiceData")throw new ArgumentException("A letöltött XML nem NAV-számla.");
         if(Value(document,"invoiceNumber")!=input.Number||NavTaxpayerClient.TaxNumber(Required(document,"supplierTaxNumber").Replace("\n","").Replace("\t",""))!=supplier)throw new ArgumentException("A letöltött számla nem a kiválasztott bizonylat.");
         var buyer=document.Descendants().FirstOrDefault(e=>e.Name.LocalName=="customerTaxNumber");var taxpayer=buyer?.Descendants().FirstOrDefault(e=>e.Name.LocalName=="taxpayerId")?.Value.Trim();if(taxpayer!=NavTaxpayerClient.TaxNumber(secrets.TaxNumber))throw new ArgumentException("A számla vevőjének adószáma nem a kiválasztott cégé.");
-        if(document.Descendants().Any(e=>e.Name.LocalName=="invoiceReference"))throw new ArgumentException("Módosító vagy sztornó számlát nem könyvelünk normál bevételezésként. Külön ellenőrzést igényel.");
-        return ReceivingImport.FromNav(text);
+        var parsed=ReceivingImport.FromNav(text);return parsed with{Operation=operation.Length>0?operation:parsed.Operation};
     }
     private static async Task<XDocument> Request(NavConnectionSecrets secrets,string operation,IEnumerable<XElement> body,CancellationToken ct,HttpClient? client)
     {

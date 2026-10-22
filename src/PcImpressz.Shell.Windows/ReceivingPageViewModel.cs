@@ -31,8 +31,9 @@ public sealed class ReceiptRow
         SourceLabel = json.GetProperty("sourceLabel").GetString() ?? "";
         Status = json.GetProperty("status").GetString() ?? "";
         StatusLabel = json.GetProperty("statusLabel").GetString() ?? "";
-        Net = MoneyDisplay.Format(json.GetProperty("net").GetDecimal());
+        Net = MoneyDisplay.Format(json.GetProperty("net").GetDecimal());Gross=json.TryGetProperty("gross",out var gross)?MoneyDisplay.Format(gross.GetDecimal()):"";SupplierTaxId=GetText(json,"supplierTaxId");
     }
+    private static string GetText(JsonElement row,string key)=>row.TryGetProperty(key,out var value)?value.GetString()??"":"";
     public Guid Id { get; }
     public long Version { get; }
     public string Number { get; }
@@ -40,12 +41,14 @@ public sealed class ReceiptRow
     public string IssuedOn { get; }
     public string SourceLabel { get; }
     public string Net { get; }
+    public string Gross {get;}
+    public string SupplierTaxId {get;}
     public string Status { get; }
     public string StatusLabel { get; }
     public object? this[string key] => key switch
     {
         "number" => Number, "supplierName" => SupplierName, "issuedOn" => IssuedOn,
-        "sourceLabel" => SourceLabel, "net" => Net, "statusLabel" => StatusLabel, _ => ""
+        "sourceLabel" => SourceLabel, "net" => Net,"gross"=>Gross,"supplierTaxId"=>SupplierTaxId, "statusLabel" => StatusLabel, _ => ""
     };
 }
 
@@ -71,9 +74,9 @@ internal sealed partial class LineEditor : Observable
     public string Sku { get => _sku; set { _sku = value; Changed(); Touch();SyncProductField("sku",value); } }
     public string Barcode { get => _barcode; set { _barcode = value; Changed(); Touch();SyncProductField("barcode",value); } }
     public string UnitCode { get => _unit; set { _unit = value; Changed(); Touch(); } }
-    public string QuantityText { get => _quantity; set { _quantity = value; Changed(); Changed(nameof(SuggestedSale)); Touch(); } }
-    public string PriceText { get => _price; set { _price = value; Changed(); Changed(nameof(SuggestedSale)); Touch(); } }
-    public string VatText { get => _vat; set { _vat = value; Changed(); Changed(nameof(SuggestedSale)); Touch(); } }
+    public string QuantityText { get => _quantity; set { _quantity = value; Changed(); Changed(nameof(SuggestedSale));Changed(nameof(StockEffect)); Touch(); } }
+    public string PriceText { get => _price; set { _price = value; Changed(); Changed(nameof(SuggestedSale));Changed(nameof(StockEffect)); Touch(); } }
+    public string VatText { get => _vat; set { _vat = value; Changed(); Changed(nameof(SuggestedSale));Changed(nameof(StockEffect)); Touch(); } }
     public string SearchText { get => _search; set { _search = value; Changed(); } }
     public string MatchLabel { get; private set; } = "";
     public string SuggestedSale => "Árjavaslat: nettó beszerzés × (1 + haszonkulcs / 100) × (1 + eladási áfa / 100).";
@@ -182,7 +185,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public string Message { get => _message; private set { _message = value; Changed(); } }
     public string CountsLabel { get => _counts; private set { _counts = value; Changed(); } }
     public string MatchCount => _matches + " db találat";
-    public string Search { get => _search; set { if (_search == value) return; _search = value;_receiptPage=0; Changed(); _typed.Schedule(); } }
+    public string Search { get => _search; set { if (_search == value) return; _search = value;_receiptPage=0; Changed(); if(PcImpressz.Shell.Customization.InvoiceListPreferences.LiveFiltering)_typed.Schedule(); } }
     public string Filter { get => _filter; set { if (string.IsNullOrEmpty(value) || _filter == value) return; _filter = value;_receiptPage=0; Changed(); if (!_populating) _ = LoadAsync(); } }
     public string Number { get => _number; set { if(!_populating&&IsNavReceipt)return;_number = value; Changed(); MarkDirty(); Changed(nameof(EditorTitle)); } }
     public string IssuedOn { get => _issued; set { if(!_populating&&IsNavReceipt)return;_issued = value; Changed(); MarkDirty(); } }
@@ -264,7 +267,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
             var query = new
             {
                 search = Search, filter = Filter, page = _receiptPage, pageSize = InvoicePageSize,
-                sort = SortColumn, descending = SortDescending
+                sort = SortColumn, descending = SortDescending,supplier=_invoiceFilters.Supplier,dateFrom=_invoiceFilters.From,dateTo=_invoiceFilters.To,minGross=_invoiceFilters.MinGross,maxGross=_invoiceFilters.MaxGross,columns=_invoiceFilters.Columns
             };
             var result = await ModuleAsync("receiving", "list", query);
             if (!_loader.IsCurrent(generation)) return;
@@ -469,7 +472,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     {
         _populating = true;
         if(!preservePdf)ClearPdfPreview();
-        _navPreview=null;_receiptSource=Get(detail,"source");_editorKind=_receiptSource=="nav"?"nav":"manual";
+        _navPreview=null;_receiptPosted=detail.TryGetProperty("stockPosted",out var posted)&&posted.GetBoolean();_receiptSource=Get(detail,"source");_editorKind=_receiptSource=="nav"?"nav":"manual";
         _editId = detail.GetProperty("id").GetGuid();
         _version = detail.GetProperty("version").GetInt64();
         _status = detail.GetProperty("status").GetString() ?? "uj";
@@ -500,6 +503,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
                 line.QuantityText = row.GetProperty("quantity").GetDecimal().ToString(CultureInfo.GetCultureInfo("hu-HU"));
                 line.PriceText = row.GetProperty("netUnitPrice").GetDecimal().ToString(CultureInfo.GetCultureInfo("hu-HU"));
                 line.VatText = row.GetProperty("vatRate").GetDecimal().ToString("0", CultureInfo.InvariantCulture);
+                line.SourceNetAmount=row.TryGetProperty("sourceNetAmount",out var sourceNet)&&sourceNet.ValueKind==JsonValueKind.Number?sourceNet.GetDecimal():null;line.SourceVatAmount=row.TryGetProperty("sourceVatAmount",out var sourceVat)&&sourceVat.ValueKind==JsonValueKind.Number?sourceVat.GetDecimal():null;line.SourceGrossAmount=row.TryGetProperty("sourceGrossAmount",out var sourceGross)&&sourceGross.ValueKind==JsonValueKind.Number?sourceGross.GetDecimal():null;
             });
             line.StockItem=!row.TryGetProperty("stockItem",out var stock)||stock.GetBoolean();
             line.ShowMatch(row.TryGetProperty("matchLabel",out var label)?label.GetString()??"":Get(row,"match"));
@@ -507,7 +511,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         }
         _populating = false; IsDirty = false;
         Changed(nameof(Number)); Changed(nameof(IssuedOn)); Changed(nameof(DueOn)); Changed(nameof(Notes)); Changed(nameof(Warehouse));
-        Changed(nameof(SelectedSupplier)); Changed(nameof(NavSupplierHint)); Changed(nameof(NetLabel)); Changed(nameof(GrossLabel)); Changed(nameof(EditorTitle));
+        Changed(nameof(SelectedSupplier)); Changed(nameof(NavSupplierHint)); Changed(nameof(ExcludedInvoiceLines));Changed(nameof(NetLabel)); Changed(nameof(GrossLabel)); Changed(nameof(EditorTitle));
         NotifyEditorKind();Changed(nameof(IsEditable)); Changed(nameof(IsLocked)); Changed(nameof(CanPickSupplier)); Changed(nameof(CanClassify));
     }
     private void BeginManual()
@@ -553,12 +557,12 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         foreach (var line in Lines)
         {
             if (!TryMoney(line.QuantityText, out var quantity) || !TryMoney(line.PriceText, out var price) || !TryMoney(line.VatText, out var vat)) continue;
-            var row = decimal.Round(quantity * price, 2, MidpointRounding.AwayFromZero);
-            net += row; gross += row + decimal.Round(row * vat / 100m, 2, MidpointRounding.AwayFromZero);
+            var row = line.SourceNetAmount??decimal.Round(quantity * price, 2, MidpointRounding.AwayFromZero);
+            net += row; gross += line.SourceGrossAmount??row + (line.SourceVatAmount??decimal.Round(row * vat / 100m, 2, MidpointRounding.AwayFromZero));
         }
         _net = MoneyDisplay.Format(net);
         _gross = MoneyDisplay.Format(gross);
-        Changed(nameof(NetLabel)); Changed(nameof(GrossLabel));
+        Changed(nameof(ExcludedInvoiceLines));Changed(nameof(NetLabel)); Changed(nameof(GrossLabel));
     }
     private object LinePayload(LineEditor line) => new
     {

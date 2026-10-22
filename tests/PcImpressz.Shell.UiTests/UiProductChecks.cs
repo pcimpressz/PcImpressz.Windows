@@ -30,7 +30,9 @@ internal static class UiProductChecks
             seen.SetResult(); await release.Task.WaitAsync(cancel.Token);
             await LocalProtocol.WriteAsync(first, new LocalResponse(true, JsonSerializer.SerializeToElement(new { rows = Array.Empty<object>(), total = 0 })), cancel.Token);
         }, cancel.Token);
-        var definition = new EntityPageDescriptor("products", "catalog", "Terméktörzs", "", "", [], [new("name", "Név")], new("list", "save", "archive", "export"));
+        // Products now search through column filters. Exercise the still-supported
+        // general search on partners to verify the delayed-response contract.
+        var definition = new EntityPageDescriptor("partners", "partners", "Partnerek", "", "", [], [new("name", "Név")], new("list", "save", "archive", "export"));
         var vm = new EntityPageViewModel(definition, new HostConnection(directory, null), () => Guid.NewGuid(), cancel.Token, new ListLayoutStore(directory));
         void CancelTyping() => typeof(EntityPageViewModel).GetField("_typed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(vm)!.GetType().GetMethod("CancelPending")!.Invoke(typeof(EntityPageViewModel).GetField("_typed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(vm), null);

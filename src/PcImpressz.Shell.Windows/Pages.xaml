@@ -400,6 +400,7 @@
         </StackPanel>
       </Expander>
       <Expander Header="Számlák · megjelenítés" Margin="0,0,0,18"><Border Style="{StaticResource Card}"><StackPanel>
+              <CheckBox Content="Bejövő számlák: élő szűrés gépelés közben" IsChecked="{Binding InvoiceLiveFilter, Mode=TwoWay}" Margin="0,0,0,10"/>
               <TextBlock Text="Számlák száma egy listaoldalon"/>
               <ComboBox ItemsSource="{Binding InvoicePageSizes}" SelectedItem="{Binding InvoicePageSize, Mode=TwoWay}" Width="130" HorizontalAlignment="Left"/>
               <TextBlock Text="Címkenyomtató: Niimbot D110-M Bluetooth vagy Windows-nyomtatónév (üresen választó)" Margin="0,8,0,0"/>

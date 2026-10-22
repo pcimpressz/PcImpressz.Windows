@@ -22,6 +22,7 @@ public static class BuiltInSkins
 
 public sealed record AppearancePreferences
 {
+    public bool InvoiceLiveFilter {get;init;}=true;
     public int InvoicePageSize {get;init;}=20;
     public bool SearchOnEnter { get; init; }
     public string LabelPrinter {get;init;}="Niimbot D110-M Bluetooth";
