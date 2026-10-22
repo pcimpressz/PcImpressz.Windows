@@ -8,7 +8,7 @@
       "pcimpressz.shell.customization": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.16, )"
+          "PcImpressz.Contracts": "[0.4.17, )"
         }
       }
     }

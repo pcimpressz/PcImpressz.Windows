@@ -189,7 +189,7 @@ public sealed class EntityPageView : UserControl
             listPanel.Visibility = editorOnly ? Visibility.Collapsed : Visibility.Visible;
             editorBorder.Visibility = ViewMode == "list" ? Visibility.Collapsed : Visibility.Visible;
             var partner=DataContext is EntityPageViewModel {IsCompactMaster:true};
-            var narrow = separate || partner || ActualWidth < 980;
+            var narrow = separate || partner || body.ActualWidth < 980;
             editorBorder.MaxWidth=partner?680:DataContext is EntityPageViewModel pageVm&&pageVm.Definition.ModuleId=="catalog"&&pageVm.Definition.Id=="products"?900:680;
             editorBorder.HorizontalAlignment=HorizontalAlignment.Stretch;editorBorder.VerticalAlignment=VerticalAlignment.Top;
             Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,editorOnly ? 0 : narrow ? 1 : 0);
@@ -198,7 +198,7 @@ public sealed class EntityPageView : UserControl
             grid.MinHeight = ViewMode == "list" ? 480 : 360; grid.MaxHeight = ViewMode == "list" ? 680 : 480;
             if(partner)
             {
-                var sideBySide=ActualWidth>=1000&&ViewMode!="list";
+                var sideBySide=body.ActualWidth>=1000&&ViewMode!="list";
                 body.ColumnDefinitions[0].Width=new(1.35,GridUnitType.Star);body.ColumnDefinitions[1].Width=new(1,GridUnitType.Star);
                 Grid.SetColumn(listPanel,0);Grid.SetRow(listPanel,0);Grid.SetColumnSpan(listPanel,2);
                 Grid.SetRow(editorBorder,1);Grid.SetColumn(editorBorder,0);Grid.SetColumnSpan(editorBorder,sideBySide?1:2);editorBorder.Margin=new(0,20,sideBySide?20:0,0);
@@ -208,7 +208,9 @@ public sealed class EntityPageView : UserControl
             search.Width = ViewMode == "list" ? 360 : 230;
         };
         SizeChanged += (_, _) => _applyLayout();
+        body.SizeChanged += (_, _) => _applyLayout();
         _applyLayout();
+        Content=ArrangeableWorkspace.Split(root,body,"workspace","Lista és adatlap");
     }
     private WrapPanel cardHost = null!;
     private StackPanel sectionHost = null!;

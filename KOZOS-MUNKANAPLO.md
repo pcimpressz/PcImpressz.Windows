@@ -287,3 +287,7 @@ A Bevételezés menü Számlákra változott, bejövő és kimenő nézettel. A 
 ## 2026-10-22 – 0.4.16 csomagellenőrzés és számlázási beállítások
 
 Az átadott fejlesztési ZIP elkülönített példányon, javított alkalmazó scripttel beépítve. Saját SQL-alapú kimenő lista, külön NAV-egyeztetés, pénznemenkénti összesítés. Admin szolgáltatóválasztás és több számlatömb előtaggal, tervezett kezdősorszámmal, alapértelmezéssel. Egyetlen DPAPI Bizonylat-kulcstároló. API-adapter tartós ismétlésvédelemmel, hiányos/eltérő összeg elutasításával, de normál alkalmazási úton a valódi kiállítás még tiltva marad. POS bekötés, tesztcéges próba és teljes API-referencia igazolása következő fázis. 187/187 üzleti és 66/66 felületi teszt sikeres; kiadási csomagban 5 aktív 0.4.16 modul. Élő számla, e-mail, éles NAV-művelet nem történt. Részletek: docs/KIMENO-SZAMLA-0.4.16.md.
+
+## 2026-10-22 – 0.4.17 admin panelrendező
+
+Közös admin panelkeret: egérrel mozgatás, méretezés, adaptív tördelés, céges SQL nézetmentés, verzióütközés-védelem, legutóbbi tíz mentés, Mégse/alapnézet/előző mentés. Fő panelcsoportok: bejövő és kimenő számlák, partnerek, termékek, eladás és készlet. Kompakt bevételezés két oszloppal és lenyitható tételrészletekkel. A rendezés megőrzi az üzleti piszkozatot; mentés csak hitelesített adminnak. 189/189 üzleti és 69/69 WPF ellenőrzés sikeres, külön görgetési próbával. Számlakiállítás/API-élesítés nem történt. Részletek: docs/ADMIN-PANELRENDEZO.md.

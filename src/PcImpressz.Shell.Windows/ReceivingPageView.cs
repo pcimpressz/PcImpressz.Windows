@@ -20,8 +20,8 @@ public sealed class ReceivingPageView : UserControl
         root.Children.Add(tabs);
         var incoming=new StackPanel();
         incoming.SetBinding(VisibilityProperty,new Binding("IsIncoming"){Converter=new BooleanToVisibilityConverter()});
-        incoming.Children.Add(Home());incoming.Children.Add(Editor());root.Children.Add(incoming);
-        root.Children.Add(Outgoing());
+                var incomingWorkspace=new ArrangeableWorkspace("incoming");incomingWorkspace.AddPanel("list","Bejövő számlák listája",(FrameworkElement)Home());incomingWorkspace.AddPanel("nav","NAV-lekérés és import",(FrameworkElement)Intake());incomingWorkspace.AddPanel("editor","Számlabevételezés",(FrameworkElement)Editor(),940);incoming.Children.Add(incomingWorkspace);root.Children.Add(incoming);
+        var outgoingWorkspace=new ArrangeableWorkspace("outgoing");outgoingWorkspace.SetBinding(VisibilityProperty,new Binding("IsOutgoing"){Converter=new BooleanToVisibilityConverter()});outgoingWorkspace.AddPanel("list","Kimenő számlák",(FrameworkElement)Outgoing());root.Children.Add(outgoingWorkspace);
         Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         DataContextChanged += (_, _) => Hook();
     }
@@ -37,7 +37,7 @@ public sealed class ReceivingPageView : UserControl
         modes.Children.Add(Button("PDF alapján rögzítés", "PdfCommand"));
         modes.Children.Add(Button("Excel / CSV / XML import", "ImportCommand"));
         panel.Children.Add(modes);
-        panel.Children.Add(Intake());
+
         panel.Children.Add(Bound(Muted(""), "CountsLabel"));
         var tools = new WrapPanel();
         var search = Input(); search.Width = 240; search.SetBinding(TextBox.TextProperty, new Binding("Search") { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
@@ -126,11 +126,9 @@ public sealed class ReceivingPageView : UserControl
         var supplierButton = Button("Új szállító", "NewSupplierCommand");
         supplierButton.SetBinding(VisibilityProperty, new Binding("IsEditable") { Converter = new BooleanToVisibilityConverter() });
         panel.Children.Add(supplierButton);
-        panel.Children.Add(Labeled("Számlaszám", "Number"));
-        panel.Children.Add(Labeled("Kelt", "IssuedOn"));
-        panel.Children.Add(Labeled("Fizetési határidő", "DueOn"));
-        panel.Children.Add(Labeled("Raktár", "Warehouse"));
-        panel.Children.Add(Labeled("Megjegyzés", "Notes"));
+        var mainFields=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};mainFields.Children.Add(Labeled("Számlaszám","Number"));mainFields.Children.Add(Labeled("Kelt","IssuedOn"));panel.Children.Add(mainFields);
+        var extraFields=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};extraFields.Children.Add(Labeled("Fizetési határidő","DueOn"));extraFields.Children.Add(Labeled("Raktár","Warehouse"));
+        var extra=new StackPanel();extra.Children.Add(extraFields);extra.Children.Add(Labeled("Megjegyzés","Notes"));panel.Children.Add(new Expander{Header="További számlaadatok és megjegyzés",Content=extra,Margin=new(0,0,0,10)});
         panel.Children.Add(Text("Tételek", 16, true));
         panel.Children.Add(_lines);
         var add = Button("Új tételsor", "AddLineCommand");
@@ -193,7 +191,11 @@ public sealed class ReceivingPageView : UserControl
     {
         _lines.Children.Clear();
         if (_page is null) return;
-        foreach (var line in _page.Lines) _lines.Children.Add(new LineCard(line));
+        foreach (var line in _page.Lines)
+        {
+            var header=new WrapPanel();foreach(var path in new[]{"Name","QuantityText","PriceText","MatchLabel"}){var label=new TextBlock{Margin=new(0,0,16,0),FontWeight=path=="Name"?FontWeights.SemiBold:FontWeights.Normal};label.SetBinding(TextBlock.TextProperty,new Binding(path){StringFormat=path=="QuantityText"?"Mennyiség: {0}":path=="PriceText"?"Nettó egységár: {0} Ft":null});if(path=="Name"){label.MaxWidth=360;label.TextWrapping=TextWrapping.Wrap;}header.Children.Add(label);}
+            var row=new Expander{DataContext=line,Header=header,Content=new LineCard(line),IsExpanded=string.IsNullOrWhiteSpace(line.Name),Margin=new(0,0,0,6)};_lines.Children.Add(row);
+        }
     }
     private static Button Classify(string content, string command)
     {

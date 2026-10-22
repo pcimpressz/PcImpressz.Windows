@@ -79,12 +79,17 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
             "ui.auth.login" => administration.Login(Read<UiLogin>(), sid),
             "ui.auth.session" => administration.Authenticate(company, request.SessionToken, sid),
             "ui.users.list" => administration.ListUsers(company, request.SessionToken ?? "", sid),
+            "ui.workspace.read" => ReadWorkspace(),
+            "ui.workspace.save" => SaveWorkspace(),
             "ui.layout.read" => ReadLayout(),
             "ui.layout.save" => administration.Save(Read<UiLayoutSave>(), Page(), sid),
             "ui.layout.restore" => administration.Restore(Read<UiLayoutRestore>(), Page(), sid),
             _ => ExecuteOther()
         };
         return new(true, JsonSerializer.SerializeToElement(value));
+        void WorkspacePage(string key){if(!runtime.Pages.Any(p=>p.ModuleId+"."+p.Id==key))throw new ArgumentException("Ismeretlen munkafelület.");}
+        object ReadWorkspace(){administration.Authenticate(company,request.SessionToken,sid);var input=Read<UiWorkspaceRequest>();WorkspacePage(input.PageKey);return administration.ReadWorkspace(input);}
+        object SaveWorkspace(){var input=Read<UiWorkspaceSave>() with{Token=request.SessionToken??""};WorkspacePage(input.PageKey);return administration.SaveWorkspace(input,sid);}
         object ReadLayout() { administration.Authenticate(company, request.SessionToken, sid); return administration.Read(company, Page()); }
         object ExecuteOther()
         {

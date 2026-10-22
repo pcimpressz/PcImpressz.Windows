@@ -63,6 +63,7 @@ internal static class Program
                 ThemeManager.Apply(skin,new AppearancePreferences{SkinId=skin.Id});
                 UiProductChecks.Render(output,skin.Id);
                 AdminUiChecks.Render(output,skin.Id);
+                WorkspacePanelUiChecks.Render(output,skin.Id);
                 WorkflowUiChecks.Render(output,skin.Id);
                 RoleUiChecks.Render(output,skin.Id);
                 DemoUiChecks.Render(output,skin.Id);
@@ -92,7 +93,7 @@ internal static class Program
             }
             PresentationTraceSources.DataBindingSource.Flush();
             if(bindingErrors.ToString().Length>0)throw new InvalidOperationException(bindingErrors.ToString());
-            Console.WriteLine("66/66 WPF renders passed; no binding errors.");return 0;
+            Console.WriteLine("69/69 WPF renders passed; no binding errors.");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }

@@ -70,7 +70,7 @@ internal sealed class OperationsPageView:UserControl
             details.SetResourceReference(Control.BackgroundProperty,"ElevatedBrush");details.SetResourceReference(Control.ForegroundProperty,"TextBrush");details.SetBinding(TextBox.TextProperty,new Binding("Details"){Mode=BindingMode.OneWay});root.Children.Add(details);
         }
         root.Children.Add(Button(page.IsInventory?"Kijelölt kézi mozgás visszafordítása":"Kijelölt eladás visszafordítása","ReverseCommand"));
-        Content=root;
+        Content=ArrangeableWorkspace.Split(root,card,"editor","Készletművelet");
     }
     private static DataGrid Grid(string source,string selected)
     {
