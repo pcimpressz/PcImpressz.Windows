@@ -155,21 +155,17 @@ public sealed class ReceivingPageView : UserControl
     {
         var panel=new StackPanel();panel.SetBinding(VisibilityProperty,new Binding("IsOutgoing"){Converter=new BooleanToVisibilityConverter()});
         panel.Children.Add(Text("Kimenő számlák",22,true));
-        panel.Children.Add(Muted("A kiválasztott céged által kiállított, NAV-nál nyilvántartott számlák. A helyi eladási bizonylatok az Eladás menüben találhatók. Itt nem történik új számlakiállítás vagy készletmozgás."));
+        panel.Children.Add(Muted("Elsődleges forrás: a PC-Impressz saját adatbázisa. A Bizonylat API állítja ki a számlát; a NAV csak külön egyeztetés."));
         var dates=new WrapPanel();dates.Children.Add(Text("Időszak",14,false));
-        foreach(var path in new[]{"OutgoingFrom","OutgoingTo"})
-        {
-            var date=new DatePicker{Width=160,Margin=new(10,0,10,12)};date.SetBinding(DatePicker.SelectedDateProperty,new Binding(path){Mode=BindingMode.TwoWay});date.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(date);
-        }
-        dates.Children.Add(Primary("Kimenő számlák lekérése","FetchOutgoingCommand"));panel.Children.Add(dates);
-        panel.Children.Add(Bound(Muted(""),"OutgoingMessage"));
-        var grid=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=280,MaxHeight=560,HeadersVisibility=DataGridHeadersVisibility.Column};
-        grid.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingInvoices");
-        foreach(var (title,path) in new[]{("Kelt","IssuedOn"),("Számlaszám","Number"),("Vevő","CustomerName"),("Adószám","CustomerTaxNumber"),("Nettó","Net"),("Pénznem","Currency"),("Művelet","Operation")})
-            grid.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="CustomerName"?220:100,Width=path=="CustomerName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path=="Number"?160:120)});
-        panel.Children.Add(grid);
-        var pages=new WrapPanel{Margin=new(0,12,0,0)};pages.Children.Add(Button("Előző oldal","PreviousOutgoingCommand"));pages.Children.Add(Button("Következő oldal","NextOutgoingCommand"));pages.Children.Add(Bound(Muted(""),"OutgoingPageLabel"));panel.Children.Add(pages);
-        return panel;
+        foreach(var path in new[]{"OutgoingFrom","OutgoingTo"}){var date=new DatePicker{Width=150,Margin=new(10,0,10,12)};date.SetBinding(DatePicker.SelectedDateProperty,new Binding(path){Mode=BindingMode.TwoWay});date.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(date);}panel.Children.Add(dates);
+        var filters=new WrapPanel();filters.SetBinding(IsEnabledProperty,"IsNotBusy");var search=Input();search.Width=230;search.SetBinding(TextBox.TextProperty,new Binding("OutgoingSearch"){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged});filters.Children.Add(search);
+        var pay=new ComboBox{Width=160,Margin=new(0,0,10,10),DisplayMemberPath="Label",SelectedValuePath="Value"};pay.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingPaymentOptions");pay.SetBinding(ComboBox.SelectedValueProperty,"OutgoingPayment");filters.Children.Add(pay);
+        var nav=new ComboBox{Width=180,Margin=new(0,0,10,10),DisplayMemberPath="Label",SelectedValuePath="Value"};nav.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingNavOptions");nav.SetBinding(ComboBox.SelectedValueProperty,"OutgoingNavStatus");filters.Children.Add(nav);
+        filters.Children.Add(Primary("Keresés / frissítés","FetchOutgoingCommand"));filters.Children.Add(Button("Szűrők törlése","ClearOutgoingFiltersCommand"));filters.Children.Add(Button("NAV egyeztetés","ReconcileOutgoingCommand"));panel.Children.Add(filters);
+        panel.Children.Add(Bound(Text("",14,true),"OutgoingSummary"));panel.Children.Add(Bound(Muted(""),"OutgoingMessage"));
+        var grid=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=320,MaxHeight=650,HeadersVisibility=DataGridHeadersVisibility.Column};grid.SetBinding(ItemsControl.ItemsSourceProperty,"OutgoingInvoices");
+        foreach(var c in new[]{("Kelt","IssuedOn",105d),("Számlaszám","Number",150d),("Vevő","CustomerName",210d),("Adószám","CustomerTaxNumber",120d),("Fizetés","PaymentMethod",110d),("Határidő","DueOn",105d),("Nettó","Net",110d),("ÁFA","Vat",100d),("Bruttó","Gross",110d),("Pénznem","Currency",80d),("Pénzügy","FinancialStatus",120d),("NAV","NavStatus",130d)})grid.Columns.Add(new DataGridTextColumn{Header=c.Item1,Binding=new Binding(c.Item2),Width=c.Item3});
+        panel.Children.Add(grid);var paging=new WrapPanel{Margin=new(0,12,0,0)};paging.Children.Add(Button("Előző oldal","PreviousOutgoingCommand"));paging.Children.Add(Button("Következő oldal","NextOutgoingCommand"));paging.Children.Add(Bound(Muted(""),"OutgoingPageLabel"));panel.Children.Add(paging);return panel;
     }
     private void Hook()
     {

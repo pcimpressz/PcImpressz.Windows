@@ -37,7 +37,7 @@ public sealed partial class ShellViewModel
             _ = PrepareAuthenticationAsync();
         }
     }
-    public bool WorkspaceIsIdle => !_authBusy && !_maintenanceBusy && !_entityPages.Values.Any(p => p.IsBusy || p.HasUnresolvedOperation);
+    public bool WorkspaceIsIdle => !_billingBusy && !_authBusy && !_maintenanceBusy && !_entityPages.Values.Any(p => p.IsBusy || p.HasUnresolvedOperation);
     public string CompanyMode => SelectedCompany is { IsDemo: true } ? "DEMÓ CÉG · ELKÜLÖNÍTETT ADATOK" : "SAJÁT CÉGES ADATOK";
     public ICommand CreateCompanyCommand { get; private set; } = null!;
 

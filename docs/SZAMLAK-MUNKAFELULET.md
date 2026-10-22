@@ -1,3 +1,5 @@
+A 0.4.16-tól a kimenő lista elsődleges forrása a saját SQL-nyilvántartás; a NAV külön egyeztet. A szolgáltató- és számlatömb-beállítások, valamint a még nem aktivált API-adapter állapota: [0.4.16](KIMENO-SZAMLA-0.4.16.md).
+
 # Számlák munkafelület – 0.4.15
 
 A Bevételezés menü átnevezve Számlákra. A belső receiving modulazonosító, tárolási hely, korábbi számlák és jogosultságok megmaradtak; nem szükséges adatmozgatás vagy új modul megvásárlása.

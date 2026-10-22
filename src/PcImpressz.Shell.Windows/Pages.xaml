@@ -397,6 +397,7 @@
           </Border>
         </StackPanel>
       </Expander>
+      <Expander Header="Számlázás · szolgáltató és számlatömbök" Margin="0,0,0,18"><local:InvoicingSettingsCard Margin="0,16,0,0" IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
       <Expander Header="NAV-kapcsolat" IsExpanded="True" Margin="0,0,0,18">
         <StackPanel>
           <local:NavConnectionCard Margin="0,20,0,0" IsEnabled="{Binding IsCompanyAdmin}" />

@@ -128,7 +128,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 return new(true, JsonSerializer.SerializeToElement(new { change.ModuleId, change.Enabled }));
             case "module.execute":
                 var command = request.Payload.Deserialize<ModuleCommandRequest>() ?? throw new ArgumentException("Hiányzó parancs.");
-                if(command.ModuleId=="receiving"&&command.Command=="nav-store")throw new CommandDeniedException("A NAV-import mentése csak ellenőrzött letöltés után hívható.");
+                if(command.ModuleId=="receiving"&&command.Command is "nav-store" or "outgoing-reconcile-store")throw new CommandDeniedException("A NAV-import mentése csak ellenőrzött letöltés után hívható.");
                 if(command.ModuleId=="receiving"&&command.Command=="seed-demo")throw new CommandDeniedException("A mintaadat-feltöltés csak az admin demócég-műveletén keresztül indítható.");
                 if (!companies.List().Any(c => c.Id == command.CompanyId)) throw new ArgumentException("Ismeretlen cég.");
                 if (!modulesEnabled.IsEnabled(command.ModuleId))
@@ -143,7 +143,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 payload["companyId"] = command.CompanyId;
                 var session=Session(command.CompanyId);
                 // Dossiers expose cross-module history; NAV settings contain local secrets.
-                if ((command.ModuleId=="receiving" && command.Command=="nav-save") || (command.ModuleId=="partners" && command.Command=="dossier") || (command.ModuleId=="catalog"&&command.Command=="products-overview"))
+                if ((command.ModuleId=="receiving" && command.Command is "nav-save" or "bizonylat-save" or "invoicing-settings" or "invoicing-settings-save" or "bizonylat-status" or "outgoing-issue-sale") || (command.ModuleId=="partners" && command.Command=="dossier") || (command.ModuleId=="catalog"&&command.Command=="products-overview"))
                     Admin(command.CompanyId);
                 var caller = new CallerIdentity(actor+"/"+session.UserName, commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(session.Role,p)).ToHashSet(StringComparer.Ordinal), session.Role);
                 if(command.ModuleId=="sales"&&command.Command=="customer-save")CustomerWriteLicense();
@@ -154,9 +154,15 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 }
                 var result = await commands.ExecuteAsync(new(command.ModuleId, command.Command,
                     JsonSerializer.SerializeToElement(payload)), caller, ct);
-                if(command.ModuleId=="receiving"&&command.Command is "nav-import" or "nav-list" or "nav-outgoing-list")
+                if(command.ModuleId=="receiving"&&command.Command is "nav-import" or "nav-list" or "nav-outgoing-list" or "nav-outgoing-reconcile")
                 {
                     var current=Session(command.CompanyId);
+                    if(command.Command=="nav-outgoing-reconcile")
+                    {
+                        foreach(var required in commands.RequiredEnabledModules("receiving","outgoing-reconcile-store").Prepend("receiving"))if(!modulesEnabled.IsEnabled(required))throw new CommandDeniedException("A szükséges modul ki van kapcsolva: "+required);
+                        var refreshed=new CallerIdentity(actor+"/"+current.UserName,commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(current.Role,p)).ToHashSet(StringComparer.Ordinal),current.Role);
+                        result=await commands.ExecuteAsync(new("receiving","outgoing-reconcile-store",JsonSerializer.SerializeToElement(new{companyId=command.CompanyId,request=payload,rows=result})),refreshed,ct);
+                    }
                     if(command.Command=="nav-import")
                     {
                         foreach(var required in commands.RequiredEnabledModules("receiving","nav-store").Prepend("receiving"))if(!modulesEnabled.IsEnabled(required))throw new CommandDeniedException("A szükséges modul ki van kapcsolva: "+required);

@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.15
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.16
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -165,3 +165,7 @@ A Bevételezés oldalról dátum szerint lekérhetők a NAV bejövő számlái, 
 A korábbi Bevételezés menü neve **Számlák**. A **Bejövő számlák** oldalon a lista, a lenyitható NAV-lekérés és a számlaszerkesztő egy munkafelületen marad. Innen indítható kézi bevételezés, PDF alapján történő ellenőrzött rögzítés és Excel/CSV/XML import. A **Kimenő számlák** nézet a kiválasztott cég saját, NAV-nál nyilvántartott kiállított számláit listázza. A helyi eladási bizonylatok nem minősülnek adóügyi számlának, továbbra is az Eladás menüben találhatók.
 
 A PDF szövege beolvasható, de általános automatikus tételfelismerés és OCR még nincs: az adatokat ellenőrizve kell kitölteni. Az eredeti PDF-et külön kell megőrizni. Használat és korlátok: [Számlák munkafelület](docs/SZAMLAK-MUNKAFELULET.md).
+
+## Kimenő számlák és szolgáltatóbeállítások – 0.4.16
+
+A kimenő számlák listája a saját céges SQL-adatbázisból jön; a NAV külön egyeztetésre használható. A Beállítások számlázási csoportjában szolgáltató, több számlatömb, előtag, tervezett kezdősorszám és alapértelmezett tömb menthető. A Számlázz.hu és Billingo még tervezett integráció. A Bizonylat fejlesztési adapter tesztelt, de az éles API-kiállítás és a pénztári bekötés még nincs aktiválva. A kezdősorszám szolgáltatói érvényesítése külön igazolást igényel. Részletek: [0.4.16 fejlesztési állapot](docs/KIMENO-SZAMLA-0.4.16.md).

@@ -21,6 +21,8 @@ public sealed class ReceivingModule : IModule
             return ReceivingJson.Element(await NavTaxpayerClient.QueryAsync(secrets,lookup,ct));
         });
         var repository = new ReceivingRepository(context.GetCompanyDataDirectory, context.TimeProvider, context.Database);
+        OutgoingInvoiceRegistry Outgoing()=>new(context.Database??throw new InvalidOperationException("A kimenő számlák céges SQL-adatbázist igényelnek."),context.TimeProvider);
+        var invoiceService = new OutgoingInvoiceService(context.Database!, context.TimeProvider, id => context.GetCompanyDataDirectory(id));
         Register(context,"nav-list","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
         {
             var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
@@ -30,6 +32,45 @@ public sealed class ReceivingModule : IModule
         {
             var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
             return ReceivingJson.Element(await NavInvoiceClient.ListAsync(secret,query,ct,direction:"OUTBOUND"));
+        });
+        Register(context,"outgoing-local-list","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(Outgoing().List(ReceivingJson.Read<OutgoingInvoiceQuery>(input))));
+        });
+        Register(context,"bizonylat-status","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();var company=input.GetProperty("companyId").GetGuid();return Task.FromResult(ReceivingJson.Element(BizonylatConnectionStore.Status(context.GetCompanyDataDirectory(company),company)));
+        });
+        Register(context,"bizonylat-save","receiving.write",CommandAccess.Licensed,(input,_,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();var request=ReceivingJson.Read<BizonylatConnectionSave>(input);return Task.FromResult(ReceivingJson.Element(BizonylatConnectionStore.Save(context.GetCompanyDataDirectory(request.CompanyId),request.CompanyId,request)));
+        });
+        Register(context,"outgoing-issue-sale","receiving.write",CommandAccess.Licensed,async(input,actor,ct)=>ReceivingJson.Element(await invoiceService.IssueSaleAsync(ReceivingJson.Read<IssueSaleInvoiceRequest>(input),actor,ct)));
+        Register(context,"nav-outgoing-reconcile","receiving.write",CommandAccess.Licensed,async(input,actor,ct)=>
+        {
+            var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
+            var all=new List<NavInvoiceDigest>();var page=1;var pages=1;
+            do{var result=await NavInvoiceClient.ListAsync(secret,query with{Page=page},ct,direction:"OUTBOUND");all.AddRange(result.Rows);pages=result.AvailablePage;page++;if(all.Count>20000)throw new ArgumentException("Túl sok NAV-számla egy egyeztetéshez.");}while(page<=pages);
+            return ReceivingJson.Element(all);
+        });
+        Register(context,"outgoing-reconcile-store","receiving.write",CommandAccess.Licensed,(input,actor,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();var query=ReceivingJson.Read<NavInvoiceQuery>(input.GetProperty("request"));if(query.CompanyId!=input.GetProperty("companyId").GetGuid())throw new ArgumentException("Eltérő cég.");
+            return Task.FromResult(ReceivingJson.Element(Outgoing().Reconcile(query.CompanyId,query.From,query.To,ReceivingJson.Read<NavInvoiceDigest[]>(input.GetProperty("rows")),actor)));
+        });
+        var billingSettings=new InvoicingSettingsStore(context.Database!);
+        Register(context,"invoicing-settings","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();var company=input.GetProperty("companyId").GetGuid();return Task.FromResult(ReceivingJson.Element(new{settings=billingSettings.Read(company),connection=BizonylatConnectionStore.Status(context.GetCompanyDataDirectory(company),company)}));
+        });
+        Register(context,"invoicing-settings-save","receiving.write",CommandAccess.Licensed,(input,_,ct)=>
+        {
+            ct.ThrowIfCancellationRequested();var request=ReceivingJson.Read<InvoicingSettingsSave>(input);
+            if(!string.IsNullOrWhiteSpace(request.ApiKey)&&(request.ApiKey.Trim().Length is <12 or >300||request.ApiKey.Trim().Any(c=>char.IsWhiteSpace(c)||char.IsControl(c))))throw new ArgumentException("Érvénytelen API-kulcs.");
+            var settings=billingSettings.Save(request.CompanyId,request.Settings);var directory=context.GetCompanyDataDirectory(request.CompanyId);
+            if(!string.IsNullOrWhiteSpace(request.ApiKey)||BizonylatConnectionStore.Status(directory,request.CompanyId).Configured)
+                BizonylatConnectionStore.Save(directory,request.CompanyId,new(request.CompanyId,request.ApiKey,request.TestMode,settings.Blocks.FirstOrDefault(b=>b.Id==settings.DefaultBlockId)?.Prefix??""));
+            return Task.FromResult(ReceivingJson.Element(new{settings,connection=BizonylatConnectionStore.Status(directory,request.CompanyId)}));
         });
         Register(context,"pdf-preview","receiving.read",CommandAccess.Licensed,(input,_,ct)=>
         {

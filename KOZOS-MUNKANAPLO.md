@@ -283,3 +283,7 @@ Dátumszűrt, lapozható NAV-számlalista és kiválasztott számla biztonságos
 ## 2026-10-21 – 0.4.15 Számlák munkafelület
 
 A Bevételezés menü Számlákra változott, bejövő és kimenő nézettel. A NAV-lekérés oldalon belüli lenyitható panel; a lista és szerkesztő megmarad. A NAV-panel szállítóválasztása külön állapot, nem írja át a megnyitott számlát. Kimenő saját számlák NAV OUTBOUND listával és kibocsátóellenőrzéssel. PDF-szöveg beolvasása ellenőrzött kézi rögzítéshez; automatikus tételfelismerés/OCR és PDF-archiválás nincs. A PDF-függőségek aláírt modulcsomagba kerülnek. 180 üzleti és 63 felületi teszt sikeres; valódi modul/IPC PDF-próba is futott. Élő céges NAV-próba nem történt. Részletek: docs/SZAMLAK-MUNKAFELULET.md.
+
+## 2026-10-22 – 0.4.16 csomagellenőrzés és számlázási beállítások
+
+Az átadott fejlesztési ZIP elkülönített példányon, javított alkalmazó scripttel beépítve. Saját SQL-alapú kimenő lista, külön NAV-egyeztetés, pénznemenkénti összesítés. Admin szolgáltatóválasztás és több számlatömb előtaggal, tervezett kezdősorszámmal, alapértelmezéssel. Egyetlen DPAPI Bizonylat-kulcstároló. API-adapter tartós ismétlésvédelemmel, hiányos/eltérő összeg elutasításával, de normál alkalmazási úton a valódi kiállítás még tiltva marad. POS bekötés, tesztcéges próba és teljes API-referencia igazolása következő fázis. 187/187 üzleti és 66/66 felületi teszt sikeres; kiadási csomagban 5 aktív 0.4.16 modul. Élő számla, e-mail, éles NAV-művelet nem történt. Részletek: docs/KIMENO-SZAMLA-0.4.16.md.

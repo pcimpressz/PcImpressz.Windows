@@ -12,7 +12,7 @@ internal static class NavInvoiceUiChecks
         Task<JsonElement> Send(string operation,object input,CancellationToken ct)
         {
             var request=(ModuleCommandRequest)input;
-            if(request.Command=="nav-outgoing-list")return Task.FromResult(JsonSerializer.SerializeToElement(new{currentPage=1,availablePage=1,rows=new[]{new{number="OUT-1",customerName="Vevő",customerTaxNumber="22222222",issuedOn="2026-10-21",currency="HUF",operation="CREATE",net=200m}}}));
+            if(request.Command=="outgoing-local-list")return Task.FromResult(JsonSerializer.SerializeToElement(new{total=1,rows=new[]{new{number="OUT-1",customerName="Vevő",customerTaxNumber="22222222",issuedOn="2026-10-21",deliveryOn="2026-10-21",dueOn="2026-11-01",currency="HUF",providerStatus="issued",navStatus="pending",financialStatus="open",paymentMethod="BANK_TRANSFER",net=200m,vat=54m,gross=254m}},summary=new{count=1,currencies=new[]{new{currency="HUF",net=200m,vat=54m,gross=254m}}}}));
             if(request.Command=="nav-list")return Task.FromResult(JsonSerializer.SerializeToElement(new{currentPage=request.Input.GetProperty("page").GetInt32(),availablePage=2,rows=new[]{new{number="NAV-1",supplierName="Teszt",supplierTaxNumber="11111111",issuedOn="2026-10-21",currency="HUF",operation="CREATE",net=200m}}}));
             if(request.Command=="nav-import")
             {
@@ -33,7 +33,7 @@ internal static class NavInvoiceUiChecks
         page.SelectedNavInvoice=new("OTHER","Másik szállító","33333333","2026-10-21","HUF","CREATE","100",null);
         if(page.SelectedSupplier!=original||page.IsDirty)throw new InvalidOperationException("A NAV-kijelölés átírta a szerkesztett számlát.");
         page.OutgoingCommand.Execute(null);if(!page.IsOutgoing)throw new InvalidOperationException("Nem váltott kimenő nézetre.");
-        await page.FetchOutgoingAsync(1);if(page.OutgoingInvoices.Single().CustomerName!="Vevő")throw new InvalidOperationException("Nem töltődött be a kimenő lista.");
+        await page.FetchOutgoingAsync();if(page.OutgoingInvoices.Single().CustomerName!="Vevő")throw new InvalidOperationException("Nem töltődött be a kimenő lista.");
         page.IncomingCommand.Execute(null);if(!page.IsEditor||!page.IsIncoming||!page.IsNav)throw new InvalidOperationException("A nézetváltás elvesztette a bejövő munkát.");
         page.ApplyPdfPreview("teszt.pdf","PDF tesztszöveg");if(!page.HasPdfPreview||!page.IsDirty||page.PdfText!="PDF tesztszöveg")throw new InvalidOperationException("Hiányzik a PDF ellenőrzési előnézet.");
         page.CompanyChanged();if(page.HasPdfPreview||page.OutgoingInvoices.Count>0||page.IsNav)throw new InvalidOperationException("Cégváltás után megmaradt másik cég számlája.");
