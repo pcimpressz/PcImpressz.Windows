@@ -58,9 +58,10 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     private readonly ColumnList _columns;
     private readonly TypedSearch _typed;
     private readonly ListLoader _loader;
-    private sealed record AppliedQuery(string Search, string Filter, string Sort, bool Descending, int Page);
+    private sealed record AppliedQuery(string Search, string Filter, string Sort, bool Descending, int Page,
+        decimal? MinPrice = null, decimal? MaxPrice = null, decimal? MinStock = null, decimal? MaxStock = null, string[]? CategoryCodes = null);
     private AppliedQuery? _applied;
-    public string AppliedSearchLabel => _applied is null ? "Még nincs betöltött lista." : "Megjelenített keresés: " + (_applied.Search.Length == 0 ? "minden találat" : _applied.Search) + " · " + (Filters.FirstOrDefault(f => f.Value == _applied.Filter)?.Label ?? _applied.Filter);
+    public string AppliedSearchLabel => IsProductMaster ? ActiveFiltersLabel : _applied is null ? "Még nincs betöltött lista." : "Megjelenített keresés: " + (_applied.Search.Length == 0 ? "minden találat" : _applied.Search) + " · " + (Filters.FirstOrDefault(f => f.Value == _applied.Filter)?.Label ?? _applied.Filter);
     private bool _filtersReady;
     private EntityRow? _selected;
     private Guid? _editId;
@@ -202,6 +203,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
     public void CompanyChanged()
     {
         ResetAppearance(); _ = LoadAppearanceAsync();
+        ClearProductFilters();
         _applied = null; Changed(nameof(AppliedSearchLabel)); Rows.Clear(); _page = 0; _total = 0; _selected = null; Populate(null); _ = LoadAsync();
     }
     private bool CanDiscard() => !IsDirty || (ConfirmDiscardOverride?.Invoke() ?? UnsavedChanges.Confirm("Elveted a nem mentett változtatásokat? A Nem válasszal az adatlap és a beírt adatok megmaradnak.","Nem mentett adatlap"));
@@ -281,11 +283,13 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
         IsBusy = true;
         try
         {
-            var query = new AppliedQuery(Search, Filter, SortColumn, SortDescending, _page);
+            var query = new AppliedQuery(IsProductMaster ? ComposeColumnSearch() : Search, Filter, SortColumn, SortDescending, _page,
+                _minPrice, _maxPrice, _minStock, _maxStock, _categoryCodes);
             var result = await ExecuteAsync(Definition.Commands.List, new
             {
                 search = query.Search, filter = query.Filter, page = query.Page, pageSize = 50,
-                sort = query.Sort, descending = query.Descending
+                sort = query.Sort, descending = query.Descending, minPrice = query.MinPrice, maxPrice = query.MaxPrice,
+                minStock = query.MinStock, maxStock = query.MaxStock, categoryCodes = query.CategoryCodes
             });
             if (!_loader.IsCurrent(generation)) return;
             var receivedRows = result.GetProperty("rows").EnumerateArray().Select(row => new EntityRow(row)).ToArray();
@@ -358,7 +362,12 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
         IsBusy = true;
         try
         {
-            var result = await ExecuteAsync(Definition.Commands.Export, new { search = query.Search, filter = query.Filter, sort = query.Sort, descending = query.Descending });
+            var result = await ExecuteAsync(Definition.Commands.Export, new
+            {
+                search = query.Search, filter = query.Filter, sort = query.Sort, descending = query.Descending,
+                minPrice = query.MinPrice, maxPrice = query.MaxPrice, minStock = query.MinStock, maxStock = query.MaxStock,
+                categoryCodes = query.CategoryCodes
+            });
             await AtomicExport.WriteAsync(dialog.FileName, result.GetProperty("csv").GetString() ?? "", _shutdown);
             Message = Labels.ExportedMessage;
         }

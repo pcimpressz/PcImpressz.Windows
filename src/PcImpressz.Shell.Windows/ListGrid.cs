@@ -24,14 +24,14 @@ internal static class ListGrid
         };
     }
 
-    public static void Show(DataGrid grid, IColumnList page)
+    public static void Show(DataGrid grid, IColumnList page, Action<string, FrameworkElement>? columnSearch = null)
     {
+        grid.CanUserSortColumns = columnSearch is null;
         grid.Columns.Clear();
         foreach (var column in page.VisibleColumns)
         {
-            var header = new TextBlock { Text = column.Label };
-            if (column.Id == "quantity")
-                header.ToolTip = "A termék készlete az összes raktárban. Raktárankénti bontás a Készlet és mozgások fülön.";
+            var filtered = page is EntityPageViewModel products && products.IsColumnFiltered(column.Id);
+            var header = columnSearch is null ? (object)PlainHeader(column) : SearchHeader(page, column, filtered, columnSearch);
             var text = new DataGridTextColumn
             {
                 Header = header,
@@ -45,6 +45,51 @@ internal static class ListGrid
             grid.Columns.Add(text);
         }
     }
+
+    private static TextBlock PlainHeader(EntityColumn column)
+    {
+        var header = new TextBlock { Text = column.Label };
+        if (column.Id == "quantity")
+            header.ToolTip = "A termék készlete az összes raktárban. Raktárankénti bontás a Készlet és mozgások fülön.";
+        return header;
+    }
+
+    private static DockPanel SearchHeader(IColumnList page, EntityColumn column, bool filtered, Action<string, FrameworkElement> open)
+    {
+        var panel = new DockPanel();
+        var sort = new Button
+        {
+            Content = column.Id == page.SortColumn ? (page.SortDescending ? "↓" : "↑") : "↕",
+            ToolTip = "Rendezés", Width = 28, Padding = new(0), Margin = new(6, 0, 0, 0),
+            Background = Brushes.Transparent, BorderThickness = new(0), Cursor = System.Windows.Input.Cursors.Hand
+        };
+        sort.Click += (_, _) => page.ToggleSort(column.Id);
+        DockPanel.SetDock(sort, Dock.Right);
+        var label = new Button
+        {
+            Content = column.Label, ToolTip = ColumnTip(column.Id),
+            HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new(0),
+            Background = Brushes.Transparent, BorderThickness = new(0), Cursor = System.Windows.Input.Cursors.Hand,
+            FontWeight = filtered ? FontWeights.Bold : FontWeights.SemiBold
+        };
+        label.Click += (_, _) => open(column.Id, label);
+        panel.Children.Add(sort);
+        panel.Children.Add(label);
+        return panel;
+    }
+
+    private static string ColumnTip(string id) => id switch
+    {
+        "categoryCode" => "Keresés kategória név alapján. A kiválasztott csoport és az alatta lévők termékei maradnak.",
+        "quantity" => "A készlet szűrése a Szűrés panelen van: darabszám tól–ig.",
+        "name" => "Keresés a termék nevében.",
+        "sku" => "Keresés a saját cikkszámban.",
+        "manufacturerPartNumber" => "Keresés a gyártói cikkszámban.",
+        "barcode" => "Keresés a vonalkódban.",
+        "unitCode" => "Keresés a mértékegységben.",
+        "revision" => "Keresés a revízióban.",
+        _ => "Keresés ebben az oszlopban."
+    };
 
     private static Style CellStyle(string id)
     {

@@ -27,8 +27,8 @@ public sealed class ProductSearch
             var colon = word.IndexOf(':');
             var field = colon < 0 ? "" : Normalize(word[..colon]).ToLowerInvariant();
             var value = colon < 0 ? word : word[(colon + 1)..];
-            if (field is not ("" or "nev" or "sku" or "cikkszam" or "mpn" or "gyartoi" or "vonalkod" or "ean" or "kategoria"))
-                throw new ArgumentException("Ismeretlen keresési mező. Használható: nev, sku, gyartoi, vonalkod, kategoria.");
+            if (field is not ("" or "nev" or "sku" or "cikkszam" or "mpn" or "gyartoi" or "vonalkod" or "ean" or "kategoria" or "egyseg" or "revizio"))
+                throw new ArgumentException("Ismeretlen keresési mező. Használható: nev, sku, gyartoi, vonalkod, kategoria, egyseg, revizio.");
             var exact = value.StartsWith('=');
             if (exact) value = value[1..];
             if (value.Length == 0) throw new ArgumentException("A keresési mező után adj meg értéket.");
@@ -43,6 +43,7 @@ public sealed class ProductSearch
     {
         "nev" => [p.Name], "sku" or "cikkszam" => [p.Sku], "mpn" or "gyartoi" => [p.ManufacturerPartNumber],
         "vonalkod" or "ean" => [p.Barcode], "kategoria" => [p.CategoryCode],
+        "egyseg" => [p.UnitCode], "revizio" => [p.Revision],
         _ => [p.Name, p.Sku, p.ManufacturerPartNumber, p.Barcode, p.CategoryCode, p.UnitCode, p.Description, p.Parameters]
     };
     private static string Normalize(string? value)

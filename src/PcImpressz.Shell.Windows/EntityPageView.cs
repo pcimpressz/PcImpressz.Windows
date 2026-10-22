@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
 
@@ -23,7 +24,11 @@ public sealed class EntityPageView : UserControl
         var filter = new ComboBox { Width = 180, Margin = new(0,0,10,10), DisplayMemberPath = "Label", SelectedValuePath = "Value" };
         filter.SetBinding(ComboBox.SelectedValueProperty, new Binding("Filter") { Mode = BindingMode.TwoWay });
         toolbar.Children.Add(filter);
-        toolbar.Children.Add(ActionButton("Keresés", "SearchCommand"));
+        var searchButton = ActionButton("Keresés", "SearchCommand");
+        toolbar.Children.Add(searchButton);
+        var detailFilter = ActionButton("Szűrés", "ToggleFilterPanelCommand");
+        detailFilter.Visibility = Visibility.Collapsed;
+        toolbar.Children.Add(detailFilter);
         var create = ActionButton("Új", "NewCommand"); toolbar.Children.Add(create);
         toolbar.Children.Add(ActionButton("CSV export", "ExportCommand"));
         toolbar.Children.Add(ListGrid.ColumnButton(() => DataContext as IColumnList));
@@ -33,6 +38,8 @@ public sealed class EntityPageView : UserControl
         root.Children.Add(message);
         var applied = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,10) };
         applied.SetBinding(TextBlock.TextProperty, new Binding("AppliedSearchLabel")); root.Children.Add(applied);
+        var filterPanel = ProductFilterPanel();
+        root.Children.Add(filterPanel);
         var body = new Grid(); body.ColumnDefinitions.Add(new() { Width = new(3, GridUnitType.Star) });
         body.ColumnDefinitions.Add(new() { Width = new(2, GridUnitType.Star) });
         body.RowDefinitions.Add(new() { Height = GridLength.Auto }); body.RowDefinitions.Add(new() { Height = GridLength.Auto });
@@ -154,7 +161,7 @@ public sealed class EntityPageView : UserControl
         EntityPageViewModel? observed = null;
         System.ComponentModel.PropertyChangedEventHandler? observer = null;
         Unloaded += (_, _) => { if (observed is not null && observer is not null) observed.PropertyChanged -= observer; };
-        Loaded += (_, _) => { if (observed is not null && observer is not null) { observed.PropertyChanged -= observer; observed.PropertyChanged += observer; RenderFields(observed); ListGrid.Show(grid, observed); } };
+        Loaded += (_, _) => { if (observed is not null && observer is not null) { observed.PropertyChanged -= observer; observed.PropertyChanged += observer; RenderFields(observed); ListGrid.Show(grid, observed, observed.IsProductMaster ? OpenColumnSearch : null); } };
         DataContextChanged += (_, _) =>
         {
             if (observed is not null && observer is not null) observed.PropertyChanged -= observer;
@@ -162,17 +169,23 @@ public sealed class EntityPageView : UserControl
             if (DataContext is not EntityPageViewModel vm) return;
             search.ToolTip = vm.Labels.SearchHint;
             searchHelp.Text = vm.Labels.SearchHint;
-            searchHelp.Visibility = ViewMode != "editor" && vm.Definition.ModuleId == "catalog" && vm.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
+            var columnSearch = vm.IsProductMaster;
+            search.Visibility = searchButton.Visibility = filter.Visibility = columnSearch ? Visibility.Collapsed : Visibility.Visible;
+            detailFilter.Visibility = columnSearch ? Visibility.Visible : Visibility.Collapsed;
+            searchHelp.Visibility = !columnSearch && ViewMode != "editor" && vm.Definition.ModuleId == "catalog" && vm.Definition.Id == "products" ? Visibility.Visible : Visibility.Collapsed;
+            if (columnSearch) filterPanel.SetBinding(VisibilityProperty, new Binding("FilterPanelOpen") { Converter = new BooleanToVisibilityConverter() });
+            else { BindingOperations.ClearBinding(filterPanel, VisibilityProperty); filterPanel.Visibility = Visibility.Collapsed; }
             create.Content = vm.Labels.NewLabel;
             filter.ItemsSource = vm.Filters;
             if (filter.SelectedValue is null) filter.SelectedValue = vm.Filters[0].Value;
-            ListGrid.Show(grid, vm);
+            ListGrid.Show(grid, vm, columnSearch ? OpenColumnSearch : null);
             RenderFields(vm);
             observer = (_, args) =>
             {
                 if (args.PropertyName == nameof(EntityPageViewModel.AppearanceRevision)) RenderFields(vm);
                 if (args.PropertyName == nameof(EntityPageViewModel.DossierRevision)) RenderDossier(vm);
-                if (args.PropertyName == nameof(EntityPageViewModel.LayoutRevision)) ListGrid.Show(grid, vm);
+                if (args.PropertyName is nameof(EntityPageViewModel.LayoutRevision) or nameof(EntityPageViewModel.ColumnFilterRevision))
+                    ListGrid.Show(grid, vm, vm.IsProductMaster ? OpenColumnSearch : null);
             };
             observed = vm; vm.PropertyChanged += observer;
             _applyLayout?.Invoke();
@@ -211,6 +224,107 @@ public sealed class EntityPageView : UserControl
         body.SizeChanged += (_, _) => _applyLayout();
         _applyLayout();
         Content=ArrangeableWorkspace.Split(root,body,"workspace","Lista és adatlap");
+    }
+    private void OpenColumnSearch(string columnId, FrameworkElement anchor)
+    {
+        if (DataContext is not EntityPageViewModel page) return;
+        if (columnId == "quantity") { page.FilterPanelOpen = true; page.Notify("A készletet a Szűrés panelen, darabszám tól–ig lehet szűrni."); return; }
+        if (columnId is "isPurchaseable" or "isSalable") { page.Filter = columnId == "isPurchaseable" ? "purchaseable" : "salable"; return; }
+        if (columnId == "categoryCode") { ShowCategorySearch(page, anchor); return; }
+        ShowTextSearch(page, columnId, anchor);
+    }
+    private static void ShowTextSearch(EntityPageViewModel page, string columnId, FrameworkElement anchor)
+    {
+        var box = Input(); box.Width = 240; box.Text = page.ColumnText(columnId); box.Margin = new(0, 0, 0, 10);
+        var title = columnId switch
+        {
+            "name" => "Keresés a névben", "sku" => "Keresés a saját cikkszámban", "manufacturerPartNumber" => "Keresés a gyártói cikkszámban",
+            "barcode" => "Keresés a vonalkódban", "unitCode" => "Keresés az egységben", "revision" => "Keresés a revízióban", _ => "Keresés az oszlopban"
+        };
+        var apply = new Button { Content = "Keresés", Margin = new(0, 0, 8, 0) };
+        var clear = new Button { Content = "Törlés" };
+        var popup = ColumnPopup(anchor, title, box, apply, clear);
+        apply.Click += (_, _) => { page.ApplyColumnText(columnId, box.Text); popup.IsOpen = false; };
+        clear.Click += (_, _) => { page.ApplyColumnText(columnId, ""); popup.IsOpen = false; };
+        box.KeyDown += (_, args) => { if (args.Key == System.Windows.Input.Key.Enter) { page.ApplyColumnText(columnId, box.Text); popup.IsOpen = false; } };
+        popup.IsOpen = true; box.Focus();
+    }
+    private static void ShowCategorySearch(EntityPageViewModel page, FrameworkElement anchor)
+    {
+        var box = Input(); box.Width = 260; box.Margin = new(0, 0, 0, 8);
+        box.SetBinding(TextBox.TextProperty, new Binding("CategoryLookup") { Source = page, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        var list = new ListBox { MinHeight = 120, MaxHeight = 220, DisplayMemberPath = "Label", Margin = new(0, 0, 0, 8) };
+        list.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("CategoryChoices") { Source = page });
+        var apply = new Button { Content = "Ebbe a csoportba", Margin = new(0, 0, 8, 0) };
+        var clear = new Button { Content = "Törlés" };
+        var popup = ColumnPopup(anchor, "Kategória név szerint", box, apply, clear, list);
+        apply.Click += (_, _) =>
+        {
+            var chosen = list.SelectedItem as CategoryPick ?? (page.CategoryChoices.Count == 1 ? page.CategoryChoices[0] : null);
+            page.ApplyCategory(chosen);
+            if (chosen is not null) popup.IsOpen = false;
+        };
+        clear.Click += (_, _) => { page.ClearCategory(); popup.IsOpen = false; };
+        popup.Opened += async (_, _) => await page.LoadCategoryChoicesAsync();
+        popup.IsOpen = true; box.Focus();
+    }
+    private static Popup ColumnPopup(FrameworkElement anchor, string title, TextBox box, Button apply, Button clear, ListBox? list = null)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Margin = new(0, 0, 0, 8) });
+        stack.Children.Add(box);
+        if (list is not null) stack.Children.Add(list);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+        buttons.Children.Add(apply); buttons.Children.Add(clear); stack.Children.Add(buttons);
+        var border = new Border { Child = stack, Padding = new(12), BorderThickness = new(1), MaxWidth = 320 };
+        border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+        border.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+        return new Popup { PlacementTarget = anchor, Placement = PlacementMode.Bottom, StaysOpen = false, Child = border };
+    }
+    private static FrameworkElement ProductFilterPanel()
+    {
+        var panel = new StackPanel { Margin = new(0, 0, 0, 14) };
+        panel.SetBinding(VisibilityProperty, new Binding("FilterPanelOpen") { Converter = new BooleanToVisibilityConverter() });
+        var card = new Border { Padding = new(16), CornerRadius = new(12), BorderThickness = new(1) };
+        card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+        card.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+        var stack = new StackPanel();
+        stack.Children.Add(new TextBlock { Text = "Részletes szűrés", FontWeight = FontWeights.SemiBold, Margin = new(0, 0, 0, 10) });
+        var status = new ComboBox { Width = 220, Margin = new(0, 0, 12, 10), HorizontalAlignment = HorizontalAlignment.Left, DisplayMemberPath = "Label", SelectedValuePath = "Value" };
+        status.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Filters"));
+        status.SetBinding(ComboBox.SelectedValueProperty, new Binding("Filter"));
+        stack.Children.Add(LabeledRow("Állapot", status));
+        stack.Children.Add(RangeRow("Nettó eladási ár (Ft)", "PriceFromText", "PriceToText"));
+        stack.Children.Add(RangeRow("Saját készlet (db)", "StockFromText", "StockToText"));
+        var actions = new WrapPanel { Margin = new(0, 8, 0, 0) };
+        actions.Children.Add(ActionButton("Szűrés alkalmazása", "ApplyDetailFilterCommand"));
+        actions.Children.Add(ActionButton("Minden szűrés törlése", "ClearProductFiltersCommand"));
+        stack.Children.Add(actions);
+        card.Child = stack; panel.Children.Add(card);
+        return panel;
+    }
+    private static UIElement LabeledRow(string label, UIElement input)
+    {
+        var row = new StackPanel { Margin = new(0, 0, 0, 8) };
+        var caption = new TextBlock { Text = label, Margin = new(0, 0, 0, 4) };
+        caption.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        row.Children.Add(caption); row.Children.Add(input); return row;
+    }
+    private static UIElement RangeRow(string label, string from, string to)
+    {
+        var row = new StackPanel { Margin = new(0, 0, 0, 8) };
+        var caption = new TextBlock { Text = label, Margin = new(0, 0, 0, 4) };
+        caption.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        var fields = new WrapPanel();
+        fields.Children.Add(BoundInput(from)); fields.Children.Add(new TextBlock { Text = "–", VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 8, 10) });
+        fields.Children.Add(BoundInput(to));
+        row.Children.Add(caption); row.Children.Add(fields); return row;
+    }
+    private static TextBox BoundInput(string path)
+    {
+        var box = Input(); box.Width = 120;
+        box.SetBinding(TextBox.TextProperty, new Binding(path) { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        return box;
     }
     private WrapPanel cardHost = null!;
     private StackPanel sectionHost = null!;

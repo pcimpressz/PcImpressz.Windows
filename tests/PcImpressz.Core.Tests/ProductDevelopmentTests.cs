@@ -55,6 +55,21 @@ internal static class ProductDevelopmentTests
             var quantities = new Dictionary<Guid, decimal> { [a.Id] = 2 };
             Check.Equal(a.Id, CatalogModule.FilterStock([a, b], quantities, "in-stock").Single().Id);
             Check.Equal(b.Id, CatalogModule.FilterStock([a, b], quantities, "out-of-stock").Single().Id);
+            CatalogQuery stockRange = new(Guid.Empty, MinStock: 1, MaxStock: 3);
+            Check.Equal(a.Id, CatalogModule.FilterStock([a, b], quantities, stockRange).Single().Id);
+        });
+        yield return Test("product price and category filters stay on the chosen column", () =>
+        {
+            ProductRecord Item(string name, string sku, string category, decimal? price) => new(Guid.NewGuid(), 1,
+                new ProductData { Name = name, Sku = sku, UnitCode = "DB", CategoryCode = category, SaleNetUnitPrice = price, IsActive = true },
+                DateTimeOffset.UtcNow, "test", DateTimeOffset.UtcNow, "test");
+            var screw = Item("Csavar", "CSV", "KOT", 150); var washer = Item("Alátét", "ALT", "ALA", 40); var bare = Item("Névtelen", "NINCS", "KOT", null);
+            var priced = CatalogListing.Products([screw, washer, bare], new(Guid.NewGuid(), MinPrice: 100, MaxPrice: 200));
+            Check.Equal(screw.Id, priced.Single().Id);
+            var grouped = CatalogListing.Products([screw, washer], new(Guid.NewGuid(), CategoryCodes: ["KOT"]));
+            Check.Equal(screw.Id, grouped.Single().Id);
+            Check.True(new ProductSearch("vonalkod:599").Matches(Record("Egér", "E", barcode: "599000").Data));
+            Check.Throws<ArgumentException>(() => CatalogListing.Products([screw], new(Guid.NewGuid(), MinPrice: 20, MaxPrice: 10)));
         });
         yield return Test("inventory is embedded in product navigation with a standalone fallback", () =>
         {

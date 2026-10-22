@@ -49,13 +49,14 @@ public sealed partial class CatalogModule : IModule
             var matching = FilterProducts((await repository.Snapshot(query.CompanyId, ct)).Products, query);
             if (context.Database is null)
             {
-                if (query.Filter is "in-stock" or "out-of-stock") throw new InvalidOperationException("A készletszűréshez céges adatbázis szükséges.");
+                if (query.Filter is "in-stock" or "out-of-stock" || query.MinStock is not null || query.MaxStock is not null)
+                    throw new InvalidOperationException("A készletszűréshez céges adatbázis szükséges.");
                 return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p => ProductRow(p)), matching.Length);
             }
             return context.Database.Execute(query.CompanyId, tx =>
             {
                 var quantities = CompanyReferenceQueries.StockQuantities(tx);
-                matching = FilterStock(matching, quantities, query.Filter);
+                matching = FilterStock(matching, quantities, query);
                 if (query.Sort == "quantity") matching = (query.Descending ? matching.OrderByDescending(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id) : matching.OrderBy(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id)).ToArray();
                 return Page(matching.Skip(Skip(query)).Take(query.PageSize).Select(p=>ProductRow(p, quantities.GetValueOrDefault(p.Id))), matching.Length);
             });
@@ -90,10 +91,11 @@ public sealed partial class CatalogModule : IModule
             if (context.Database is not null) rows = context.Database.Execute(query.CompanyId, tx =>
             {
                 var quantities = CompanyReferenceQueries.StockQuantities(tx);
-                var filtered = FilterStock(rows, quantities, query.Filter);
+                var filtered = FilterStock(rows, quantities, query);
                 return query.Sort == "quantity" ? (query.Descending ? filtered.OrderByDescending(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id) : filtered.OrderBy(p=>quantities.GetValueOrDefault(p.Id)).ThenBy(p=>p.Id)).ToArray() : filtered;
             });
-            else if (query.Filter is "in-stock" or "out-of-stock") throw new InvalidOperationException("A készletszűréshez céges adatbázis szükséges.");
+            else if (query.Filter is "in-stock" or "out-of-stock" || query.MinStock is not null || query.MaxStock is not null)
+                throw new InvalidOperationException("A készletszűréshez céges adatbázis szükséges.");
             return CatalogJson.Element(new { csv = CatalogRepository.ExportCsv(
                 "Név;Cikkszám;Gyártói cikkszám;Kategória;Mértékegység;Revízió;Vonalkód;Beszerzés;Eladás;Aktív;Leírás;Paraméterek;Megjegyzés", rows, p =>
                 [p.Data.Name, p.Data.Sku, p.Data.ManufacturerPartNumber, p.Data.CategoryCode, p.Data.UnitCode, p.Data.Revision, p.Data.Barcode,
@@ -154,11 +156,28 @@ public sealed partial class CatalogModule : IModule
         var query = CatalogJson.Read<CatalogQuery>(input);
         if (query.Page < 0 || query.PageSize is < 1 or > 200 || (query.Search is null || query.Search.Length > 200) || query.Filter is null || query.Sort is null || !IsSort(query.Sort))
             throw new ArgumentException("Érvénytelen listázási kérés.");
+        if (query.MinPrice is < 0 or > 1_000_000_000 || query.MaxPrice is < 0 or > 1_000_000_000
+            || query.MinStock is < -1_000_000 or > 1_000_000_000 || query.MaxStock is < -1_000_000 or > 1_000_000_000
+            || query.MinPrice > query.MaxPrice || query.MinStock > query.MaxStock)
+            throw new ArgumentException("Érvénytelen árszűrés vagy készletszűrés.");
+        if (query.CategoryCodes is { Length: > 40 } || query.CategoryCodes?.Any(code => code is not { Length: > 0 and <= 40 }
+            || code.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '.')) == true)
+            throw new ArgumentException("Érvénytelen kategóriaszűrés.");
         return query;
     }
     public static ProductRecord[] FilterStock(ProductRecord[] products, IReadOnlyDictionary<Guid, decimal> quantities, string filter) =>
-        products.Where(p => filter switch
-        { "in-stock" => quantities.GetValueOrDefault(p.Id) > 0, "out-of-stock" => quantities.GetValueOrDefault(p.Id) <= 0, _ => true }).ToArray();
+        FilterStock(products, quantities, new CatalogQuery(Guid.Empty, Filter: filter));
+    public static ProductRecord[] FilterStock(ProductRecord[] products, IReadOnlyDictionary<Guid, decimal> quantities, CatalogQuery query)
+    {
+        if (query.MinStock > query.MaxStock) throw new ArgumentException("Érvénytelen készletszűrés.");
+        return products.Where(p =>
+        {
+            var quantity = quantities.GetValueOrDefault(p.Id);
+            if (query.Filter == "in-stock" && quantity <= 0 || query.Filter == "out-of-stock" && quantity > 0) return false;
+            if (query.MinStock is { } min && quantity < min || query.MaxStock is { } max && quantity > max) return false;
+            return true;
+        }).ToArray();
+    }
     private static int Skip(CatalogQuery query) => query.Page * (long)query.PageSize > int.MaxValue ? int.MaxValue : query.Page * query.PageSize;
     private static JsonElement Page(IEnumerable<JsonElement> rows, int total) => CatalogJson.Element(new { rows, total });
     private static EntityPageDescriptor Page(string id, string moduleId, string title, string description, string icon,
@@ -225,9 +244,14 @@ public static class CatalogListing
     {
         RequireSort(query.Sort);
         var search = new ProductSearch(query.Search);
+        if (query.MinPrice > query.MaxPrice) throw new ArgumentException("Érvénytelen árszűrés.");
+        var categories = query.CategoryCodes?.Select(code => code.ToUpperInvariant()).ToHashSet(StringComparer.Ordinal);
         var rows = source.OrderBy(p => p.Id).Where(p => query.Filter == "archived" ? !p.Data.IsActive : p.Data.IsActive)
             .Where(p => query.Filter switch
             { "purchaseable" => p.Data.IsPurchaseable, "salable" => p.Data.IsSalable, _ => true })
+            .Where(p => categories is null || categories.Count == 0 || categories.Contains(p.Data.CategoryCode))
+            .Where(p => query.MinPrice is null && query.MaxPrice is null || p.Data.SaleNetUnitPrice is { } price
+                && (query.MinPrice is null || price >= query.MinPrice) && (query.MaxPrice is null || price <= query.MaxPrice))
             .Where(p => search.Matches(p.Data)).ToArray();
         return query.Sort.Length == 0 ? rows.OrderBy(p => search.Rank(p.Data)).ThenBy(p => p.Data.Name, NameOrder).ThenBy(p => p.Id).ToArray() : Order(rows, query, ProductKeys, p => p.Data.Name);
     }
