@@ -72,11 +72,14 @@ internal sealed partial class ReceivingPageViewModel
             if(_company()!=company)return;
             ClearPreparation();Fill(detail);if(_editId==Guid.Empty){_editId=null;_navPreview=invoice;Changed(nameof(CanClassify));}
             Changed(nameof(NavSupplierHint));_mode="editor";NotifyMode();UpdateTotals();IsDirty=false;
-            await LoadLineProductsAsync(company);
+            SupplierStatus=SelectedSupplier is not null?"A szállítót adószám alapján azonosítottuk.":!AutoNavSupplier?"Nincs szállítóegyezés. Az automatikus felvétel kikapcsolva; válassz azonos adószámú partnert.":"";
+            if(SelectedSupplier is null&&AutoNavSupplier)
+                try{await EnsureNavSupplierAsync(invoice,company);}catch(Exception ex){SupplierStatus="A szállító automatikus felvétele nem sikerült: "+ex.Message+" Kapcsold ki az automatikus párosítást a kézi kiválasztáshoz.";}
+            try{await LoadLineProductsAsync(company);}catch(Exception ex){PreparationStatus="A termékegyeztetés nem sikerült: "+ex.Message;}
             if(_company()!=company)return;
             try{await EnrichSupplierAsync(invoice,company);}catch(Exception ex){PreparationStatus="A beszállítói adategyeztetés nem sikerült: "+ex.Message;}
-            if(IsEditable)await RestorePreparationAsync(invoice,company);
-            if(SelectedSupplier is null)await EnsureNavSupplierAsync(invoice,company);
+            if(IsEditable)try{await RestorePreparationAsync(invoice,company);}catch(Exception ex){PreparationStatus="Az előkészítés betöltése nem sikerült: "+ex.Message;}
+            Changed(nameof(CanClassify));Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));
             Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));
             Message=SelectedSupplier is null?"A számla előnézete kész. A szállítót innen felveheted; mentésig nincs új számla és készletmozgás.":"Ellenőrizd a tételeket, az eladási árakat és a termékpárosítást. A készletet csak a Bevételezés gomb módosítja.";
         }

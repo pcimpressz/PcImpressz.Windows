@@ -13,7 +13,7 @@ internal sealed partial class ReceivingPageViewModel
     {
         if(Tax(invoice.SupplierTaxNumber)!="23126806")return;
         var result=await ModuleAsync("receiving","supplier-enrich",new{number=invoice.Number,supplierTaxNumber=invoice.SupplierTaxNumber});
-        if(_company()!=company||!result.GetProperty("configured").GetBoolean())return;
+        if(_company()!=company)return;if(!result.GetProperty("configured").GetBoolean()){Message="A CompMarket API még nincs beállítva. A Beállításokban add meg a kapcsolat adatait.";return;}
         var rows=result.GetProperty("rows").EnumerateArray().ToArray();var matched=0;
         static string Fold(string s)=>new(s.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
         foreach(var line in Lines)

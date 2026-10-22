@@ -5,7 +5,7 @@
       "pcimpressz.business": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.19, )"
+          "PcImpressz.Contracts": "[0.4.20, )"
         }
       },
       "pcimpressz.contracts": {
@@ -14,7 +14,7 @@
       "pcimpressz.modules.partners": {
         "type": "Project",
         "dependencies": {
-          "PcImpressz.Contracts": "[0.4.19, )"
+          "PcImpressz.Contracts": "[0.4.20, )"
         }
       }
     }

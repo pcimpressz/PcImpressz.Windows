@@ -12,6 +12,23 @@ using PcImpressz.Shell.Windows;
 namespace PcImpressz.Shell.UiTests;
 internal static class Program
 {
+    private static void RunDispatcherCheck(Func<Task> check)
+    {
+        var previous=SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        try
+        {
+            var task=check();
+            if(!task.IsCompleted)
+            {
+                var frame=new System.Windows.Threading.DispatcherFrame();
+                task.GetAwaiter().OnCompleted(()=>frame.Continue=false);
+                System.Windows.Threading.Dispatcher.PushFrame(frame);
+            }
+            task.GetAwaiter().GetResult();
+        }
+        finally{SynchronizationContext.SetSynchronizationContext(previous);}
+    }
     private static void VerifyBusyEditor()
     {
         var directory = Path.Combine(Path.GetTempPath(), "pcimpressz-ui-audit-" + Guid.NewGuid().ToString("N"));
@@ -55,7 +72,7 @@ internal static class Program
             var bindingErrors=new StringWriter();PresentationTraceSources.DataBindingSource.Listeners.Add(new TextWriterTraceListener(bindingErrors));PresentationTraceSources.DataBindingSource.Switch.Level=SourceLevels.Error;
             CheckoutUiChecks.VerifyAsync(output).GetAwaiter().GetResult();
             PartnerEditorChecks.VerifyAsync(output).GetAwaiter().GetResult();
-            NavInvoiceUiChecks.VerifyAsync(output).GetAwaiter().GetResult();
+            RunDispatcherCheck(()=>NavInvoiceUiChecks.VerifyAsync(output));
             InvoicePagingChecks.VerifyAsync(output).GetAwaiter().GetResult();
             VerifyBusyEditor();
             UiProductChecks.VerifyAppliedQuery();

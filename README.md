@@ -1,3 +1,7 @@
+## 0.4.20 – NAV bevételezési munkafolyamat javítása
+
+Rögzített NAV-fejléc, kapcsolható automatikus szállítófelvétel, felül is elérhető Bevételezés, külön Bevételezett számlák nézet, látható kategória és terméktallózó. Részletek: [használat](docs/NAV-BEVETELEZES-0.4.20.md).
+
 # PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.19
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.

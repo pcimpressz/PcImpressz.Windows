@@ -10,6 +10,8 @@ namespace PcImpressz.Shell.Windows;
 internal sealed partial class LineEditor
 {
     private string _retail="",_markup="30",_saleVat="27";
+    public string Category {get=>ProductFields.FirstOrDefault(f=>f.Definition.Id=="categoryCode")?.Text??"";set{var categoryField=ProductFields.FirstOrDefault(f=>f.Definition.Id=="categoryCode");if(categoryField is not null)categoryField.Text=value;Changed();}}
+    public void CategoryChanged()=>Changed(nameof(Category));
     public ObservableCollection<EntityFieldViewModel> ProductFields {get;}=[];
     public bool ProductLoading {get;set;}
     public bool ProductDirty {get;set;}
@@ -27,6 +29,7 @@ internal sealed partial class LineEditor
         { _page.ProductMessage("Az árképzéshez érvényes beszerzési ár, 0–10000% haszonkulcs és 0/5/18/27% áfa kell.");return; }
         RetailPrice=RetailPricing.Suggest(buy,markup,vat).ToString("0.####",CultureInfo.GetCultureInfo("hu-HU"));
     });
+    public ICommand BrowseProductCommand=>new RelayCommand(()=>_= _page.BrowseProductAsync(this));
     public ICommand SaveProductCommand=>new RelayCommand(()=>_= _page.SaveLineProductAsync(this));
     public ICommand LoadProductCommand=>new RelayCommand(()=>_= _page.LoadLineProductAsync(this));
 }
@@ -67,7 +70,7 @@ internal sealed partial class ReceivingPageViewModel
                 }
                 else if(definition.Id is "isSalable" or "isPurchaseable")field.Checked=true;
                 else if(id is null)field.Text=definition.Id switch{"name"=>line.Name,"sku"=>line.Sku,"barcode"=>line.Barcode,"unitCode"=>line.UnitCode,_=>field.Text};
-                field.Edited=()=>{if(line.ProductLoaded){line.ProductEditRevision++;line.ProductDirty=true;MarkDirty();}};
+                field.Edited=()=>{if(definition.Id=="categoryCode")line.CategoryChanged();if(line.ProductLoaded){line.ProductEditRevision++;line.ProductDirty=true;MarkDirty();}};
                 line.ProductFields.Add(field);
             }
             line.ProductVersion=id is not null?row.GetProperty("version").GetInt64():0;
@@ -77,7 +80,7 @@ internal sealed partial class ReceivingPageViewModel
                 var vat=row.GetProperty("saleVatRate").GetDecimal();line.SaleVat=vat.ToString(CultureInfo.InvariantCulture);
                 line.RetailPrice=row.TryGetProperty("saleNetUnitPrice",out var price)&&price.ValueKind==JsonValueKind.Number?(price.GetDecimal()*(1+vat/100m)).ToString("0.####",CultureInfo.GetCultureInfo("hu-HU")):"";
             }
-            line.ProductLoaded=true;line.ProductDirty=false;if(pendingPrice is {} pending){line.ApplyPrices(pending.Item1,pending.Item2,pending.Item3);line.ProductDirty=true;}
+            line.CategoryChanged();line.ProductLoaded=true;line.ProductDirty=false;if(pendingPrice is {} pending){line.ApplyPrices(pending.Item1,pending.Item2,pending.Item3);line.ProductDirty=true;}
         }
         catch(Exception ex) when(ex is not OutOfMemoryException){Message="A termékadatok nem tölthetők be: "+ex.Message;}
         finally{line.ProductLoading=false;}

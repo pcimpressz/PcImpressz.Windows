@@ -43,11 +43,27 @@ internal sealed partial class ReceivingPageViewModel
         var match=Suppliers.FirstOrDefault(s=>Tax(s.TaxId)==Tax(invoice.SupplierTaxNumber));
         if(match is null)
         {
-            var saved=await ModuleAsync("partners","save",new{id=(Guid?)null,version=0,data=new{name=invoice.SupplierName,taxId=invoice.SupplierTaxNumber,country="HU",isSupplier=true,isActive=true}});
+            SupplierStatus="Nem találtunk szállítóegyezést. Automatikus felvétel…";
+            var lookup=await ModuleAsync("partners","list",new{filter="all",search=Tax(invoice.SupplierTaxNumber),page=0,pageSize=200});
+            if(_company()!=company)return;
+            var existing=lookup.GetProperty("rows").EnumerateArray().Where(r=>Tax(Get(r,"taxId"))==Tax(invoice.SupplierTaxNumber)).ToArray();
+            if(existing.Length>1)throw new ArgumentException("Több partner adószáma egyezik. Válassz partnert kézzel.");
+            System.Text.Json.JsonElement saved;
+            if(existing.Length==1)
+            {
+                var row=existing[0];var data=System.Text.Json.Nodes.JsonNode.Parse(row.GetRawText())!.AsObject();data["isSupplier"]=true;data["isActive"]=true;
+                saved=await ModuleAsync("partners","save",new{id=row.GetProperty("id").GetGuid(),version=row.GetProperty("version").GetInt64(),data});
+                SupplierStatus="A meglévő partner szállítóként is használható; adatait megőriztük.";
+            }
+            else
+            {
+                saved=await ModuleAsync("partners","save",new{id=(Guid?)null,version=0,data=new{name=invoice.SupplierName,taxId=invoice.SupplierTaxNumber,country="HU",isSupplier=true,isActive=true}});
+                SupplierStatus="Nem volt egyezés: a szállítót automatikusan felvettük a partnertörzsbe.";
+            }
             if(_company()!=company)return;
             match=new(saved.GetProperty("id").GetGuid(),invoice.SupplierName,invoice.SupplierTaxNumber);Suppliers.Add(match);
         }
-        _populating=true;_supplier=match;SelectedNavSupplier=match;Changed(nameof(SelectedSupplier));Changed(nameof(NavSupplierHint));_populating=false;
+        if(string.IsNullOrEmpty(SupplierStatus))SupplierStatus="A szállítót adószám alapján azonosítottuk.";_populating=true;_supplier=match;SelectedNavSupplier=match;Changed(nameof(SelectedSupplier));Changed(nameof(NavSupplierHint));_populating=false;
     }
     internal async Task GenerateBarcodeAsync(LineEditor line)
     {
