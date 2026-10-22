@@ -121,6 +121,7 @@ public sealed partial class ShellViewModel : Observable
     public ShellViewModel(AppearanceStore store, string directory, string? hostPath)
     {
         (_store, DataDirectory) = (store, directory);
+        Operations = new OperationWorkspace(directory, () => IsCompanyAdmin);
         _layouts = new ListLayoutStore(directory);
         _layouts.Changed += key =>
         {
@@ -206,12 +207,13 @@ public sealed partial class ShellViewModel : Observable
             Changed(); Changed(nameof(PageTitle)); Changed(nameof(PageDescription)); Changed(nameof(CurrentPage));
         }
     }
+    public OperationWorkspace Operations { get; }
     public string PageTitle => SelectedNavigation.Title;
     public string PageDescription => SelectedNavigation.Description;
     private LoginPanel? _loginPanel;
     public object CurrentPage => !IsSignedIn ? (_loginPanel ??= new LoginPanel { DataContext=this }) : _entityPages.TryGetValue(SelectedNavigation.PageKey, out var entityPage)
         ? ProductWorkspace(entityPage) : SelectedNavigation.PageKey switch
-    { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(), _ => new DashboardPage() };
+    { "modules" => new ModulesPage(), "license" => new LicensePage(), "appearance" => new AppearancePage(), "settings" => new SettingsPage(), _ when OperationCatalog.IsPage(SelectedNavigation.PageKey) && IsCompanyAdmin => new OperationSettingsPage(SelectedNavigation.PageKey), _ => new DashboardPage() };
 
     private ProductWorkspaceViewModel? _productWorkspace;
     private object ProductWorkspace(IWorkspacePage page)

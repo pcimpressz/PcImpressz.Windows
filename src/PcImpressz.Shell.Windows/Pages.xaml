@@ -444,4 +444,5 @@
       </Expander>
     </StackPanel>
   </DataTemplate>
+  <DataTemplate DataType="{x:Type local:OperationSettingsPage}"><local:OperationSettingsView DataContext="{Binding DataContext.Operations, RelativeSource={RelativeSource AncestorType=Window}}" /></DataTemplate>
 </ResourceDictionary>
