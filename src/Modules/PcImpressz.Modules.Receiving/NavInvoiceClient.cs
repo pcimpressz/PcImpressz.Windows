@@ -7,7 +7,7 @@ using System.Xml.Linq;
 namespace PcImpressz.Modules.Receiving;
 public sealed record NavInvoiceQuery(Guid CompanyId,string From,string To,int Page=1);
 public sealed record NavInvoiceImport(Guid CompanyId,string Number,string SupplierTaxNumber,Guid? SupplierId=null,int? BatchIndex=null);
-public sealed record NavInvoiceDigest(string Number,string SupplierName,string SupplierTaxNumber,string IssuedOn,string Currency,string Operation,decimal? Net,int? BatchIndex=null,string CustomerName="",string CustomerTaxNumber="",decimal? Vat=null,decimal? Gross=null,string PaymentMethod="",string PaymentDate="",string DeliveryDate="");
+public sealed record NavInvoiceDigest(string Number,string SupplierName,string SupplierTaxNumber,string IssuedOn,string Currency,string Operation,decimal? Net,int? BatchIndex=null,string CustomerName="",string CustomerTaxNumber="",decimal? Vat=null,decimal? Gross=null,string PaymentMethod="",string PaymentDate="",string DeliveryDate="",Guid? ReceiptId=null,bool Received=false);
 public sealed record NavInvoicePage(int CurrentPage,int AvailablePage,NavInvoiceDigest[] Rows);
 public static class NavInvoiceClient
 {

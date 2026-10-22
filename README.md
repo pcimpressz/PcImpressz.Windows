@@ -1,4 +1,4 @@
-# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.17
+# PC-Impressz Windows Edition – Core + Windows Shell + üzleti modulok v0.4.18
 
 A Windows-termék üzleti moduloktól független magja és testreszabható grafikus kerete. A projekt új helye: `F:\progs\PcImpressz.Windows`. A korábbi architektúraterv a `docs` könyvtárban található.
 
@@ -173,3 +173,7 @@ A kimenő számlák listája a saját céges SQL-adatbázisból jön; a NAV kül
 ## Admin panelrendező és kompakt bevételezés – 0.4.17
 
 A fő munkafelületeken admin rendezőmód érhető el: fejlécnél húzható panelsorrend, saroknál állítható szélesség/magasság, cégenkénti nézetmentés, Mégse, alapnézet és előző mentés. Számlák, törzsadatok, eladás és készlet fő panelcsoportjai támogatottak. A bevételezés alapadatai két oszloposak, a további mezők és tételrészletek lenyithatók. Használat és hatókör: [Admin panelrendező](docs/ADMIN-PANELRENDEZO.md).
+
+## NAV-előnézet, állapotszínek és kisker ár – 0.4.18
+
+A NAV-listán a kijelölés automatikusan, szállítófelvétel nélkül megnyitja az alsó tételszerkesztőt. Csak a tényleges készletre vétel zöld; a többi fehér, szöveges állapottal. A színek a Beállítások → Számlák · megjelenítés alatt változtathatók. Fejléces tételtáblázat, bruttó kisker ár, állítható haszonkulcs és eladási áfa; a további termékadatok a közös terméktörzs mezőleírásából épülnek fel. [Használat és korlátok](docs/NAV-BEVETELEZES-0.4.18.md).

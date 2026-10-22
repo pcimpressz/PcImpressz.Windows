@@ -182,6 +182,8 @@ public sealed partial class ShellViewModel : Observable
     public string LicenseReason => _status?.LicenseReason ?? "A licencállapot a maghoz kapcsolódás után jelenik meg.";
     public string LicenseUntil => _status?.LicenseValidUntil?.ToLocalTime().ToString("yyyy. MM. dd. HH:mm") ?? "Nincs aktív időszak";
     public string LastUpdated => _status?.ObservedAt.ToLocalTime().ToString("HH:mm:ss") ?? "—";
+    public string NavReceivedColor {get=>_preferences.NavReceivedColor;set{if(!SkinValidation.IsColor(value))return;_preferences=_preferences with{NavReceivedColor=value};ApplyAndSave();Changed();}}
+    public string NavPendingColor {get=>_preferences.NavPendingColor;set{if(!SkinValidation.IsColor(value))return;_preferences=_preferences with{NavPendingColor=value};ApplyAndSave();Changed();}}
     public bool FormatPartnerNames {get=>_preferences.FormatPartnerNames;set{_preferences=_preferences with{FormatPartnerNames=value};PartnerNameFormatting.Enabled=value;ApplyAndSave();Changed();}}
     public int[] MoneyDecimalChoices {get;}=[0,1,2,3,4];
     public int MoneyDecimals {get=>_preferences.MoneyDecimals;set{if(value is <0 or >4)return;_preferences=_preferences with{MoneyDecimals=value};MoneyDisplay.Decimals=value;ApplyAndSave();Changed();}}

@@ -1,3 +1,5 @@
+Aktuális, 0.4.18-as működés: [automatikus előnézet, állapotszínek, termékadatok és kisker ár](NAV-BEVETELEZES-0.4.18.md). Az alábbi korábbi verzió leírása történeti állapot.
+
 A 0.4.16-tól a kimenő lista elsődleges forrása a saját SQL-nyilvántartás; a NAV külön egyeztet. A szolgáltató- és számlatömb-beállítások, valamint a még nem aktivált API-adapter állapota: [0.4.16](KIMENO-SZAMLA-0.4.16.md).
 
 # Számlák munkafelület – 0.4.15

@@ -26,7 +26,7 @@ public sealed class ReceivingModule : IModule
         Register(context,"nav-list","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
         {
             var query=ReceivingJson.Read<NavInvoiceQuery>(input);var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("A Beállításokban előbb add meg a cég NAV-kapcsolatát.");
-            return ReceivingJson.Element(await NavInvoiceClient.ListAsync(secret,query,ct));
+            var page=await NavInvoiceClient.ListAsync(secret,query,ct);return ReceivingJson.Element(await repository.MarkNavPage(query.CompanyId,page,ct));
         });
         Register(context,"nav-outgoing-list","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
         {
@@ -76,6 +76,14 @@ public sealed class ReceivingModule : IModule
         {
             ct.ThrowIfCancellationRequested();
             return Task.FromResult(ReceivingJson.Element(new{text=InvoicePdf.ReadText(input.GetProperty("contentBase64").GetString())}));
+        });
+        Register(context,"nav-preview","receiving.read",CommandAccess.Licensed,async(input,_,ct)=>
+        {
+            var query=ReceivingJson.Read<NavInvoiceImport>(input);
+            var secret=NavConnectionStore.Read(context.GetCompanyDataDirectory(query.CompanyId),query.CompanyId)??throw new ArgumentException("Előbb állítsd be a NAV-kapcsolatot.");
+            var document=await NavInvoiceClient.DownloadAsync(secret,query,ct);
+            var preview=await repository.PreviewNav(query,document,ct);
+            return ReceivingJson.Element(new{document,lines=preview.Lines,receipt=preview.Existing is null?(JsonElement?)null:Detail(preview.Existing)});
         });
         Register(context,"nav-import","receiving.write",CommandAccess.Licensed,async(input,actor,ct)=>
         {

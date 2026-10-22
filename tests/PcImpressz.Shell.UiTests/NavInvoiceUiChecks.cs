@@ -1,5 +1,9 @@
 using System.IO;
 using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using PcImpressz.Contracts;
 using PcImpressz.Shell.Customization;
 using PcImpressz.Shell.Windows;
@@ -8,35 +12,60 @@ internal static class NavInvoiceUiChecks
 {
     public static async Task VerifyAsync(string output)
     {
-        var company=Guid.NewGuid();var supplier=Guid.NewGuid();var imported=0;
+        var company=Guid.NewGuid();var product=Guid.NewGuid();var supplier=Guid.NewGuid();var receipt=Guid.NewGuid();var lineId=Guid.NewGuid();var previews=0;var writes=0;var imports=0;var receiptSaves=0;JsonElement savedData=default;
         Task<JsonElement> Send(string operation,object input,CancellationToken ct)
         {
+            if(operation=="ui.workspace.read")return Task.FromResult(JsonSerializer.SerializeToElement(new UiWorkspaceLayout(0,[],[])));
             var request=(ModuleCommandRequest)input;
-            if(request.Command=="outgoing-local-list")return Task.FromResult(JsonSerializer.SerializeToElement(new{total=1,rows=new[]{new{number="OUT-1",customerName="Vevő",customerTaxNumber="22222222",issuedOn="2026-10-21",deliveryOn="2026-10-21",dueOn="2026-11-01",currency="HUF",providerStatus="issued",navStatus="pending",financialStatus="open",paymentMethod="BANK_TRANSFER",net=200m,vat=54m,gross=254m}},summary=new{count=1,currencies=new[]{new{currency="HUF",net=200m,vat=54m,gross=254m}}}}));
-            if(request.Command=="nav-list")return Task.FromResult(JsonSerializer.SerializeToElement(new{currentPage=request.Input.GetProperty("page").GetInt32(),availablePage=2,rows=new[]{new{number="NAV-1",supplierName="Teszt",supplierTaxNumber="11111111",issuedOn="2026-10-21",currency="HUF",operation="CREATE",net=200m}}}));
-            if(request.Command=="nav-import")
+            object result=request.Command switch
             {
-                imported++;return Task.FromResult(JsonSerializer.SerializeToElement(new{id=Guid.NewGuid(),version=1,status="uj",number="NAV-1",issuedOn="2026-10-21",dueOn="",warehouse="Bolt",net=200m,gross=254m,supplierId=supplier,supplierName="Teszt",supplierTaxId="11111111",lines=new[]{new{id=Guid.NewGuid(),productId=(Guid?)null,name="USB egér",sku="M-1",barcode="",unitCode="DB",quantity=2m,netUnitPrice=100m,vatRate=27m,match="uj",matchLabel="Nincs a törzsben"}}}));
-            }
-            throw new InvalidOperationException("Váratlan parancs: "+request.Command);
+                "list"=>new{total=0,rows=Array.Empty<object>(),counts=new{uj=0,bevetelezve=0,koltseg=0,fuggo=0}},
+                "nav-list"=>new{currentPage=request.Input.GetProperty("page").GetInt32(),availablePage=2,rows=new[]{new{number="NAV-1",supplierName="Új szállító",supplierTaxNumber="11111111",issuedOn="2026-10-21",currency="HUF",operation="CREATE",net=200m,received=false}}},
+                "products-schema"=>new EntityField[]{new("name","Név"),new("sku","Cikkszám"),new("unitCode","Egység"),new("barcode","Vonalkód"),new("manufacturerPartNumber","Gyártói cikkszám"),new("description","Leírás","multiline"),new("isActive","Aktív","boolean",DefaultChecked:true),new("saleVatRate","Eladási áfa","decimal",DefaultText:"27"),new("saleNetUnitPrice","Eladási nettó","decimal")},
+                "products-get"=>new{id=product,version=7,name="Törzsben tárolt név",sku="M-1",unitCode="DB",barcode="",manufacturerPartNumber="MPN-123",description="Megőrzendő leírás",isActive=true,saleNetUnitPrice=1000m,saleVatRate=27m},
+                "nav-preview"=>Preview(),
+                "products-save"=>SaveProduct(),
+                "nav-import"=>Import(),
+                "save"=>SaveReceipt(),
+                _=>Unexpected()
+            };
+            return Task.FromResult(JsonSerializer.SerializeToElement(result,new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            object Unexpected(){writes++;throw new InvalidOperationException("Váratlan írás vagy parancs: "+request.Command);}
+            object SaveProduct(){savedData=request.Input.GetProperty("data").Clone();if(request.Input.GetProperty("version").GetInt64()!=7)throw new InvalidOperationException("Hiányzó verzióellenőrzés.");return new{id=product,version=8,sku="M-1",barcode="",unitCode="DB"};}
+            object Import(){imports++;return Detail(1);}
+            object SaveReceipt(){receiptSaves++;if(request.Input.GetProperty("id").GetGuid()!=receipt||request.Input.GetProperty("version").GetInt64()!=1||request.Input.GetProperty("draft").GetProperty("supplierId").GetGuid()!=supplier)throw new InvalidOperationException("A NAV-előnézet mentése nem a megfelelő számlát módosítja.");return Detail(2);}
+            object Detail(long version)=>new{id=receipt,version,status="uj",number="NAV-1",issuedOn="2026-10-21",dueOn="",warehouse="Bolt",net=200m,gross=254m,supplierId=supplier,supplierName="Új szállító",supplierTaxId="11111111",lines=new[]{new{id=lineId,productId=(Guid?)product,name="Szállítói megnevezés",sku="M-1",barcode="",unitCode="DB",quantity=2m,netUnitPrice=100m,vatRate=27m,match="megvan",matchLabel="Párosítva"}}};
+            object Preview(){previews++;return new{document=new{issuedOn="2026-10-21",dueOn=""},receipt=(object?)null,lines=new[]{new{id=Guid.NewGuid(),productId=(Guid?)product,name="Szállítói megnevezés",sku="M-1",barcode="",unitCode="DB",quantity=2m,netUnitPrice=100m,vatRate=27m,match="megvan"}}};}
         }
         var connection=new HostConnection(output,null,Send);connection.SetSession(company,new("test","admin","admin",DateTimeOffset.UtcNow.AddMinutes(30)));
-        var definition=new EntityPageDescriptor("receiving","receiving","Bevételezés","","",[],[new("number","Bizonylat")],new("list","save","reverse","export")){ViewKind="receiving"};
+        var definition=new EntityPageDescriptor("receiving","receiving","Számlák","","",[],[new("number","Bizonylat")],new("list","save","reverse","export")){ViewKind="receiving"};
         var page=new ReceivingPageViewModel(definition,connection,()=>company,CancellationToken.None,new ListLayoutStore(Path.Combine(output,"nav-ui-check")));
-        page.Suppliers.Add(new(supplier,"Teszt","11111111-2-42"));page.NavFrom=new DateTime(2026,10,1);page.NavTo=new DateTime(2026,10,21);await page.FetchNavAsync(1);if(page.NavInvoices.Count!=1)throw new InvalidOperationException("A NAV-lista nem töltődött be.");
-        await page.FetchNavAsync(2);if(!page.NavPageLabel.StartsWith("2 / 2"))throw new InvalidOperationException("A NAV-lapozás hibás.");
-        page.SelectedNavInvoice=page.NavInvoices.Single();if(page.SelectedNavSupplier?.Id!=supplier)throw new InvalidOperationException("A NAV-szállító adószám alapján nem párosult.");
-        page.IsNav=true;
-        await page.DownloadNavAsync();if(imported!=1||!page.IsEditor||!page.IsEditable||page.Lines.Count!=1||page.IsDirty)throw new InvalidOperationException("A NAV-letöltés nem nyitotta meg az új számlát párosításhoz.");
-        if(!page.IsNav)throw new InvalidOperationException("A NAV-panel eltűnt a számla betöltése után.");
-        var original=page.SelectedSupplier;
-        page.SelectedNavInvoice=new("OTHER","Másik szállító","33333333","2026-10-21","HUF","CREATE","100",null);
-        if(page.SelectedSupplier!=original||page.IsDirty)throw new InvalidOperationException("A NAV-kijelölés átírta a szerkesztett számlát.");
-        page.OutgoingCommand.Execute(null);if(!page.IsOutgoing)throw new InvalidOperationException("Nem váltott kimenő nézetre.");
-        await page.FetchOutgoingAsync();if(page.OutgoingInvoices.Single().CustomerName!="Vevő")throw new InvalidOperationException("Nem töltődött be a kimenő lista.");
-        page.IncomingCommand.Execute(null);if(!page.IsEditor||!page.IsIncoming||!page.IsNav)throw new InvalidOperationException("A nézetváltás elvesztette a bejövő munkát.");
-        page.ApplyPdfPreview("teszt.pdf","PDF tesztszöveg");if(!page.HasPdfPreview||!page.IsDirty||page.PdfText!="PDF tesztszöveg")throw new InvalidOperationException("Hiányzik a PDF ellenőrzési előnézet.");
-        page.CompanyChanged();if(page.HasPdfPreview||page.OutgoingInvoices.Count>0||page.IsNav)throw new InvalidOperationException("Cégváltás után megmaradt másik cég számlája.");
-        Console.WriteLine("ui-ok NAV dates, pagination, supplier matching and imported invoice editor");
+        page.NavFrom=new DateTime(2026,10,1);page.NavTo=new DateTime(2026,10,21);await page.FetchNavAsync(1);
+        await page.FetchNavAsync(2);if(!page.NavPageLabel.StartsWith("2 / 2"))throw new InvalidOperationException("Hibás lapozás.");
+        page.IsNav=true;page.SelectedNavInvoice=page.NavInvoices.Single();
+        if(previews!=1||writes!=0||!page.IsEditor||page.SelectedSupplier is not null||page.Lines.Count!=1||page.IsDirty||!page.IsNav)throw new InvalidOperationException("Ismeretlen szállítóval nem működik az automatikus, írás nélküli előnézet: "+page.Message);
+        var line=page.Lines.Single();if(line.RetailPrice!="1270"||line.ProductFields.Single(f=>f.Definition.Id=="manufacturerPartNumber").Text!="MPN-123")throw new InvalidOperationException("Hiányzó kisker ár vagy termékadat.");
+        line.CalculateRetailCommand.Execute(null);if(line.RetailPrice!="165"||!line.ProductDirty||!page.IsDirty)throw new InvalidOperationException("Hibás haszonkulcsos árképzés vagy módosításjelzés.");
+        await page.SaveLineProductAsync(line);
+        if(savedData.ValueKind!=JsonValueKind.Object||savedData.GetProperty("description").GetString()!="Megőrzendő leírás"||savedData.GetProperty("name").GetString()!="Törzsben tárolt név"||savedData.GetProperty("manufacturerPartNumber").GetString()!="MPN-123"||savedData.GetProperty("saleNetUnitPrice").GetDecimal()!=129.9213m||line.ProductDirty)throw new InvalidOperationException("Az ármentés elvesztette a terméktörzs adatait: "+page.Message);
+        ThemeManager.Apply(BuiltInSkins.All.Single(s=>s.Id=="paper"),new AppearancePreferences{SkinId="paper"});
+        page.NavInvoices.Add(new("NAV-RECEIVED","Már bevételezett szállító","22222222","2026-10-21","HUF","CREATE","1000",null,Guid.NewGuid(),true));
+        var view=new ReceivingPageView{DataContext=page,Width=1200};var surface=new Border{Child=view,Background=(Brush)Application.Current.Resources["BackgroundBrush"]};
+        surface.Measure(new Size(1200,1900));surface.Arrange(new Rect(0,0,1200,1900));surface.UpdateLayout();
+        var grids=Descendants(surface).OfType<DataGrid>().ToArray();var items=grids.Single(g=>ReferenceEquals(g.ItemsSource,page.Lines));
+        if(items.Columns.Count<9||items.HeadersVisibility!=DataGridHeadersVisibility.Column)throw new InvalidOperationException("Hiányos tételtáblázat.");
+        items.SelectedIndex=0;surface.UpdateLayout();
+        var nav=grids.Single(g=>ReferenceEquals(g.ItemsSource,page.NavInvoices));var received=(DataGridRow)nav.ItemContainerGenerator.ContainerFromItem(page.NavInvoices.Last());var pending=(DataGridRow)nav.ItemContainerGenerator.ContainerFromItem(page.NavInvoices.First());
+        if(((SolidColorBrush)received.Background).Color!=Color.FromRgb(217,242,220)||((SolidColorBrush)pending.Background).Color!=Colors.White)throw new InvalidOperationException("Hibás NAV-állapotszínezés.");
+        var bitmap=new RenderTargetBitmap(1200,1900,96,96,PixelFormats.Pbgra32);bitmap.Render(surface);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using(var file=File.Create(Path.Combine(output,"nav-preview-retail.png")))encoder.Save(file);
+        view.DataContext=null;surface.Child=null;
+        page.Suppliers.Add(new(supplier,"Új szállító","11111111-2-42"));page.SelectedSupplier=page.Suppliers.Last();
+        await page.SaveAsync();if(imports!=1||receiptSaves!=1||page.IsDirty||page.Lines.Count!=1)throw new InvalidOperationException("A szállító kiválasztása után nem menthető a NAV-előnézet: "+page.Message);
+        page.ApplyPdfPreview("teszt.pdf","PDF tesztszöveg");page.CompanyChanged();if(page.HasPdfPreview||page.IsNav||page.Lines.Count!=0)throw new InvalidOperationException("Cégváltás után megmaradt az előnézet.");
+        Console.WriteLine("ui-ok automatic NAV preview without supplier, no import writes, full product fields, retail price and markup");
+    }
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++){var child=VisualTreeHelper.GetChild(parent,i);yield return child;foreach(var descendant in Descendants(child))yield return descendant;}
     }
 }

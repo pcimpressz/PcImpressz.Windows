@@ -21,7 +21,7 @@ internal sealed partial class ReceivingPageViewModel
         var submit=new Button{Content="Visszafordítás",HorizontalAlignment=HorizontalAlignment.Left};submit.Click+=(_,_)=>{if(reason.Text.Trim().Length>=3)window.DialogResult=true;};panel.Children.Add(submit);window.Content=panel;
         if(window.ShowDialog()!=true)return;
         IsBusy=true;var succeeded=false;
-        try{var saved=await ModuleAsync("receiving","reverse",new{id,version,reason=reason.Text});if(IsEditor)Fill(saved);succeeded=true;Message="A bevételezés visszafordítva, a készlet ellenmozgása rögzítve.";}
+        try{var saved=await ModuleAsync("receiving","reverse",new{id,version,reason=reason.Text});if(IsEditor)Fill(saved);await RefreshNavReceiptFlagsAsync(saved);succeeded=true;Message="A bevételezés visszafordítva, a készlet ellenmozgása rögzítve.";}
         catch(Exception ex){Message=ex.Message;}
         finally{IsBusy=false;}
         if(succeeded&&IsHome){await LoadAsync();Message="A bevételezés visszafordítva; az eredeti és az ellenmozgás megmaradt.";}

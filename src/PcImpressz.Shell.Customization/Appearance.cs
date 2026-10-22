@@ -22,6 +22,8 @@ public static class BuiltInSkins
 
 public sealed record AppearancePreferences
 {
+    public string NavReceivedColor {get;init;}="#D9F2DC";
+    public string NavPendingColor {get;init;}="#FFFFFF";
     public bool FormatPartnerNames {get;init;}=true;
     public int MoneyDecimals { get; init; } = 0;
     public int SchemaVersion { get; init; } = 1;
@@ -147,6 +149,7 @@ public sealed class AppearanceStore(string directory)
 
     private static void ValidatePreferences(AppearancePreferences value)
     {
+        if (!SkinValidation.IsColor(value.NavReceivedColor)||!SkinValidation.IsColor(value.NavPendingColor))throw new InvalidDataException("A számlaállapot színe #RRGGBB legyen.");
         if (value.SchemaVersion != 1 || !SkinValidation.IsId(value.SkinId)
             || value.AccentOverride is not null && !SkinValidation.IsColor(value.AccentOverride)
             || value.MoneyDecimals is <0 or >4

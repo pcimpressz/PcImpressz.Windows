@@ -291,3 +291,7 @@ Az átadott fejlesztési ZIP elkülönített példányon, javított alkalmazó s
 ## 2026-10-22 – 0.4.17 admin panelrendező
 
 Közös admin panelkeret: egérrel mozgatás, méretezés, adaptív tördelés, céges SQL nézetmentés, verzióütközés-védelem, legutóbbi tíz mentés, Mégse/alapnézet/előző mentés. Fő panelcsoportok: bejövő és kimenő számlák, partnerek, termékek, eladás és készlet. Kompakt bevételezés két oszloppal és lenyitható tételrészletekkel. A rendezés megőrzi az üzleti piszkozatot; mentés csak hitelesített adminnak. 189/189 üzleti és 69/69 WPF ellenőrzés sikeres, külön görgetési próbával. Számlakiállítás/API-élesítés nem történt. Részletek: docs/ADMIN-PANELRENDEZO.md.
+
+## 2026-10-22 – 0.4.18 NAV-előnézet és termékárak
+
+Kijelölésre automatikus, írás nélküli előnézet ismeretlen szállítóval is; a szállító az alsó szerkesztőből felvehető. A NAV-listán zöld csak a ténylegesen készletre könyvelt számla, visszafordításkor jelzésfrissítés; színek beállíthatók. Táblázatos tételek, nettó beszerzés, bruttó kisker ár, változtatható haszonkulcs és eladási áfa, a régi raktárkezelő szerinti 5 Ft-ra kerekített árjavaslat. Teljes, közös metaadatból épülő termékszerkesztő, meglévő adatok és verzióütközés-védelem megőrzése. 190/190 üzleti és 70/70 WPF ellenőrzés. A tesztek szintetikusak; éles számla, e-mail, céges NAV-lekérés vagy eredeti céges készletmódosítás nem történt. Részletek: docs/NAV-BEVETELEZES-0.4.18.md.

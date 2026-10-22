@@ -95,7 +95,7 @@ public sealed partial class CatalogModule : IModule
             new("units-list", "units-save", "units-archive", "units-export"),
             Labels("mértékegység", "Mértékegység", "mértékegységet", "mertekegysegek.csv", "Keresés név, kód vagy jelölés alapján"),
             [new("all", "Aktív mértékegységek"), new("archived", "Archiváltak")]));
-        context.RegisterPage(Page("products", context.ModuleId, "Terméktörzs", "Cikkszám, kategória, mértékegység és alapparaméterek.", "\uE7B8",
+        var productPage=Page("products", context.ModuleId, "Terméktörzs", "Cikkszám, kategória, mértékegység és alapparaméterek.", "\uE7B8",
             [new("name", "Termék neve", Required: true), new("sku", "Saját cikkszám", Required: true), new("manufacturerPartNumber", "Gyártói cikkszám"), new("categoryCode", "Kategória kódja"),
              new("unitCode", "Mértékegység kódja", Required: true), new("revision", "Revízió"), new("barcode", "Vonalkód"),
              new("saleNetUnitPrice","Nettó eladási egységár (Ft)","decimal"), new("saleVatRate","Eladási áfa %","decimal",Required:true,DefaultText:"27"),
@@ -116,7 +116,14 @@ public sealed partial class CatalogModule : IModule
                 ExportFileName = "termekek.csv", ExportedMessage = "A szűrt terméklista exportálva.",
                 SearchHint = "Több szó, ékezet nélkül is. Példa: vezetek nelkuli eger · gyartoi:=ABC-123 · sku:=MOUSE-1 · vonalkod:599 · nev:\"vezeték nélküli\""
             },
-            [new("all", "Aktív termékek"), new("in-stock", "Van saját készleten"), new("out-of-stock", "Nincs saját készleten"), new("purchaseable", "Beszerzésre jelöltek"), new("salable", "Eladásra jelöltek"), new("archived", "Archiváltak")]));
+            [new("all", "Aktív termékek"), new("in-stock", "Van saját készleten"), new("out-of-stock", "Nincs saját készleten"), new("purchaseable", "Beszerzésre jelöltek"), new("salable", "Eladásra jelöltek"), new("archived", "Archiváltak")]);
+        context.RegisterPage(productPage);
+        Register(context,"products-schema","catalog.read",CommandAccess.RecoveryReadOnly,(_,_,_)=>Task.FromResult(CatalogJson.Element(productPage.Fields)));
+        Register(context,"products-get","catalog.read",CommandAccess.RecoveryReadOnly,async(input,_,ct)=>
+        {
+            var product=(await repository.Snapshot(input.GetProperty("companyId").GetGuid(),ct)).Products.SingleOrDefault(p=>p.Id==input.GetProperty("id").GetGuid())??throw new ArgumentException("A termék nem található.");
+            return ProductRow(product);
+        });
         return ValueTask.CompletedTask;
     }
     public ValueTask StopAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;

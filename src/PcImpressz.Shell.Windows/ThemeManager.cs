@@ -16,6 +16,8 @@ internal static class ThemeManager
         {
             ["Background"] = p.Background, ["Surface"] = p.Surface, ["Elevated"] = p.Elevated,
             ["Sidebar"] = p.Sidebar, ["Stroke"] = p.Stroke, ["Text"] = p.Text, ["Muted"] = p.Muted,
+            ["NavReceived"] = preferences.NavReceivedColor, ["NavPending"] = preferences.NavPendingColor,
+            ["NavReceivedText"] = SkinValidation.AccentForeground(preferences.NavReceivedColor), ["NavPendingText"] = SkinValidation.AccentForeground(preferences.NavPendingColor),
             ["Accent"] = preferences.AccentOverride ?? p.Accent
         };
         var resources = Application.Current.Resources;

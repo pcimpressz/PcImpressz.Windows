@@ -45,9 +45,20 @@ internal static class NavInvoiceTests
             var supplier=database.Execute(company,tx=>CompanyReferenceQueries.Partners(tx).First(p=>p.IsSupplier));var product=database.Execute(company,tx=>CompanyReferenceQueries.Products(tx).Single(p=>p.Sku=="DEMO-001"));var before=database.Execute(company,tx=>CompanyReferenceQueries.StockQuantity(tx,product.Id));
             var doc=new ImportedDocument("NAV-UNIQUE","2026-10-21",null,supplier.Name,supplier.TaxId,[new(product.Name,product.Sku,"",2,100,27,"DB")],ExpectedNet:200,ExpectedVat:54,ExpectedGross:254);
             var repo=new ReceivingRepository(id=>companies.ModuleDataDirectory(id,"receiving"),TimeProvider.System,database);var request=new NavInvoiceImport(company,"NAV-UNIQUE",supplier.TaxId,supplier.Id);
+            var preview=await repo.PreviewNav(request with{SupplierId=null},doc);
+            Check.True(preview.Existing is null);Check.Equal(product.Id,preview.Lines.Single().ProductId!.Value);
+            var unknown=doc with{Number="UNKNOWN",SupplierTaxId="55555555"};
+            var missing=await repo.PreviewNav(new(company,"UNKNOWN","55555555"),unknown);Check.True(missing.Existing is null);Check.Equal(1,missing.Lines.Length);
+            Check.True(!(await repo.Snapshot(company)).Receipts.Any(r=>r.Data.Number is "UNKNOWN" or "NAV-UNIQUE"));
+            Check.Equal(before,database.Execute(company,tx=>CompanyReferenceQueries.StockQuantity(tx,product.Id)));
+            var digest=new NavInvoicePage(1,1,[new("NAV-UNIQUE",supplier.Name,supplier.TaxId,"2026-10-21","HUF","CREATE",200)]);
+            Check.True(!(await repo.MarkNavPage(company,digest)).Rows.Single().Received);
             var first=await repo.ImportNav(request,doc,"test");var again=await repo.ImportNav(request,doc,"test");Check.Equal(first.Id,again.Id);Check.Equal("uj",first.Data.Status);Check.True(!first.Data.StockPosted);Check.Equal(before,database.Execute(company,tx=>CompanyReferenceQueries.StockQuantity(tx,product.Id)));
             var posted=await repo.Classify(new(company,first.Id,first.Version,"bevetelezve"),"test");Check.Equal(before+2,database.Execute(company,tx=>CompanyReferenceQueries.StockQuantity(tx,product.Id)));
+            var marked=(await repo.MarkNavPage(company,digest)).Rows.Single();Check.True(marked.Received);Check.Equal(posted.Id,marked.ReceiptId!.Value);
+            Check.True(!(await repo.MarkNavPage(company,digest with{Rows=[digest.Rows[0] with{SupplierTaxNumber="55555555"}]})).Rows.Single().Received);
             var third=await repo.ImportNav(request,doc,"test");Check.Equal(posted.Id,third.Id);Check.Equal("bevetelezve",third.Data.Status);Check.Equal(before+2,database.Execute(company,tx=>CompanyReferenceQueries.StockQuantity(tx,product.Id)));
+            await repo.Reverse(new(company,posted.Id,posted.Version,"Teszt visszavétel"),"test");Check.True(!(await repo.MarkNavPage(company,digest)).Rows.Single().Received);
         });
     }
     private static string Invoice()=>"<InvoiceData xmlns='http://schemas.nav.gov.hu/OSA/3.0/data'><invoiceNumber>NAV-1</invoiceNumber><invoiceIssueDate>2026-10-21</invoiceIssueDate><invoiceMain><invoice><invoiceHead><supplierInfo><supplierTaxNumber><taxpayerId>11111111</taxpayerId><vatCode>2</vatCode><countyCode>42</countyCode></supplierTaxNumber><supplierName>Teszt Szállító</supplierName></supplierInfo><customerInfo><customerTaxNumber><taxpayerId>99999999</taxpayerId></customerTaxNumber></customerInfo><invoiceDetail><currencyCode>HUF</currencyCode></invoiceDetail></invoiceHead><invoiceLines><line><lineDescription>USB egér</lineDescription><quantity>2</quantity><unitPrice>100</unitPrice><unitOfMeasure>PIECE</unitOfMeasure><vatPercentage>0.27</vatPercentage></line></invoiceLines><invoiceSummary><invoiceNetAmount>200</invoiceNetAmount><invoiceVatAmount>54</invoiceVatAmount><invoiceGrossAmount>254</invoiceGrossAmount></invoiceSummary></invoice></invoiceMain></InvoiceData>";

@@ -8,6 +8,11 @@ internal static class AppearanceTests
 {
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
+        yield return ("Retail pricing includes markup VAT and five forint rounding",()=>
+        {
+            Check.Equal(165m,RetailPricing.Suggest(100,30,27));Check.Equal(1000m,RetailPricing.Suggest(1000,0,0));Check.Equal(1535m,RetailPricing.Suggest(1000,30,18));
+            Check.Throws<ArgumentException>(()=>RetailPricing.Suggest(-1,30,27));return Task.CompletedTask;
+        });
         yield return Test("all built-in skins have readable contrast", () =>
         { foreach (var skin in BuiltInSkins.All) SkinValidation.Validate(skin); });
         yield return Test("appearance preferences survive restart", () =>
