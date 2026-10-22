@@ -48,7 +48,7 @@ public sealed record PartnerReference(Guid Id, string Name, string TaxId, bool I
 public sealed record IncomingLineReference(string Name, decimal Quantity, decimal NetUnitPrice);
 public sealed record IncomingReceiptReference(Guid SupplierId,string Number,string Date,decimal Net,decimal Gross,string Status,IncomingLineReference[] Lines);
 public sealed record OutgoingSaleReference(Guid? CustomerId,string Number,string Date,decimal Net,decimal Gross,string Status,IncomingLineReference[] Lines);
-public sealed record ProductReference(Guid Id, string Name, string Sku, string Barcode, string UnitCode, bool IsActive, bool IsSalable = false, bool IsPurchaseable = false, string ManufacturerPartNumber = "", decimal? SaleNetUnitPrice = null, decimal SaleVatRate = 27, string Parameters = "");
+public sealed record ProductReference(Guid Id, string Name, string Sku, string Barcode, string UnitCode, bool IsActive, bool IsSalable = false, bool IsPurchaseable = false, string ManufacturerPartNumber = "", decimal? SaleNetUnitPrice = null, decimal SaleVatRate = 27, string Parameters = "", ProductSalePrice[]? SalePrices = null);
 
 // Version 1 compatibility projection. Consumers depend on these typed contracts.
 // Only this adapter knows the original snapshot shape; normalized tables may replace it later.
@@ -57,7 +57,7 @@ public static class CompanyReferenceQueries
     public static PartnerReference[] Partners(ICompanyTransaction tx) => Rows(tx, "partners", "partners", (id, d) =>
         new PartnerReference(id, Text(d,"name"), Text(d,"taxId"), Flag(d,"isSupplier"), Flag(d,"isCustomer"), Flag(d,"isActive")));
     public static ProductReference[] Products(ICompanyTransaction tx) => Rows(tx, "catalog", "products", (id,d) =>
-        new ProductReference(id, Text(d,"name"), Text(d,"sku"), Text(d,"barcode"), Text(d,"unitCode"), Flag(d,"isActive"), Flag(d,"isSalable"), Flag(d,"isPurchaseable"), Text(d,"manufacturerPartNumber"),d.TryGetProperty("saleNetUnitPrice",out var price)&&price.ValueKind==JsonValueKind.Number?price.GetDecimal():null,d.TryGetProperty("saleVatRate",out var vat)&&vat.ValueKind==JsonValueKind.Number?vat.GetDecimal():27,Text(d,"parameters")));
+        new ProductReference(id, Text(d,"name"), Text(d,"sku"), Text(d,"barcode"), Text(d,"unitCode"), Flag(d,"isActive"), Flag(d,"isSalable"), Flag(d,"isPurchaseable"), Text(d,"manufacturerPartNumber"),d.TryGetProperty("saleNetUnitPrice",out var price)&&price.ValueKind==JsonValueKind.Number?price.GetDecimal():null,d.TryGetProperty("saleVatRate",out var vat)&&vat.ValueKind==JsonValueKind.Number?vat.GetDecimal():27,Text(d,"parameters"),SalePrices(d)));
     public static BillingCustomer[] BillingCustomers(ICompanyTransaction tx)=>Rows(tx,"partners","partners",(id,d)=>new BillingCustomer(id,Text(d,"name"),Text(d,"taxId"),Text(d,"country"),Text(d,"postalCode"),Text(d,"city"),Text(d,"address"),Flag(d,"isActive"),Flag(d,"isCustomer")));
     public static IReadOnlyDictionary<Guid,decimal> StockQuantities(ICompanyTransaction tx) => StockRows(tx).GroupBy(row=>row.GetProperty("productId").GetGuid()).ToDictionary(g=>g.Key,g=>g.Sum(row=>row.GetProperty("quantity").GetDecimal()));
     public static decimal StockQuantity(ICompanyTransaction tx, Guid productId) => StockQuantities(tx).GetValueOrDefault(productId);
@@ -87,6 +87,12 @@ public static class CompanyReferenceQueries
         if (tx.Get(module,"state") is not { } body) return [];
         using var doc=JsonDocument.Parse(body);
         return doc.RootElement.GetProperty(name).EnumerateArray().Select(row => map(row.GetProperty("id").GetGuid(),row.GetProperty("data"))).ToArray();
+    }
+    private static ProductSalePrice[] SalePrices(JsonElement d)
+    {
+        if (!d.TryGetProperty("salePrices", out var prices) || prices.ValueKind != JsonValueKind.Array) return [];
+        return prices.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.Object).Select(p => new ProductSalePrice(
+            Text(p, "name"), Text(p, "kind"), p.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.Number ? value.GetDecimal() : 0)).ToArray();
     }
     private static string Text(JsonElement d,string key) => d.TryGetProperty(key,out var v) ? v.GetString() ?? "" : "";
     private static bool Flag(JsonElement d,string key) => d.TryGetProperty(key,out var v) && v.ValueKind==JsonValueKind.True;

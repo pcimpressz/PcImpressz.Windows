@@ -197,6 +197,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
         PeriodPreviousYearCommand = new RelayCommand(() => SetPeriod(new DateTime(DateTime.Today.Year - 1, 1, 1), new DateTime(DateTime.Today.Year - 1, 12, 31)));
         PeriodQuarterCommand = new RelayCommand(() => SetPeriod(DateTime.Today.AddDays(-90), DateTime.Today));
         InitializeLayoutEditor();
+        InitializeProductPrices();
         Populate(null);
         _filtersReady = true;
     }
@@ -227,6 +228,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
                 field.Checked = row?[field.Definition.Id] is bool b ? b : field.Definition.DefaultChecked;
             else field.Text = row?[field.Definition.Id]?.ToString() ?? field.Definition.DefaultText ?? "";
         }
+        LoadProductPrices(row);
         _populating = false; IsDirty = false; Changed(nameof(EditorTitle)); Changed(nameof(CanOpenDossier));Changed(nameof(CanLookupPartnerNav));
         RefreshPartnerOverview();
         if (IsDossierOpen && row is not null) _ = LoadDossierAsync();
@@ -336,6 +338,7 @@ public sealed partial class EntityPageViewModel : Observable, IWorkspacePage, IC
                 data[field.Definition.Id] = field.Definition.Kind == "boolean"
                     ? JsonValue.Create(field.Checked) : JsonValue.Create(field.Text);
             }
+            WriteProductPrices(data);
             var result = await ExecuteAsync(Definition.Commands.Save, new { id = _editId, version = _version, data });
             var warning = result.TryGetProperty("warning", out var warningValue) && warningValue.ValueKind == JsonValueKind.String
                 ? warningValue.GetString() : null;

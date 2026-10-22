@@ -149,6 +149,29 @@ internal static class CatalogTests
             Check.Equal(3, CatalogListing.Products(products, new(f.First.Id, Sort: "nincsilyen")).Length);
             Check.Throws<ArgumentException>(() => CatalogListing.Products(products, new(f.First.Id, Sort: "sku;drop")));
         });
+        yield return Case("sale prices accept gross entry math, named prices and a partial update", async f =>
+        {
+            await f.Unit(f.First.Id, "Darab", "DB");
+            Check.Equal(1270m, SalePriceMath.GrossFromNet(1000m, 27));
+            Check.Equal(1000m, SalePriceMath.NetFromGross(1270m, 27));
+            Check.Equal(900m, SalePriceMath.ResolveNet(new("Akciós", "percent", 10), 1000m, 27));
+            var saved = await f.Repository.SaveProduct(new(f.First.Id, null, 0, Product("Csavar", "CSV-1") with
+            {
+                SaleNetUnitPrice = 1000m, SaleVatRate = 27,
+                SalePrices = [new("Akciós", "percent", 10), new("Törzsvásárlói", "gross", 1143m)]
+            }), "operator");
+            Check.Equal("percent", saved.Data.SalePrices![0].Kind);
+            Check.Equal(1143m, saved.Data.SalePrices[1].Value);
+            var kept = await f.Repository.SaveProduct(new(f.First.Id, saved.Id, saved.Version, saved.Data with { Name = "Csavar plusz", SalePrices = null }), "operator");
+            Check.Equal(2, kept.Data.SalePrices!.Length);
+            Check.Equal("Csavar plusz", kept.Data.Name);
+            var cleared = await f.Repository.SaveProduct(new(f.First.Id, kept.Id, kept.Version, kept.Data with { SalePrices = [] }), "operator");
+            Check.Equal(0, cleared.Data.SalePrices!.Length);
+            await Check.ThrowsAsync<ArgumentException>(async () => await f.Repository.SaveProduct(
+                new(f.First.Id, cleared.Id, cleared.Version, cleared.Data with { SalePrices = [new("Dupla", "percent", 0)] }), "operator"));
+            await Check.ThrowsAsync<ArgumentException>(async () => await f.Repository.SaveProduct(
+                new(f.First.Id, cleared.Id, cleared.Version, cleared.Data with { SalePrices = [new("Dupla", "percent", 10), new("dupla", "net", 1)] }), "operator"));
+        });
         yield return ("product page shows quantity and can hide the sku", () =>
         {
             var probe = new PageProbe("catalog");

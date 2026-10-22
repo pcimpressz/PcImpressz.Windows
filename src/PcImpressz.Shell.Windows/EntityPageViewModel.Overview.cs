@@ -10,8 +10,14 @@ public sealed partial class EntityPageViewModel
     private string ProductDetails()
     {
         var lines=new[]{("sku","Saját cikkszám"),("manufacturerPartNumber","Gyártói cikkszám"),("barcode","Vonalkód"),("unitCode","Egység"),("saleNetUnitPrice","Nettó eladási ár"),("saleVatRate","Eladási áfa %"),("parameters","Tulajdonságok")}.Where(item=>!string.IsNullOrWhiteSpace(_selected?[item.Item1]?.ToString())).Select(item=>item.Item2+": "+_selected![item.Item1]).ToList();
-        if(decimal.TryParse((_selected?["saleNetUnitPrice"]?.ToString()??"").Replace(" ","").Replace(",","."),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out var net)&&decimal.TryParse((_selected?["saleVatRate"]?.ToString()??"").Replace(",","."),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out var vat))
-            lines.Insert(lines.FindIndex(line=>line.StartsWith("Eladási áfa",StringComparison.Ordinal)) is var at&&at>=0?at+1:lines.Count,"Bruttó eladási ár: "+decimal.Round(net*(1+vat/100m),2,MidpointRounding.AwayFromZero).ToString("N2",System.Globalization.CultureInfo.GetCultureInfo("hu-HU"))+" Ft");
+        var hasNet=decimal.TryParse((_selected?["saleNetUnitPrice"]?.ToString()??"").Replace(" ","").Replace(",","."),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out var net);
+        var hasVat=decimal.TryParse((_selected?["saleVatRate"]?.ToString()??"").Replace(",","."),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out var vat);
+        if(hasNet&&hasVat)
+            lines.Insert(lines.FindIndex(line=>line.StartsWith("Eladási áfa",StringComparison.Ordinal)) is var at&&at>=0?at+1:lines.Count,"Bruttó eladási ár: "+PcImpressz.Contracts.SalePriceMath.GrossFromNet(net,vat).ToString("N2",System.Globalization.CultureInfo.GetCultureInfo("hu-HU"))+" Ft");
+        if(_selected!.Json.TryGetProperty("salePrices",out var prices)&&prices.ValueKind==System.Text.Json.JsonValueKind.Array)
+            foreach(var price in prices.EnumerateArray())
+                if(price.ValueKind==System.Text.Json.JsonValueKind.Object&&price.TryGetProperty("name",out var priceName)&&price.TryGetProperty("kind",out var priceKind)&&price.TryGetProperty("value",out var priceValue)&&priceValue.ValueKind==System.Text.Json.JsonValueKind.Number)
+                    lines.Add(PcImpressz.Contracts.SalePriceMath.Describe(new(priceName.GetString()??"",priceKind.GetString()??"",priceValue.GetDecimal()),hasNet?net:null,hasVat?vat:27));
         return string.Join("\n",lines);
     }
     public ObservableCollection<DossierCardRow> PartnerOverviewCards{get;}=[];
