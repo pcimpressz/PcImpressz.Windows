@@ -11,6 +11,15 @@ internal static class ReceivingPreparationTests
 {
     public static IEnumerable<(string,Func<Task>)> Cases()
     {
+        yield return ("partial manual invoice drafts persist without stock, isolate companies and reject stale updates and deletion",()=>
+        {
+            using var dir=new TestDirectory();var companies=new CompanyStore(dir.Path);var company=companies.Create("Piszkozat",true).Id;var other=companies.Create("Másik",true).Id;var db=new CompanyDatabase(companies.DataDirectory);var store=new ManualInvoiceDraftStore(db,TimeProvider.System);var id=Guid.NewGuid();
+            var data=JsonSerializer.SerializeToElement(new{number="",supplierId=(Guid?)null,lines=new[]{new{name="Félbehagyott sor",quantityText="",priceText="még nincs ár",category="TONER"}}});
+            var saved=store.Save(new(company,id,0,data),"raktaros");Check.Equal(1L,saved.Version);Check.Equal(1,store.List(company).Length);Check.Equal(0,store.List(other).Length);
+            var reopened=new ManualInvoiceDraftStore(db,TimeProvider.System).Read(new(company,id));Check.Equal("még nincs ár",reopened.Data.GetProperty("lines")[0].GetProperty("priceText").GetString());
+            Check.Throws<ArgumentException>(()=>store.Read(new(other,id)));Check.Throws<ReceivingConflictException>(()=>store.Save(new(company,id,0,data),"masik"));Check.Throws<ReceivingConflictException>(()=>store.Delete(new(company,id,0)));
+            Check.Equal(0,db.Execute(company,tx=>CompanyReferenceQueries.Receipts(tx).Length));Check.Equal(0,db.Execute(company,tx=>CompanyReferenceQueries.StockQuantities(tx).Count));store.Delete(new(company,id,1));Check.Equal(0,store.List(company).Length);return Task.CompletedTask;
+        });
         yield return ("invoice preparation persists across reopen without receipt stock and rejects stale writers",()=>
         {
             using var dir=new TestDirectory();var companies=new CompanyStore(dir.Path);var company=companies.Create("Előkészítés",true).Id;var other=companies.Create("Másik cég",true).Id;var db=new CompanyDatabase(companies.DataDirectory);var store=new InvoicePreparationStore(db,TimeProvider.System);

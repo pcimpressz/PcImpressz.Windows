@@ -89,6 +89,29 @@
    </ControlTemplate>
   </Setter.Value></Setter>
  </Style>
+ <Style x:Key="EditableInvoiceCombo" TargetType="ComboBox">
+  <Setter Property="Foreground" Value="{DynamicResource TextBrush}" /><Setter Property="Background" Value="{DynamicResource ElevatedBrush}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" /><Setter Property="MinHeight" Value="34" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+   <Grid>
+    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="6">
+     <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="30" /></Grid.ColumnDefinitions>
+      <TextBox x:Name="PART_EditableTextBox" Background="{TemplateBinding Background}" Foreground="{TemplateBinding Foreground}" BorderThickness="0" Padding="8,4" MinHeight="32" VerticalContentAlignment="Center" IsReadOnly="{TemplateBinding IsReadOnly}">
+       <TextBox.Style><Style TargetType="TextBox" /></TextBox.Style>
+      </TextBox>
+      <ToggleButton Grid.Column="1" Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+       <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent"><TextBlock Text="▾" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></ControlTemplate></ToggleButton.Template>
+      </ToggleButton>
+     </Grid>
+    </Border>
+    <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
+     <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="280" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" CornerRadius="6" Padding="4">
+      <ScrollViewer><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" /></ScrollViewer>
+     </Border>
+    </Popup>
+   </Grid>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style TargetType="ComboBox">
   <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
   <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />

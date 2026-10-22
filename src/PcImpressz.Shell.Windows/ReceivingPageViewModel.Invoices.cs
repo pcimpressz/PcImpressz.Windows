@@ -22,11 +22,11 @@ internal sealed partial class ReceivingPageViewModel
     private string _pdfText="",_pdfName="",_draftSource="manual";
     public bool IsOutgoing=>_outgoing;
     public bool IsIncoming=>!_outgoing;
-    public ICommand IncomingCommand=>new RelayCommand(()=>SwitchInvoices(false));
-    public ICommand OutgoingCommand=>new RelayCommand(()=>SwitchInvoices(true));
-    private void SwitchInvoices(bool outgoing)
+    public ICommand IncomingCommand=>new RelayCommand(()=>_=SwitchInvoices(false));
+    public ICommand OutgoingCommand=>new RelayCommand(()=>_=SwitchInvoices(true));
+    private async Task SwitchInvoices(bool outgoing)
     {
-        if(IsBusy||outgoing==_outgoing||!CanLeave())return;
+        if(IsBusy||outgoing==_outgoing||!await FlushPreparationAsync()||!CanLeave())return;
         if(IsDirty){IsDirty=false;_mode="home";ClearPdfPreview();NotifyMode();}
         _outgoing=outgoing;Changed(nameof(IsOutgoing));Changed(nameof(IsIncoming));
         if(outgoing)_=FetchOutgoingAsync();
@@ -89,7 +89,7 @@ internal sealed partial class ReceivingPageViewModel
     private void ClearPdfPreview(){_pdfText=_pdfName="";_draftSource="manual";Changed(nameof(HasPdfPreview));Changed(nameof(PdfText));Changed(nameof(PdfName));}
     private async Task PickPdfAsync()
     {
-        if(IsBusy||!CanLeave()||_company() is not Guid company)return;
+        if(IsBusy||!await FlushPreparationAsync()||!CanLeave()||_company() is not Guid company)return;
         var dialog=new OpenFileDialog{Title="PDF alapján bejövő számla rögzítése",Filter="PDF (*.pdf)|*.pdf",CheckFileExists=true};
         if(dialog.ShowDialog()!=true)return;IsBusy=true;
         try

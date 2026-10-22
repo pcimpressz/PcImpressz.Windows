@@ -1,3 +1,7 @@
+## 0.4.21 – Külön NAV és kézi szerkesztő, tartós kézi piszkozatok
+
+Számlaváltáskor a szállítót mindig az új NAV-számla adószámából választjuk. A NAV-nézethez nem adható új sor. Kézire áthelyezve külön szerkesztő nyílik, a félbehagyott kézi számlák SQL-piszkozatként folytathatók és törölhetők. Részletek: [használat](docs/NAV-KEZI-PISZKOZAT-0.4.21.md).
+
 ## 0.4.20 – NAV bevételezési munkafolyamat javítása
 
 Rögzített NAV-fejléc, kapcsolható automatikus szállítófelvétel, felül is elérhető Bevételezés, külön Bevételezett számlák nézet, látható kategória és terméktallózó. Részletek: [használat](docs/NAV-BEVETELEZES-0.4.20.md).

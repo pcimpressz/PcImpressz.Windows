@@ -73,6 +73,7 @@ internal static class Program
             CheckoutUiChecks.VerifyAsync(output).GetAwaiter().GetResult();
             PartnerEditorChecks.VerifyAsync(output).GetAwaiter().GetResult();
             RunDispatcherCheck(()=>NavInvoiceUiChecks.VerifyAsync(output));
+            RunDispatcherCheck(()=>InvoiceDraftUiChecks.VerifyAsync(output));
             InvoicePagingChecks.VerifyAsync(output).GetAwaiter().GetResult();
             VerifyBusyEditor();
             UiProductChecks.VerifyAppliedQuery();

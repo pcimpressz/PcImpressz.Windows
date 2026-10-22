@@ -40,6 +40,7 @@ internal sealed partial class ReceivingPageViewModel
     public void ProductMessage(string text)=>Message=text;
     internal async Task LoadLineProductsAsync(Guid company)
     {
+        await LoadCategoriesAsync();
         foreach(var line in Lines.ToArray())
         {
             if(_company()!=company)return;

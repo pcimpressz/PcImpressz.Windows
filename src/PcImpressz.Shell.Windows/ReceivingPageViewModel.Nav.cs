@@ -6,7 +6,7 @@ namespace PcImpressz.Shell.Windows;
 public sealed record NavInvoiceRow(string Number,string SupplierName,string SupplierTaxNumber,string IssuedOn,string Currency,string Operation,string Net,int? BatchIndex,Guid? ReceiptId=null,bool Received=false){public string State=>Received?"Bevételezve":"Nincs bevételezve";}
 internal sealed partial class ReceivingPageViewModel
 {
-    private NavInvoiceRow? _navPreview; private SupplierOption? _navSupplier;
+    private NavInvoiceRow? _navPreview; private SupplierOption? _navSupplier;private Guid? _linkedManualReceiptId;
     public string NavSupplierHint=>SelectedSupplier is null&&_navPreview is {} invoice?invoice.SupplierName+" · "+invoice.SupplierTaxNumber+(SelectedSupplier is null?" · Még nincs a szállítótörzsben.":""):"";
     public SupplierOption? SelectedNavSupplier{get=>_navSupplier;set{_navSupplier=value;Changed();}}
     public ICommand NewNavSupplierCommand=>new RelayCommand(()=>_=CreateSupplierAsync(true));
@@ -50,27 +50,36 @@ internal sealed partial class ReceivingPageViewModel
     internal async Task DownloadNavAsync(bool discardChecked=false)
     {
         if(IsBusy||_company() is not Guid company)return;
-        if(!discardChecked&&!CanLeave())return;
+        if(!discardChecked&&(!await FlushPreparationAsync()||!CanLeave()))return;
         if(SelectedNavInvoice is not {} invoice){Message="Válassz NAV-számlát a listából.";return;}
         if(invoice.Operation!="CREATE"){Message="Módosító/sztornó számla külön ellenőrzést igényel, nem normál bevételezés.";return;}
         IsBusy=true;
         try
         {
             await LoadSuppliersAsync();if(_company()!=company)return;
-            JsonElement detail;
+            JsonElement detail;JsonElement originalPreview=default;
             if(invoice.ReceiptId is Guid id)detail=await ModuleAsync("receiving","get",new{id});
             else
             {
-                var preview=await ModuleAsync("receiving","nav-preview",new{number=invoice.Number,supplierTaxNumber=invoice.SupplierTaxNumber,batchIndex=invoice.BatchIndex});if(_company()!=company)return;
+                var preview=await ModuleAsync("receiving","nav-preview",new{number=invoice.Number,supplierTaxNumber=invoice.SupplierTaxNumber,batchIndex=invoice.BatchIndex});if(_company()!=company)return;originalPreview=preview;
                 if(preview.GetProperty("receipt").ValueKind==JsonValueKind.Object)detail=preview.GetProperty("receipt");
                 else
                 {
                     var document=preview.GetProperty("document");
-                    detail=JsonSerializer.SerializeToElement(new{id=Guid.Empty,version=0,status="uj",number=invoice.Number,issuedOn=Get(document,"issuedOn"),dueOn=Get(document,"dueOn"),warehouse="Bolt",net=0,gross=0,supplierId=SelectedNavSupplier?.Id??Guid.Empty,supplierName=invoice.SupplierName,supplierTaxId=invoice.SupplierTaxNumber,lines=preview.GetProperty("lines")});
+                    detail=JsonSerializer.SerializeToElement(new{id=Guid.Empty,version=0,status="uj",number=invoice.Number,issuedOn=Get(document,"issuedOn"),dueOn=Get(document,"dueOn"),warehouse="Bolt",net=0,gross=0,source="nav",supplierId=Suppliers.FirstOrDefault(s=>Tax(s.TaxId)==Tax(invoice.SupplierTaxNumber))?.Id??Guid.Empty,supplierName=invoice.SupplierName,supplierTaxId=invoice.SupplierTaxNumber,lines=preview.GetProperty("lines")});
                 }
             }
             if(_company()!=company)return;
-            ClearPreparation();Fill(detail);if(_editId==Guid.Empty){_editId=null;_navPreview=invoice;Changed(nameof(CanClassify));}
+            _linkedManualReceiptId=null;
+            if(Get(detail,"source")!="nav"&&detail.GetProperty("id").GetGuid()!=Guid.Empty)
+            {
+                _linkedManualReceiptId=detail.GetProperty("id").GetGuid();
+                if(originalPreview.ValueKind==JsonValueKind.Undefined)originalPreview=await ModuleAsync("receiving","nav-preview",new{number=invoice.Number,supplierTaxNumber=invoice.SupplierTaxNumber,batchIndex=invoice.BatchIndex});
+                if(_company()!=company)return;
+                var document=originalPreview.GetProperty("document");var localStatus=Get(detail,"status");
+                detail=JsonSerializer.SerializeToElement(new{id=detail.GetProperty("id").GetGuid(),version=detail.GetProperty("version").GetInt64(),status=localStatus is "uj" or "fuggo"?"atadva":localStatus,number=invoice.Number,issuedOn=Get(document,"issuedOn"),dueOn=Get(document,"dueOn"),warehouse=Get(detail,"warehouse"),net=0,gross=0,source="nav",supplierId=Suppliers.FirstOrDefault(s=>Tax(s.TaxId)==Tax(invoice.SupplierTaxNumber))?.Id??Guid.Empty,supplierName=invoice.SupplierName,supplierTaxId=invoice.SupplierTaxNumber,lines=originalPreview.GetProperty("lines")});
+            }
+            ClearPreparation();ResetManualDraft();Fill(detail);if(_editId==Guid.Empty){_editId=null;_navPreview=invoice;_editorKind="nav";Changed(nameof(CanClassify));}
             Changed(nameof(NavSupplierHint));_mode="editor";NotifyMode();UpdateTotals();IsDirty=false;
             SupplierStatus=SelectedSupplier is not null?"A szállítót adószám alapján azonosítottuk.":!AutoNavSupplier?"Nincs szállítóegyezés. Az automatikus felvétel kikapcsolva; válassz azonos adószámú partnert.":"";
             if(SelectedSupplier is null&&AutoNavSupplier)
@@ -80,7 +89,7 @@ internal sealed partial class ReceivingPageViewModel
             try{await EnrichSupplierAsync(invoice,company);}catch(Exception ex){PreparationStatus="A beszállítói adategyeztetés nem sikerült: "+ex.Message;}
             if(IsEditable)try{await RestorePreparationAsync(invoice,company);}catch(Exception ex){PreparationStatus="Az előkészítés betöltése nem sikerült: "+ex.Message;}
             Changed(nameof(CanClassify));Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));
-            Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));
+            NotifyEditorKind();
             Message=SelectedSupplier is null?"A számla előnézete kész. A szállítót innen felveheted; mentésig nincs új számla és készletmozgás.":"Ellenőrizd a tételeket, az eladási árakat és a termékpárosítást. A készletet csak a Bevételezés gomb módosítja.";
         }
         catch(Exception ex) when(ex is not OutOfMemoryException){Message=ex.Message;}

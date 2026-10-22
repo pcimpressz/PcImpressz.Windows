@@ -9,7 +9,7 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <DefaultItemExcludesInProjectFolder>$(DefaultItemExcludesInProjectFolder);**/obj/**;**/bin/**;obj/Debug/**;obj/Release/**;obj/codex-build/**;artifacts/**/*.AssemblyInfo.cs;artifacts/**/*AssemblyAttributes.cs;artifacts/**/*.GlobalUsings.g.cs</DefaultItemExcludesInProjectFolder>
     <DefaultItemExcludes>$(DefaultItemExcludes);**/obj/**;**/bin/**;obj/Debug/**;obj/Release/**;obj/codex-build/**;artifacts/**/*.AssemblyInfo.cs;artifacts/**/*AssemblyAttributes.cs;artifacts/**/*.GlobalUsings.g.cs</DefaultItemExcludes>
-    <Version>0.4.20</Version>
+    <Version>0.4.21</Version>
   </PropertyGroup>
   <!-- A dev.ps1 és a normál fordítás ugyanebből a szabályból kapja a köztes könyvtárat. -->
   <PropertyGroup Condition="'$(PcImpresszIntermediate)' == 'codex'">

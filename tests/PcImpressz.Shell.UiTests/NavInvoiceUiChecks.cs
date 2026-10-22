@@ -25,6 +25,7 @@ internal static class NavInvoiceUiChecks
             {
                 "list"=>request.ModuleId=="partners"?(object)new{total=partnerCreates>0?1:0,rows=partnerCreates>0?new object[]{new{id=supplier,name="Új szállító",taxId="11111111-2-42"}}:Array.Empty<object>()}:new{total=0,rows=Array.Empty<object>(),counts=new{uj=0,bevetelezve=0,koltseg=0,fuggo=0}},
                 "nav-list"=>new{currentPage=request.Input.GetProperty("page").GetInt32(),availablePage=2,rows=new[]{new{number="NAV-1",supplierName="Új szállító",supplierTaxNumber="11111111",issuedOn="2026-10-21",currency="HUF",operation="CREATE",net=200m,received=false}}},
+                "categories-list"=>new{total=1,rows=new[]{new{code="TONER",name="Tonerek",isActive=true}}},
                 "products-schema"=>new EntityField[]{new("categoryCode","Kategória"),new("name","Név"),new("sku","Cikkszám"),new("unitCode","Egység"),new("barcode","Vonalkód"),new("manufacturerPartNumber","Gyártói cikkszám"),new("description","Leírás","multiline"),new("isActive","Aktív","boolean",DefaultChecked:true),new("saleVatRate","Eladási áfa","decimal",DefaultText:"27"),new("saleNetUnitPrice","Eladási nettó","decimal")},
                 "products-get"=>GetProduct(),
                 "classify"=>PostReceipt(),
@@ -77,7 +78,7 @@ internal static class NavInvoiceUiChecks
         page.NavInvoices.Add(new("NAV-RECEIVED","Már bevételezett szállító","22222222","2026-10-21","HUF","CREATE","1000",null,Guid.NewGuid(),true));
         var view=new ReceivingPageView{DataContext=page,Width=1200};var surface=new Border{Child=view,Background=(Brush)Application.Current.Resources["BackgroundBrush"]};
         surface.Measure(new Size(1200,1900));surface.Arrange(new Rect(0,0,1200,1900));surface.UpdateLayout();
-        var grids=Descendants(surface).OfType<DataGrid>().ToArray();var items=grids.Single(g=>ReferenceEquals(g.ItemsSource,page.Lines));
+        var grids=Descendants(surface).OfType<DataGrid>().ToArray();var items=grids.Single(g=>ReferenceEquals(g.ItemsSource,page.Lines)&&g.Visibility==Visibility.Visible);
         if(items.Columns.Count<9||items.HeadersVisibility!=DataGridHeadersVisibility.Column)throw new InvalidOperationException("Hiányos tételtáblázat.");
         items.SelectedIndex=0;surface.UpdateLayout();var itemRow=(DataGridRow)items.ItemContainerGenerator.ContainerFromItem(line);items.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.PreviewMouseLeftButtonDownEvent,Source=itemRow});if(itemRow.DetailsVisibility!=Visibility.Visible)throw new InvalidOperationException("A tétel nem nyílt meg.");items.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.PreviewMouseLeftButtonDownEvent,Source=itemRow});if(itemRow.DetailsVisibility!=Visibility.Collapsed)throw new InvalidOperationException("A második kattintás nem csukta be a tételt.");itemRow.DetailsVisibility=Visibility.Visible;surface.UpdateLayout();
         var nav=grids.Single(g=>ReferenceEquals(g.ItemsSource,page.NavInvoices));var received=(DataGridRow)nav.ItemContainerGenerator.ContainerFromItem(page.NavInvoices.Last());var pending=(DataGridRow)nav.ItemContainerGenerator.ContainerFromItem(page.NavInvoices.First());

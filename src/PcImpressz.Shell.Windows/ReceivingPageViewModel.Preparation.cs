@@ -11,18 +11,19 @@ internal sealed partial class ReceivingPageViewModel
     private CancellationTokenSource? _preparationDelay;
     private readonly SemaphoreSlim _preparationGate=new(1,1);
     public string PreparationStatus {get=>_preparationStatus;private set{_preparationStatus=value;Changed();}}
-    public bool IsNavReceipt=>!_convertToManual&&(_navPreview is not null||_receiptSource=="nav");
+    private string _editorKind="manual";
+    public bool IsNavReceipt=>_editorKind=="nav";
     public bool CanEditInvoiceFacts=>IsEditable&&!IsNavReceipt;
     public bool CanAddInvoiceLine=>CanEditInvoiceFacts;
-    public ICommand ConvertToManualCommand=>new RelayCommand(()=>{ConvertToManual();MarkDirty();});
+    public ICommand ConvertToManualCommand=>new RelayCommand(()=>_=MoveNavToManualAsync());
     private void ConvertToManual()
     {
         if(!IsEditable)return;
-        _convertToManual=true;Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));Changed(nameof(CanClassify));Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));PreparationStatus="Kézi bevételezés: az eredeti NAV-adatoktól eltérő szerkesztés.";
+        _editorKind="manual";_convertToManual=true;Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));Changed(nameof(CanClassify));Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));NotifyEditorKind();PreparationStatus="Kézi bevételezés: az eredeti NAV-adatoktól eltérő szerkesztés.";
     }
     private void SchedulePreparation()
     {
-        if(_preparationLoading||_preparationIdentity is null||!IsEditor||!IsEditable)return;
+        if(_preparationLoading||!IsEditor||!IsEditable)return;
         _preparationRevision++;PreparationStatus="Előkészítés mentése…";
         _preparationDelay?.Cancel();_preparationDelay?.Dispose();_preparationDelay=new();_ = SavePreparationAfterDelay(_preparationDelay.Token);
     }
@@ -32,6 +33,7 @@ internal sealed partial class ReceivingPageViewModel
     }
     internal async Task<bool> FlushPreparationAsync()
     {
+        if(IsManualEditor)return await FlushManualDraftAsync();
         if(_preparationIdentity is not {} identity||_preparationLoading||!IsDirty||_company() is not Guid company)return true;
         await _preparationGate.WaitAsync(_shutdown);
         try
@@ -68,11 +70,10 @@ internal sealed partial class ReceivingPageViewModel
             _preparationVersion=result.GetProperty("version").GetInt64();
             var data=result.GetProperty("data");var rows=data.GetProperty("lines").EnumerateArray().ToArray();
             var manual=data.TryGetProperty("manual",out var converted)&&converted.GetBoolean();
+            if(manual){PreparationStatus="Ehhez a NAV-számlához korábban kézi előkészítés készült. Az eredeti NAV-nézet adatai változatlanok.";return;}
             if(!manual&&(rows.Length!=Lines.Count||rows.Where((r,i)=>Get(r,"name")!=Lines[i].Name||Get(r,"quantityText")!=Lines[i].QuantityText||Get(r,"priceText")!=Lines[i].PriceText).Any()))throw new ArgumentException("Az előkészítés eredeti tételsorai eltérnek a NAV-számlától.");
             _populating=true;
-            if(manual){ConvertToManual();_number=Get(data,"number");_issued=Get(data,"issuedOn");if(data.TryGetProperty("supplierId",out var supplier)&&supplier.ValueKind==JsonValueKind.String)_supplier=Suppliers.FirstOrDefault(s=>s.Id==supplier.GetGuid());}
             _pdfName=Get(data,"pdfName");_pdfText=Get(data,"pdfText");Changed(nameof(PdfName));Changed(nameof(PdfText));Changed(nameof(HasPdfPreview));_due=Get(data,"dueOn");_notes=Get(data,"notes");_warehouse=Get(data,"warehouse");
-            if(manual){Lines.Clear();foreach(var row in rows){var line=new LineEditor(this);line.FillQuiet(()=>{line.Name=Get(row,"name");line.QuantityText=Get(row,"quantityText");line.PriceText=Get(row,"priceText");line.VatText=Get(row,"vatText");});Lines.Add(line);}}
             for(var i=0;i<rows.Length;i++)
             {
                 var row=rows[i];var line=Lines[i];
@@ -89,6 +90,7 @@ internal sealed partial class ReceivingPageViewModel
     }
     private void ClearPreparation()
     {
+        ResetManualDraft();
         _preparationDelay?.Cancel();_preparationIdentity=null;_preparationVersion=0;_convertToManual=false;PreparationStatus="";
         Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));Changed(nameof(CanClassify));Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));
     }

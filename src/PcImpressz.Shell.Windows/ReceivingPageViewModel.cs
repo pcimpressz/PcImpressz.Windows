@@ -67,7 +67,7 @@ internal sealed partial class LineEditor : Observable
     public bool HasNoProduct=>ProductId is null;
     public Guid? ProductId {get=>_productId;set{_productId=value;Changed();Changed(nameof(HasNoProduct));}}
     public bool IsService { get => _isService; set { _isService = value; if (value) ProductId = null; Changed(); Touch(); } }
-    public string Name { get => _name; set { _name = value; Changed(); Touch(); } }
+    public string Name { get => _name; set { _name = value; Changed(); Touch();if(ProductId is null)SyncProductField("name",value); } }
     public string Sku { get => _sku; set { _sku = value; Changed(); Touch();SyncProductField("sku",value); } }
     public string Barcode { get => _barcode; set { _barcode = value; Changed(); Touch();SyncProductField("barcode",value); } }
     public string UnitCode { get => _unit; set { _unit = value; Changed(); Touch(); } }
@@ -130,9 +130,9 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         _columns.Changed += () => Changed(nameof(LayoutRevision));
         _columns.SortChanged += () => _ = LoadAsync();
         InitializeReversal();
-        ManualCommand = new RelayCommand(BeginManual);
-        NavCommand = new RelayCommand(() => IsNav = !IsNav);
-        ImportCommand = new RelayCommand(() => BeginIntake("import"));
+        ManualCommand = new RelayCommand(()=>_=StartManualAsync());
+        NavCommand = new RelayCommand(()=>_=ShowNavAsync());
+        ImportCommand = new RelayCommand(()=>_=StartImportAsync());
         BackCommand = new RelayCommand(()=>_=ClosePreparedEditorAsync());
         RefreshCommand = new RelayCommand(() => _ = LoadAsync());
         OpenCommand = new RelayCommand(() => _ = OpenAsync());
@@ -170,7 +170,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public bool IsHome => _mode == "home";
     public bool IsNav { get => _navExpanded; set { if(IsBusy)return; _navExpanded=value;Changed();Changed(nameof(IsReceiptListVisible));Changed(nameof(IntakeHelp));if(value&&Suppliers.Count==0)_=LoadSuppliersAsync(); } }
     public bool IsImport => _mode == "import";
-    public bool IsReceiptListVisible=>!IsNav&&!IsEditor;
+    public bool IsReceiptListVisible=>!IsNav&&_mode=="home";
     public bool IsEditor => _mode == "editor";
     public bool IsBusy { get => _busy; private set { _busy = value; Changed(); Changed(nameof(IsNotBusy)); Changed(nameof(CanPickSupplier)); } }
     public bool IsNotBusy => !IsBusy;
@@ -178,7 +178,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public bool IsEditable => _editId is null || _status is "uj" or "fuggo";
     public bool CanPickSupplier => !IsBusy && (IsImport || IsEditable);
     public bool IsLocked => !IsEditable;
-    public bool CanClassify => (_editId is not null||_preparationIdentity is not null) && _status is "uj" or "fuggo";
+    public bool CanClassify => IsEditor&&IsEditable;
     public string Message { get => _message; private set { _message = value; Changed(); } }
     public string CountsLabel { get => _counts; private set { _counts = value; Changed(); } }
     public string MatchCount => _matches + " db találat";
@@ -217,7 +217,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     public void PermissionsChanged(){Changed(nameof(IsNotBusy));}
     public void CompanyChanged()
     {
-        ClearPreparation();_navPreview=null;
+        ClearPreparation();ResetManualDraft();InvoiceDrafts.Clear();CategoryOptions.Clear();_categoriesCompany=null;_navPreview=null;
         ResetInvoices();
         ResetNavList();
         _appliedListQuery=null;
@@ -286,7 +286,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     private async Task OpenAsync()
     {
         if (SelectedRow is null) { Message = "Először válassz számlát."; return; }
-        if (!CanLeave() || IsBusy) return;
+        if (IsBusy||!await FlushPreparationAsync()||!CanLeave()) return;
         IsBusy = true;
         try
         {
@@ -331,6 +331,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
             });
             if(_company()!=savingCompany)return false;
             Fill(saved,true);
+            await RetireManualDraftAsync(savingCompany);
             if(_company() is Guid company)await LoadLineProductsAsync(company);
             _ = LoadAsync();
             Message = "A számla mentve, besorolásra vár. Bevételezheted, költségként hagyhatod, vagy függőben tarthatod.";
@@ -342,7 +343,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     internal async Task ClassifyAsync(string status)
     {
         if(status=="bevetelezve"&&IsEditor&&Lines.Any(l=>l.StockItem&&!l.IsService&&l.ProductId is null)){Message="Készletre jelölt, még nem párosított tétel: "+string.Join(", ",Lines.Where(l=>l.StockItem&&!l.IsService&&l.ProductId is null).Take(5).Select(l=>l.Name))+". Nyisd ki a sort és válassz terméket a tallózóból, vedd fel újként, vagy vedd ki a Készletre jelölést.";return;}
-        if(_preparationIdentity is not null&&!await SaveAsync())return;
+        if(IsEditor&&(_editId is null||_preparationIdentity is not null)&&!await SaveAsync())return;
         Guid id; long version;
         if (IsEditor && _editId is Guid open)
         {
@@ -382,7 +383,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     {
         if (IsBusy) return;
         if (IsImport && SelectedSupplier is null) { Message = "Az importhoz válassz szállítót, vagy vegyél fel újat."; return; }
-        if(!CanLeave())return;
+        if(!await FlushPreparationAsync()||!CanLeave())return;
         var navFile = IsNav && !IsImport;
         var dialog = new OpenFileDialog { Title = navFile ? "NAV-számla XML" : "Számla importálása", CheckFileExists = true,
             Filter = navFile ? "NAV XML (*.xml)|*.xml" : "Excel, CSV vagy XML (*.xlsx;*.csv;*.xml)|*.xlsx;*.csv;*.xml" };
@@ -447,7 +448,6 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     private async Task LoadSuppliersAsync()
     {
         var selected = _supplier?.Id;
-        var navSelected = _navSupplier?.Id;
         Suppliers.Clear();
         var page = 0;
         int total;
@@ -463,13 +463,13 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         _supplier = Suppliers.FirstOrDefault(item => item.Id == selected);
         _populating = false;
         Changed(nameof(SelectedSupplier));
-        SelectedNavSupplier=Suppliers.FirstOrDefault(item=>item.Id==navSelected)??(SelectedNavInvoice is {} invoice?Suppliers.FirstOrDefault(item=>Tax(item.TaxId)==Tax(invoice.SupplierTaxNumber)):null);
+        SelectedNavSupplier=SelectedNavInvoice is {} invoice?Suppliers.FirstOrDefault(item=>Tax(item.TaxId)==Tax(invoice.SupplierTaxNumber)):null;
     }
     private void Fill(JsonElement detail, bool preservePdf=false)
     {
         _populating = true;
         if(!preservePdf)ClearPdfPreview();
-        _navPreview=null;_receiptSource=Get(detail,"source");
+        _navPreview=null;_receiptSource=Get(detail,"source");_editorKind=_receiptSource=="nav"?"nav":"manual";
         _editId = detail.GetProperty("id").GetGuid();
         _version = detail.GetProperty("version").GetInt64();
         _status = detail.GetProperty("status").GetString() ?? "uj";
@@ -508,12 +508,12 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         _populating = false; IsDirty = false;
         Changed(nameof(Number)); Changed(nameof(IssuedOn)); Changed(nameof(DueOn)); Changed(nameof(Notes)); Changed(nameof(Warehouse));
         Changed(nameof(SelectedSupplier)); Changed(nameof(NavSupplierHint)); Changed(nameof(NetLabel)); Changed(nameof(GrossLabel)); Changed(nameof(EditorTitle));
-        Changed(nameof(IsNavReceipt));Changed(nameof(CanEditInvoiceFacts));Changed(nameof(CanAddInvoiceLine));Changed(nameof(IsEditable)); Changed(nameof(IsLocked)); Changed(nameof(CanPickSupplier)); Changed(nameof(CanClassify));
+        NotifyEditorKind();Changed(nameof(IsEditable)); Changed(nameof(IsLocked)); Changed(nameof(CanPickSupplier)); Changed(nameof(CanClassify));
     }
     private void BeginManual()
     {
         if (IsBusy || !CanLeave()) return;
-        ClearPreparation();
+        ClearPreparation();ResetManualDraft();_editorKind="manual";_receiptSource="manual";
         _populating = true;
         ClearPdfPreview();
         _navPreview=null;
@@ -525,7 +525,7 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     private void BeginIntake(string mode)
     {
         if (IsBusy || !CanLeave()) return;
-        ClearPreparation();_navPreview=null;
+        ClearPreparation();ResetManualDraft();InvoiceDrafts.Clear();CategoryOptions.Clear();_categoriesCompany=null;_navPreview=null;
         _populating = true; _number = ""; _issued = ""; _due = ""; _supplier = null; _populating = false; IsDirty = false;
         if(mode=="nav")_navExpanded=true;
         _mode = mode; NotifyMode(); _ = LoadSuppliersAsync();
@@ -541,10 +541,10 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
         if (!CanAddInvoiceLine) return;
         Lines.Add(new(this)); MarkDirty();
     }
-    private bool CanLeave() => !IsDirty || MessageBox.Show("Elveted a nem mentett számlát?", "Nem mentett bevételezés", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+    private bool CanLeave() {if(!IsDirty)return true;Message="A piszkozat mentése még folyamatban van vagy sikertelen. A szerkesztést megőriztük.";return false;}
     private void NotifyMode()
     {
-        Changed(nameof(IsReceiptListVisible));Changed(nameof(IsHome)); Changed(nameof(IsNav)); Changed(nameof(IsImport)); Changed(nameof(IsEditor));
+        NotifyEditorKind();Changed(nameof(IsDraftList));Changed(nameof(IsReceiptListVisible));Changed(nameof(IsHome)); Changed(nameof(IsNav)); Changed(nameof(IsImport)); Changed(nameof(IsEditor));
         Changed(nameof(ShowSupplierPicker));Changed(nameof(NavHeader));Changed(nameof(IntakeTitle)); Changed(nameof(IntakeHelp)); Changed(nameof(IsEditable)); Changed(nameof(IsLocked)); Changed(nameof(CanClassify)); Changed(nameof(EditorTitle));
     }
     private void UpdateTotals()
@@ -602,6 +602,6 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
     private static decimal Money(string text, string label) => TryMoney(text, out var value) ? value : throw new ArgumentException(label + ": számot adj meg.");
     private static string ReceivingStatus(string status) => status switch
     {
-        "uj" => "Új, besorolásra vár", "bevetelezve" => "Bevételezve", "koltseg" => "Költség", "fuggo" => "Függő", _ => status
+        "atadva"=>"Kézi bevételezésre átadva", "uj" => "Új, besorolásra vár", "bevetelezve" => "Bevételezve", "koltseg" => "Költség", "fuggo" => "Függő", _ => status
     };
 }

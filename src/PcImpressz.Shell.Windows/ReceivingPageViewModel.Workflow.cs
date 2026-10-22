@@ -35,8 +35,9 @@ internal sealed partial class ReceivingPageViewModel
         if(IsBusy)return;
         await SelectNavAsync(row);
         if(IsBusy||SelectedNavInvoice!=row||!IsEditor||Number!=row.Number)return;
+        if(action=="manual"&&_linkedManualReceiptId is Guid linked){await OpenLinkedManualAsync(linked);return;}
         if(!IsEditable){Message="A lezárt számla nem módosítható. A bevételezett számlák listájában megtekinthető.";return;}
-        if(action=="manual"){ConvertToManual();MarkDirty();return;}
+        if(action=="manual"){await MoveNavToManualAsync();return;}
         if(action=="api")
         {
             if(Tax(row.SupplierTaxNumber)!="23126806"){Message="Ehhez a szállítóhoz még nincs bekötött API. XML vagy PDF segédletet választhatsz.";return;}

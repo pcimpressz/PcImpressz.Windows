@@ -33,6 +33,11 @@ public sealed class ReceivingModule : IModule
             if(connection is null||!connection.Enabled)return ReceivingJson.Element(new{configured=false,rows=Array.Empty<SupplierInvoiceLine>()});
             return ReceivingJson.Element(new{configured=true,rows=await SupplierInvoiceClient.ReadAsync(connection,input.GetProperty("number").GetString()??"",ct)});
         });
+        var drafts=new ManualInvoiceDraftStore(context.Database!,context.TimeProvider);
+        Register(context,"draft-list","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>{ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(drafts.List(input.GetProperty("companyId").GetGuid())));});
+        Register(context,"draft-read","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>{ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(drafts.Read(ReceivingJson.Read<ManualDraftRequest>(input))));});
+        Register(context,"draft-save","receiving.write",CommandAccess.Licensed,(input,actor,ct)=>{ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(drafts.Save(ReceivingJson.Read<ManualDraftSave>(input),actor)));});
+        Register(context,"draft-delete","receiving.write",CommandAccess.Licensed,(input,_,ct)=>{ct.ThrowIfCancellationRequested();drafts.Delete(ReceivingJson.Read<ManualDraftRequest>(input));return Task.FromResult(ReceivingJson.Element(new{deleted=true}));});
         var preparations=new InvoicePreparationStore(context.Database!,context.TimeProvider);
         Register(context,"preparation-read","receiving.read",CommandAccess.RecoveryReadOnly,(input,_,ct)=>{ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(preparations.Read(ReceivingJson.Read<InvoicePreparationRequest>(input))));});
         Register(context,"preparation-save","receiving.write",CommandAccess.Licensed,(input,actor,ct)=>{ct.ThrowIfCancellationRequested();return Task.FromResult(ReceivingJson.Element(preparations.Save(ReceivingJson.Read<InvoicePreparationSave>(input),actor)));});

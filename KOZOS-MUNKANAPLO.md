@@ -302,3 +302,7 @@ Képek alapján kompakt dátummező és lekérési/XML eszköztár, választhat�
 ## 2026-10-22 – 0.4.20
 
 NAV-előnézet: CanClassify értesítés javítva; szállítóegyeztetés a termékbetöltéstől független hibakezeléssel, meglévő vevő szállítói szerepének megőrző bővítésével. Rögzített számlaazonosság, kapcsolható szállítóválasztó, sorvégi kézi átváltás és XML/API/PDF-segédletek. Terméktörzs kategóriája a táblázatban és részletekben, tallózó élő kereséssel. Készletre jelölt párosítatlan sorok érthető ellenőrzése; új termék felvétele explicit gombbal. Külön bevételezett számlák gomb. Ellenőrzés elkülönített tesztcégen, éles számlakiállítás és nyomtatás nélkül.
+
+## 2026-10-22 – 0.4.21
+
+Orink→SMA számlaváltás: megszüntetve az előző NAV-szállító továbbörökítése. Külön NAV és kézi editorpéldány, explicit szerkesztőtípus, NAV-ban nincs új sor. Kézire átemelés teljes adatokkal és meglévő piszkozat folytatásával. Céges SQL-piszkozatok hiányos számokkal/szállító nélkül is menthetők, új munkamenetben visszanyithatók, verzióütközés ellen védettek; nincs készletmozgás. Kézi névmező a részletekben, táblázatnév csak olvasható; kategóriaválasztó név/kód szűréssel, kompakt vonalkódgombok. Új regresszió: Orink→SMA, NAV↔kézi, hiányos piszkozat, újranyitás/törlés, áthelyezett bizonylat NAV-nézete és UI-igazítás.
