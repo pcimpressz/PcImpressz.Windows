@@ -177,7 +177,7 @@ public sealed class ReceivingModule : IModule
             [new("number", "Számlaszám", Required: true), new("supplierName", "Szállító", Required: true),
              new("issuedOn", "Kelt"), new("notes", "Megjegyzés", "multiline")],
             [new("number", "Számlaszám", 150), new("supplierName", "Szállító", 220), new("issuedOn", "Kelt", 110),
-             new("sourceLabel", "Forrás", 110), new("net", "Nettó", 110), new("statusLabel", "Állapot", 180)],
+             new("supplierTaxId","Adószám",120),new("sourceLabel", "Forrás", 110), new("net", "Nettó", 110),new("gross","Bruttó",110), new("statusLabel", "Állapot", 180)],
             new("list", "save", "archive", "export"),
             new EntityPageLabels
             {
@@ -199,6 +199,7 @@ public sealed class ReceivingModule : IModule
     private static ReceiptQuery ReadQuery(JsonElement input)
     {
         var query = ReceivingJson.Read<ReceiptQuery>(input);
+        ReceiptFilters.Validate(query);
         if (query.Page < 0 || query.PageSize is < 1 or > 200 || (query.Search is null || query.Search.Length > 200) || query.Sort is null || !ReceiptListing.IsSort(query.Sort))
             throw new ArgumentException("Érvénytelen listázási kérés.");
         if (query.Filter is not ("uj" or "bevetelezve" or "visszaforditva" or "koltseg" or "fuggo" or "mind"))
@@ -227,7 +228,7 @@ public sealed class ReceivingModule : IModule
         node["lines"] = JsonSerializer.SerializeToNode(receipt.Data.Lines.Select(line => new
         {
             line.Id, line.ProductId, line.Name, line.Sku, line.Barcode, line.UnitCode, line.Quantity, line.NetUnitPrice,
-            line.VatRate, line.StockItem, line.Match, line.MatchBy, matchLabel = ReceivingText.MatchLabel(line.Match)
+            line.VatRate, line.StockItem, line.SourceNetAmount,line.SourceVatAmount,line.SourceGrossAmount,line.Match, line.MatchBy, matchLabel = ReceivingText.MatchLabel(line.Match)
         }), ReceivingJson.Options);
         return JsonSerializer.SerializeToElement(node);
     }
@@ -246,10 +247,12 @@ public static class ReceiptListing
     public static bool IsSort(string sort) => sort.Length <= 40 && sort.All(char.IsAsciiLetterOrDigit);
     public static ReceiptRecord[] Match(IEnumerable<ReceiptRecord> source, ReceiptQuery query)
     {
+        ReceiptFilters.Validate(query);
         if (!IsSort(query.Sort)) throw new ArgumentException("Érvénytelen listázási kérés.");
         var rows = source.OrderBy(receipt => receipt.Id).Where(receipt => query.Filter == "mind" || receipt.Data.Status == query.Filter)
             .Where(receipt => string.IsNullOrWhiteSpace(query.Search) || string.Join(" ", receipt.Data.Number, receipt.Data.SupplierName, receipt.Data.SupplierTaxId)
-                .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
+                .Contains(query.Search.Trim(), StringComparison.OrdinalIgnoreCase)).Where(r=>ReceiptFilters.Matches(r.Data,query)).ToArray();
+        if(query.Sort is "net" or "gross")return (query.Descending?rows.OrderByDescending(r=>query.Sort=="gross"?r.Data.Gross:r.Data.Net):rows.OrderBy(r=>query.Sort=="gross"?r.Data.Gross:r.Data.Net)).ThenBy(r=>r.Id).ToArray();
         if (query.Sort.Length > 0 && Keys.TryGetValue(query.Sort, out var key))
             return TextOrder.By(rows, query.Descending, key);
         return rows.OrderByDescending(receipt => receipt.Data.IssuedOn, StringComparer.Ordinal)

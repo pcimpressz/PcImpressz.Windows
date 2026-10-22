@@ -43,7 +43,7 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
     {
         if(document.Number!=request.Number||ReceivingText.TaxKey(document.SupplierTaxId)!=ReceivingText.TaxKey(request.SupplierTaxNumber))throw new ArgumentException("A NAV-előnézet azonosítója eltér.");
         var existing=state.Receipts.SingleOrDefault(r=>NavMatches(r.Data,document.Number??"",document.SupplierTaxId??""));
-        var lines=ReceivingMatching.Build(document.Lines.Select(l=>new ReceiptLineDraft(null,null,l.Name,l.Sku,l.Barcode,l.UnitCode,l.Quantity,l.NetUnitPrice,l.VatRate??throw new ArgumentException("Hiányzó áfakulcs a NAV-tételen."),l.IsService)).ToArray(),MasterIndex.Load(scope.Directory,scope.Transaction).Products);
+        var lines=BuildImportedLines(document,MasterIndex.Load(scope.Directory,scope.Transaction).Products);
         return (lines,existing);
     },ct);
     public Task<ReceiptRecord> ImportNav(NavInvoiceImport request,ImportedDocument document,string actor,CancellationToken ct=default)=>Locked(request.CompanyId,(scope,state)=>
@@ -82,10 +82,12 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var supplier = Supplier(index, draft.SupplierId, null)
             ?? throw new ArgumentException("A szállító nem található az aktív beszállítók között. Vedd fel a partnertörzsben, vagy hozd létre innen.");
         if(existing?.Data.Source=="nav"&&!draft.ConvertToManual)EnsureNavFacts(existing.Data,draft);
+        var built=ReceivingMatching.Build(draft.Lines??throw new ArgumentException("Hiányzó tételek."),index.Products,existing?.Data.Source=="nav"&&!draft.ConvertToManual);
+        if(existing?.Data.Source=="nav"&&!draft.ConvertToManual)built=built.Select(l=>{var original=existing.Data.Lines.Single(o=>o.Id==l.Id);return l with{SourceNetAmount=original.SourceNetAmount,SourceVatAmount=original.SourceVatAmount,SourceGrossAmount=original.SourceGrossAmount};}).ToArray();
         var data = Compose(draft.Number, supplier, draft.IssuedOn, draft.DueOn, draft.Notes, draft.Warehouse,
             draft.ConvertToManual?"manual":existing?.Data.Source ?? (draft.Source is null or "manual" or "pdf" ? draft.Source ?? "manual" : throw new ArgumentException("Ismeretlen kézi forrás.")), existing?.Data.Status ?? "uj", existing?.Data.ReceivedAt,
-            ReceivingMatching.Build(draft.Lines ?? throw new ArgumentException("Hiányzó tételek."), index.Products));
-        data = data with {OriginalNavNumber=existing?.Data.OriginalNavNumber??(existing?.Data.Source=="nav"?existing.Data.Number:null),OriginalNavSupplierTaxId=existing?.Data.OriginalNavSupplierTaxId??(existing?.Data.Source=="nav"?existing.Data.SupplierTaxId:null), SourceNet=draft.ConvertToManual?null:existing?.Data.SourceNet, SourceVat=draft.ConvertToManual?null:existing?.Data.SourceVat, SourceGross=draft.ConvertToManual?null:existing?.Data.SourceGross };
+            built);
+        data = data with {NavOperation=existing?.Data.NavOperation??"CREATE",RelatedInvoiceNumber=existing?.Data.RelatedInvoiceNumber??"",OriginalNavNumber=existing?.Data.OriginalNavNumber??(existing?.Data.Source=="nav"?existing.Data.Number:null),OriginalNavSupplierTaxId=existing?.Data.OriginalNavSupplierTaxId??(existing?.Data.Source=="nav"?existing.Data.SupplierTaxId:null), SourceNet=draft.ConvertToManual?null:existing?.Data.SourceNet, SourceVat=draft.ConvertToManual?null:existing?.Data.SourceVat, SourceGross=draft.ConvertToManual?null:existing?.Data.SourceGross };
         RejectDuplicate(state, existing?.Id, data);
         return Store(scope, state, existing, data, actor, existing is null ? "create" : "update");
     }
@@ -104,10 +106,9 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
         var issued = string.IsNullOrWhiteSpace(request.IssuedOn) ? document.IssuedOn : request.IssuedOn;
         if (string.IsNullOrWhiteSpace(issued)) issued = time.GetUtcNow().ToString("yyyy-MM-dd");
         var due = string.IsNullOrWhiteSpace(request.DueOn) ? document.DueOn : request.DueOn;
-        var lines = ReceivingMatching.Build(document.Lines.Select(line => new ReceiptLineDraft(null, null, line.Name, line.Sku, line.Barcode, line.UnitCode,
-            line.Quantity, line.NetUnitPrice, line.VatRate ?? throw new ArgumentException("Hiányzó áfakulcs: add meg az importban."), line.IsService)).ToArray(), index.Products);
+        var lines=BuildImportedLines(document,index.Products);
         var data = Compose(number, supplier, issued, due, "", "Bolt", source, "uj", null, lines);
-        data = data with {OriginalNavNumber=source=="nav"?data.Number:null,OriginalNavSupplierTaxId=source=="nav"?data.SupplierTaxId:null, SourceNet=document.ExpectedNet, SourceVat=document.ExpectedVat, SourceGross=document.ExpectedGross };
+        data = data with {NavOperation=document.Operation,RelatedInvoiceNumber=document.RelatedInvoiceNumber,OriginalNavNumber=source=="nav"?data.Number:null,OriginalNavSupplierTaxId=source=="nav"?data.SupplierTaxId:null, SourceNet=document.ExpectedNet, SourceVat=document.ExpectedVat, SourceGross=document.ExpectedGross };
         CheckSourceTotals(data);
         RejectDuplicate(state, null, data);
         return Store(scope, state, null, data, actor, "import");
@@ -152,6 +153,16 @@ public sealed class ReceivingRepository(Func<Guid, string> companyDirectory, Tim
             var line=original.Lines.SingleOrDefault(l=>l.Id==row.Id);
             if(line is null||line.Name!=row.Name||line.Quantity!=row.Quantity||line.NetUnitPrice!=row.NetUnitPrice||line.VatRate!=row.VatRate||line.UnitCode!=row.UnitCode)throw new ArgumentException("A NAV eredeti tételsora nem írható át. Előbb válts kézi bevételezésre.");
         }
+    }
+    private static ReceiptLine[] BuildImportedLines(ImportedDocument document,ProductCard[] products)
+    {
+        var lines=ReceivingMatching.Build(document.Lines.Select(l=>new ReceiptLineDraft(null,null,l.Name,l.Sku,l.Barcode,l.UnitCode,l.Quantity,l.NetUnitPrice,l.VatRate??throw new ArgumentException("Hiányzó áfakulcs a NAV-tételen."),l.IsService,l.Quantity!=0)).ToArray(),products,true);
+        return lines.Select((line,i)=>
+        {
+            var source=document.Lines[i];
+            foreach(var amount in new[]{source.SourceNetAmount,source.SourceVatAmount,source.SourceGrossAmount})if(amount is < -1_000_000_000_000_000m or > 1_000_000_000_000_000m)throw new ArgumentException("Érvénytelen NAV-tételösszeg.");
+            return line with{SourceNetAmount=source.SourceNetAmount,SourceVatAmount=source.SourceVatAmount,SourceGrossAmount=source.SourceGrossAmount};
+        }).ToArray();
     }
     private static void CheckSourceTotals(ReceiptData data)
     {

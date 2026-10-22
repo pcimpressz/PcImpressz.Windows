@@ -10,7 +10,7 @@ internal sealed partial class LineEditor
     {
         if(_filling||!ProductLoaded)return;var field=ProductFields.FirstOrDefault(f=>f.Definition.Id==id);if(field is not null&&field.Text!=value)field.Text=value;
     }
-    public bool StockItem{get=>_stockItem;set{_stockItem=value;Changed();Touch();}}
+    public bool StockItem{get=>_stockItem;set{_stockItem=value;Changed();Changed(nameof(StockEffect));Touch();}}
     public bool DetailsOpen{get;set;}
     public string Margin=>ReceivingPageViewModel.TryMoney(RetailPrice,out var gross)&&ReceivingPageViewModel.TryMoney(SaleVat,out var vat)&&ReceivingPageViewModel.TryMoney(PriceText,out var buy)&&gross>0&&vat>=0
         ? ((gross/(1+vat/100)-buy)/(gross/(1+vat/100))*100).ToString("0.##",CultureInfo.GetCultureInfo("hu-HU"))+" %":"—";

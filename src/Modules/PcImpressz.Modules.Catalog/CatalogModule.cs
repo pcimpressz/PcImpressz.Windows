@@ -97,10 +97,11 @@ public sealed partial class CatalogModule : IModule
             else if (query.Filter is "in-stock" or "out-of-stock" || query.MinStock is not null || query.MaxStock is not null)
                 throw new InvalidOperationException("A készletszűréshez céges adatbázis szükséges.");
             return CatalogJson.Element(new { csv = CatalogRepository.ExportCsv(
-                "Név;Cikkszám;Gyártói cikkszám;Kategória;Mértékegység;Revízió;Vonalkód;Beszerzés;Eladás;Aktív;Leírás;Paraméterek;Megjegyzés", rows, p =>
+                "Név;Cikkszám;Gyártói cikkszám;Kategória;Mértékegység;Revízió;Vonalkód;Beszerzés;Eladás;Aktív;Leírás;Paraméterek;Megjegyzés;További eladási árak", rows, p =>
                 [p.Data.Name, p.Data.Sku, p.Data.ManufacturerPartNumber, p.Data.CategoryCode, p.Data.UnitCode, p.Data.Revision, p.Data.Barcode,
                  p.Data.IsPurchaseable ? "Igen" : "Nem", p.Data.IsSalable ? "Igen" : "Nem", p.Data.IsActive ? "Igen" : "Nem",
-                 p.Data.Description, p.Data.Parameters, p.Data.Notes]) });
+                 p.Data.Description, p.Data.Parameters, p.Data.Notes,
+                 string.Join(" | ", (p.Data.SalePrices ?? []).Select(price => SalePriceMath.Describe(price, p.Data.SaleNetUnitPrice, p.Data.SaleVatRate)))]) });
         });
         context.RegisterPage(Page("categories", context.ModuleId, "Kategóriák", "Termékcsoportok, egymásba ágyazható kóddal.", "\uE8FD",
             [new("name", "Kategória neve", Required: true), new("code", "Kód", Required: true), new("parentCode", "Szülő kódja"),
@@ -119,7 +120,7 @@ public sealed partial class CatalogModule : IModule
         var productPage=Page("products", context.ModuleId, "Terméktörzs", "Cikkszám, kategória, mértékegység és alapparaméterek.", "\uE7B8",
             [new("name", "Termék neve", Required: true), new("sku", "Saját cikkszám", Required: true), new("manufacturerPartNumber", "Gyártói cikkszám"), new("categoryCode", "Kategória kódja"),
              new("unitCode", "Mértékegység kódja", Required: true), new("revision", "Revízió"), new("barcode", "Vonalkód"),
-             new("saleNetUnitPrice","Nettó eladási egységár (Ft)","decimal"), new("saleVatRate","Eladási áfa %","decimal",Required:true,DefaultText:"27"),
+             new("saleNetUnitPrice","Eladási egységár (Ft)","decimal"), new("saleVatRate","Eladási áfa %","decimal",Required:true,DefaultText:"27"),
              new("description", "Leírás", "multiline"), new("parameters", "Paraméterek (név=érték)", "multiline"),
              new("isPurchaseable", "Beszerzésre jelölhető", "boolean"), new("isSalable", "Eladásra jelölhető", "boolean"),
              new("isActive", "Aktív", "boolean", DefaultChecked: true), new("notes", "Megjegyzés", "multiline")],

@@ -84,7 +84,7 @@ public static class ReceivingImport
             throw new ArgumentException("Az XML-ben nincs NAV-tételsor (<line>). Katalógusfájl vagy más nagyker formátuma nem számla.");
         return new(Header(document, "invoiceNumber"), Date(Header(document, "invoiceIssueDate")), Date(Header(document, "paymentDate")),
             Header(document, "supplierName"), Header(document, "supplierTaxNumber"), lines, "HUF",
-            Summary(document,"invoiceNetAmount"),Summary(document,"invoiceVatAmount"),Summary(document,"invoiceGrossAmount"));
+            Summary(document,"invoiceNetAmount"),Summary(document,"invoiceVatAmount"),Summary(document,"invoiceGrossAmount"),document.Descendants().Any(e=>e.Name.LocalName=="invoiceReference")?"MODIFY":"CREATE",Header(document,"originalInvoiceNumber"));
     }
     private static decimal? Summary(XDocument document,string name)
     {
@@ -94,7 +94,7 @@ public static class ReceivingImport
     private static ImportedLine? ParseLine(XElement line)
     {
         var name = Text(line, "lineDescription");
-        if (name.Length == 0) return null;
+        if (name.Length == 0) name="Számlatétel "+Text(line,"lineNumber");
         var codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var code in line.Descendants().Where(element => element.Name.LocalName.Equals("productCode", StringComparison.OrdinalIgnoreCase)))
         {
@@ -110,8 +110,9 @@ public static class ReceivingImport
             throw new ArgumentException("A NAV-tétel áfakezelése hiányzik vagy még nem támogatott.");
         var unit = Text(line, "unitOfMeasure");
         unit = unit switch { "" or "PIECE" => "DB", "OWN" => Text(line, "unitOfMeasureOwn"), _ => unit };
-        return new(name, sku, ReceivingText.Digits(barcode), Number(Text(line, "quantity"), "Mennyiség"), Number(Text(line, "unitPrice"), "Nettó egységár"),
-            Number(vatText, "Áfa") * 100m, unit, Text(line,"productOrServiceIndicator")=="SERVICE");
+        decimal? Amount(string field){var value=Text(line,field);return value.Length==0?null:Number(value,field);}
+        return new(name, sku, ReceivingText.Digits(barcode), Amount("quantity")??0, Amount("unitPrice")??0,
+            Number(vatText, "Áfa") * 100m, unit, Text(line,"productOrServiceIndicator")=="SERVICE",Amount("lineNetAmount"),Amount("lineVatAmount"),Amount("lineGrossAmountNormal"));
     }
     private static string Header(XDocument document, string name) =>
         document.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase)

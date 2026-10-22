@@ -132,6 +132,8 @@ public sealed class CatalogRepository(Func<Guid, string> companyDirectory, TimeP
     {
         var data = CatalogValidation.NormalizeProduct(request.Data ?? throw new ArgumentException("Hiányzó termékadat."));
         var existing = Find(state.Products, request.Id, request.Version, p => p.Id, p => p.Version);
+        if (data.SalePrices is null)
+            data = data with { SalePrices = CatalogValidation.NormalizeSalePrices(existing?.Data.SalePrices) ?? [] };
         EnsureProductLinks(state, data);
         if (existing is not null && existing.Data.UnitCode != data.UnitCode && scope.Transaction is { } transaction
             && CompanyReferenceQueries.HasStockHistory(transaction, existing.Id))

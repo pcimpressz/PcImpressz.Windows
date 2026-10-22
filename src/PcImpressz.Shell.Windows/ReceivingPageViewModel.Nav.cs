@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Windows.Input;
 namespace PcImpressz.Shell.Windows;
-public sealed record NavInvoiceRow(string Number,string SupplierName,string SupplierTaxNumber,string IssuedOn,string Currency,string Operation,string Net,int? BatchIndex,Guid? ReceiptId=null,bool Received=false){public string State=>Received?"Bevételezve":"Nincs bevételezve";}
+public sealed record NavInvoiceRow(string Number,string SupplierName,string SupplierTaxNumber,string IssuedOn,string Currency,string Operation,string Net,int? BatchIndex,Guid? ReceiptId=null,bool Received=false,decimal? NetAmount=null,decimal? GrossAmount=null){public string Gross=>GrossAmount is decimal gross?MoneyDisplay.Format(gross):"—";public string State=>Received?"Bevételezve":"Nincs bevételezve";}
 internal sealed partial class ReceivingPageViewModel
 {
     private NavInvoiceRow? _navPreview; private SupplierOption? _navSupplier;private Guid? _linkedManualReceiptId;
@@ -16,7 +16,7 @@ internal sealed partial class ReceivingPageViewModel
     public DateTime? NavFrom{get=>_navFrom;set{if(IsBusy)return;_navFrom=value;ResetNavList();Changed();}}
     public DateTime? NavTo{get=>_navTo;set{if(IsBusy)return;_navTo=value;ResetNavList();Changed();}}
     public ObservableCollection<NavInvoiceRow> NavInvoices{get;}=[];
-    public string NavPageLabel=>_navPage==0?"Válassz időszakot és kérd le a bejövő számlákat.":_navPage+" / "+Math.Max(_navPages,1)+". oldal · "+NavInvoices.Count+" számla · "+(_navLocalPage+1)+" / "+Math.Max(1,(_navAll.Count+InvoicePageSize-1)/InvoicePageSize)+" listaoldal";
+    public string NavPageLabel=>_navPage==0?"Válassz időszakot és kérd le a bejövő számlákat.":(_navAllPagesLoaded?"Összes NAV-oldal":_navPage+" / "+Math.Max(_navPages,1)+". NAV-oldal")+" · "+NavInvoices.Count+" számla · "+(_navLocalPage+1)+" / "+Math.Max(1,(FilteredNavRows().Length+InvoicePageSize-1)/InvoicePageSize)+" listaoldal";
     public NavInvoiceRow? SelectedNavInvoice
     {
         get=>_navSelected;
@@ -32,7 +32,7 @@ internal sealed partial class ReceivingPageViewModel
     public ICommand PreviousNavCommand=>new RelayCommand(()=>MoveNavPage(-1));
     public ICommand DownloadNavCommand=>new RelayCommand(()=>_=DownloadNavAsync());
     private static string Tax(string value)=>new string(value.Where(char.IsAsciiDigit).Take(8).ToArray());
-    private void ResetNavList(){_navAll.Clear();_navLocalPage=0;NavInvoices.Clear();_navPage=_navPages=0;_navAppliedFrom=_navAppliedTo=null;_navSelected=null;Changed(nameof(SelectedNavInvoice));SelectedNavSupplier=null;Changed(nameof(NavPageLabel));}
+    private void ResetNavList(){_navAllPagesLoaded=false;_navAll.Clear();_navLocalPage=0;NavInvoices.Clear();_navPage=_navPages=0;_navAppliedFrom=_navAppliedTo=null;_navSelected=null;Changed(nameof(SelectedNavInvoice));SelectedNavSupplier=null;Changed(nameof(NavPageLabel));}
     internal async Task FetchNavAsync(int page,bool lastSlice=false)
     {
         if(IsBusy||_company() is not Guid company)return;if(!await FlushPreparationAsync())return;IsBusy=true;
@@ -41,8 +41,22 @@ internal sealed partial class ReceivingPageViewModel
             var from=page==1?NavFrom:_navAppliedFrom;var to=page==1?NavTo:_navAppliedTo;
             if(from is null||to is null||from>to||(to.Value-from.Value).TotalDays>34)throw new ArgumentException("Legfeljebb 35 napos kezdő és záró dátum kell.");
             var result=await ModuleAsync("receiving","nav-list",new{from=from.Value.ToString("yyyy-MM-dd"),to=to.Value.ToString("yyyy-MM-dd"),page});if(_company()!=company)return;
-            _navAll.Clear();_navSelected=null;Changed(nameof(SelectedNavInvoice));foreach(var row in result.GetProperty("rows").EnumerateArray())_navAll.Add(new(Get(row,"number"),Get(row,"supplierName"),Get(row,"supplierTaxNumber"),Get(row,"issuedOn"),Get(row,"currency"),Get(row,"operation"),row.TryGetProperty("net",out var net)&&net.ValueKind==JsonValueKind.Number?MoneyDisplay.Format(net.GetDecimal()):"—",row.TryGetProperty("batchIndex",out var batch)&&batch.ValueKind==JsonValueKind.Number?batch.GetInt32():null,row.TryGetProperty("receiptId",out var receipt)&&receipt.ValueKind==JsonValueKind.String?receipt.GetGuid():null,row.TryGetProperty("received",out var received)&&received.ValueKind==JsonValueKind.True));
-            _navLocalPage=lastSlice?Math.Max(0,(_navAll.Count-1)/InvoicePageSize):0;ShowNavSlice();_navAppliedFrom=from;_navAppliedTo=to;_navPage=result.GetProperty("currentPage").GetInt32();_navPages=result.GetProperty("availablePage").GetInt32();Changed(nameof(NavPageLabel));Message=NavInvoices.Count==0?"Ebben az időszakban nincs bejövő számla.":"Kattints egy számlára: alatta automatikusan megjelennek a tételei. A készlet még nem változik.";
+            var incoming=ReadNavRows(result).ToList();var allPages=false;
+            if(_invoiceFilters.Active)
+            {
+                var available=result.GetProperty("availablePage").GetInt32();if(available>200)throw new ArgumentException("A NAV-szűréshez szűkítsd a lekérési időszakot: legfeljebb 200 NAV-oldal tölthető be.");
+                for(var next=1;next<=available;next++)
+                {
+                    if(next==page)continue;
+                    if(incoming.Count>=20000)throw new ArgumentException("A NAV-szűréshez szűkítsd a lekérési időszakot: legfeljebb 20 000 számla tölthető be.");
+                    Message=$"NAV-szűrés: {next} / {available} oldal betöltése…";
+                    var extra=await ModuleAsync("receiving","nav-list",new{from=from.Value.ToString("yyyy-MM-dd"),to=to.Value.ToString("yyyy-MM-dd"),page=next});if(_company()!=company)return;
+                    incoming.AddRange(ReadNavRows(extra));
+                }
+                allPages=true;
+            }
+            _navAll.Clear();_navAll.AddRange(incoming);_navAllPagesLoaded=allPages;_navSelected=null;Changed(nameof(SelectedNavInvoice));
+            _navLocalPage=lastSlice?Math.Max(0,(FilteredNavRows().Length-1)/InvoicePageSize):0;ShowNavSlice();_navAppliedFrom=from;_navAppliedTo=to;_navPage=allPages?1:result.GetProperty("currentPage").GetInt32();_navPages=allPages?1:result.GetProperty("availablePage").GetInt32();Changed(nameof(NavPageLabel));Message=NavInvoices.Count==0?"Ebben az időszakban nincs bejövő számla.":"Kattints egy számlára: alatta automatikusan megjelennek a tételei. A készlet még nem változik.";
         }
         catch(Exception ex) when(ex is not OutOfMemoryException){Message=ex.Message;}
         finally{IsBusy=false;}
@@ -52,7 +66,7 @@ internal sealed partial class ReceivingPageViewModel
         if(IsBusy||_company() is not Guid company)return;
         if(!discardChecked&&(!await FlushPreparationAsync()||!CanLeave()))return;
         if(SelectedNavInvoice is not {} invoice){Message="Válassz NAV-számlát a listából.";return;}
-        if(invoice.Operation!="CREATE"){Message="Módosító/sztornó számla külön ellenőrzést igényel, nem normál bevételezés.";return;}
+        if(invoice.Operation is not ("CREATE" or "MODIFY" or "STORNO")){Message="Ismeretlen NAV-számlaművelet.";return;}
         IsBusy=true;
         try
         {

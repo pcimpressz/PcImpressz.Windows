@@ -306,3 +306,8 @@ NAV-előnézet: CanClassify értesítés javítva; szállítóegyeztetés a term
 ## 2026-10-22 – 0.4.21
 
 Orink→SMA számlaváltás: megszüntetve az előző NAV-szállító továbbörökítése. Külön NAV és kézi editorpéldány, explicit szerkesztőtípus, NAV-ban nincs új sor. Kézire átemelés teljes adatokkal és meglévő piszkozat folytatásával. Céges SQL-piszkozatok hiányos számokkal/szállító nélkül is menthetők, új munkamenetben visszanyithatók, verzióütközés ellen védettek; nincs készletmozgás. Kézi névmező a részletekben, táblázatnév csak olvasható; kategóriaválasztó név/kód szűréssel, kompakt vonalkódgombok. Új regresszió: Orink→SMA, NAV↔kézi, hiányos piszkozat, újranyitás/törlés, áthelyezett bizonylat NAV-nézete és UI-igazítás.
+
+
+## 2026-10-22 – 0.4.22
+
+NAV eredeti sor nettó/áfa/bruttó összegek megőrzése import, előnézet és szerkesztés után; költségként kihagyott sorok továbbra is a teljes számla részei. Negatív mennyiségek és MODIFY/STORNO beolvasás, meglévő tranzakciós és készletellenőrzéssel. Oszlopos számlaszűrés a ListGrid meglévő fejlécfelületén, fejlett szállító/dátum/bruttó tartomány, modul saját élő szűrési kapcsoló. NAV-szűrés minden lekért időszaki oldalon, max. 200 oldal; export és helyi lista azonos backendfeltételekkel. 200/200 üzleti és 70/70 WPF render, új előjeles/fuvar/oldalakon átnyúló szűrési használati próbák. A Cursor terméktörzs- és árkezelési commitjaival együtt ellenőrizve; a folyamatban lévő vizuális szerkesztő nem része a számlás commitnak.

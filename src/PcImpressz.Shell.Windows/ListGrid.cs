@@ -146,23 +146,23 @@ internal static class ListGrid
                 };
                 stack.Children.Add(box);
             }
-            if (current is EntityPageViewModel products && products.IsProductMaster)
+            if (current is EntityPageViewModel rows)
             {
-                stack.Children.Add(new TextBlock { Text = "Egyszerre ennyi termék", FontWeight = FontWeights.SemiBold, Margin = new(0, 12, 0, 6) });
-                var sizes = new ComboBox { ItemsSource = new[] { 10, 20, 50, 100 }, SelectedItem = products.PageSize, MinWidth = 90 };
+                stack.Children.Add(new TextBlock { Text = "Egyszerre ennyi " + rows.Labels.CountNoun, FontWeight = FontWeights.SemiBold, Margin = new(0, 12, 0, 6) });
+                var sizes = new ComboBox { ItemsSource = new[] { 10, 20, 50, 100 }, SelectedItem = rows.PageSize, MinWidth = 90 };
                 var ignore = true;
                 sizes.SelectionChanged += (_, _) =>
                 {
                     if (ignore || sizes.SelectedItem is not int count) return;
-                    products.TrySetPageSize(count);
+                    rows.TrySetPageSize(count);
                 };
                 stack.Children.Add(sizes);
                 ignore = false;
             }
             var note = new TextBlock
             {
-                Text = current is EntityPageViewModel { IsProductMaster: true }
-                    ? "A terméksorok a lap görgetésével látszanak, a lista nem görget külön. A gépelés közbeni keresés a Beállításokban kapcsolható."
+                Text = current is EntityPageViewModel
+                    ? "A sorok a lap görgetésével látszanak, a lista nem görget külön. A gépelés közbeni keresés a Beállításokban kapcsolható."
                     : "A kereső gépelés közben szűkít, ha a Beállításokban ez be van kapcsolva.",
                 TextWrapping = TextWrapping.Wrap, Margin = new(0, 10, 0, 0), FontSize = 12
             };

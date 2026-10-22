@@ -5,7 +5,7 @@ using System.Windows.Data;
 
 namespace PcImpressz.Shell.Windows;
 
-public sealed class ReceivingPageView : UserControl
+public sealed partial class ReceivingPageView : UserControl
 {
     private readonly List<DataGrid> _lineGrids=[];
     private DataGrid _receipts = null!;
@@ -35,9 +35,10 @@ public sealed class ReceivingPageView : UserControl
         modes.Children.Add(Primary("Új kézi bevételezés", "ManualCommand"));modes.Children.Add(Button("Bevételezett számlák", "ReceivedInvoicesCommand"));modes.Children.Add(Button("Kézi piszkozatok", "DraftsCommand"));
         modes.Children.Add(Button("NAV-számlák lekérése", "NavCommand"));
         modes.Children.Add(Button("PDF alapján rögzítés", "PdfCommand"));
-        modes.Children.Add(Button("Excel / CSV / XML import", "ImportCommand"));
+        modes.Children.Add(Button("Excel / CSV / XML import", "ImportCommand"));modes.Children.Add(Button("Szűrés","ToggleInvoiceFiltersCommand"));
         panel.Children.Add(modes);
 
+        panel.Children.Add(InvoiceFilterPanel());
         panel.Children.Add(DraftList());
         var home=panel;var listing=new StackPanel();listing.SetBinding(VisibilityProperty,new Binding("IsReceiptListVisible"){Converter=new BooleanToVisibilityConverter()});home.Children.Add(listing);panel=listing;
         panel.Children.Add(Bound(Muted(""), "CountsLabel"));
@@ -63,7 +64,7 @@ public sealed class ReceivingPageView : UserControl
             HeadersVisibility = DataGridHeadersVisibility.Column, MinHeight = 80, Margin = new(0, 8, 0, 0) };
         _receipts.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("Rows"));
         _receipts.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedRow"));
-        _receipts.MouseDoubleClick += (_, _) => { if (DataContext is ReceivingPageViewModel page) page.OpenCommand.Execute(null); };
+        _receipts.SelectionChanged += (_, _) => { if (_receipts.SelectedItem is ReceiptRow&&DataContext is ReceivingPageViewModel page&&page.IsReceiptListVisible&&page.IsNotBusy) page.OpenCommand.Execute(null); };
         ListGrid.Prepare(_receipts, () => DataContext as IColumnList);
         panel.Children.Add(_receipts);var paging=new WrapPanel();paging.Children.Add(Button("Előző oldal","PreviousReceiptPageCommand"));paging.Children.Add(Button("Következő oldal","NextReceiptPageCommand"));paging.Children.Add(PageSizePicker());paging.Children.Add(Bound(Muted(""),"ReceiptPageLabel"));panel.Children.Add(paging);
         return home;
@@ -107,7 +108,7 @@ public sealed class ReceivingPageView : UserControl
         if(nav)
         {
             var dates=new WrapPanel{Margin=new(0,0,0,12)};dates.Children.Add(Text("Kezdő nap",14,false));var from=CompactDatePicker();from.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavFrom"){Mode=BindingMode.TwoWay});from.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(from);dates.Children.Add(Text("Záró nap",14,false));var to=CompactDatePicker();to.SetBinding(DatePicker.SelectedDateProperty,new Binding("NavTo"){Mode=BindingMode.TwoWay});to.SetBinding(IsEnabledProperty,"IsNotBusy");dates.Children.Add(to);dates.Children.Add(Primary("Bejövő számlák lekérése","FetchNavCommand"));dates.Children.Add(Button("NAV XML megnyitása","PickFileCommand"));dates.Children.Add(PageSizePicker());panel.Children.Add(dates);
-            var invoices=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=65,Margin=new(0,0,0,12)};invoices.HeadersVisibility=DataGridHeadersVisibility.Column;invoices.RowStyle=NavRowStyle();invoices.SetBinding(ItemsControl.ItemsSourceProperty,"NavInvoices");invoices.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedNavInvoice"){Mode=BindingMode.TwoWay});invoices.SetBinding(IsEnabledProperty,"IsNotBusy");foreach(var (title,path) in new[]{("Állapot","State"),("Kelt","IssuedOn"),("Számlaszám","Number"),("Szállító","SupplierName"),("Adószám","SupplierTaxNumber"),("Nettó","Net"),("Pénznem","Currency")})invoices.Columns.Add(new DataGridTextColumn{Header=title,Binding=new Binding(path),MinWidth=path=="SupplierName"?180:60,Width=path=="SupplierName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path switch{"State"=>110,"Number"=>150,"Net"=>90,"Currency"=>70,_=>100})});invoices.Columns.Add(NavActions());panel.Children.Add(invoices);
+            var invoices=new DataGrid{AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,MinHeight=65,Margin=new(0,0,0,12)};invoices.CanUserSortColumns=false;invoices.HeadersVisibility=DataGridHeadersVisibility.Column;invoices.RowStyle=NavRowStyle();invoices.SetBinding(ItemsControl.ItemsSourceProperty,"NavInvoices");invoices.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedNavInvoice"){Mode=BindingMode.TwoWay});invoices.SetBinding(IsEnabledProperty,"IsNotBusy");foreach(var (title,path) in new[]{("Állapot","State"),("Kelt","IssuedOn"),("Számlaszám","Number"),("Szállító","SupplierName"),("Adószám","SupplierTaxNumber"),("Nettó","Net"),("Bruttó","Gross"),("Pénznem","Currency")})invoices.Columns.Add(new DataGridTextColumn{Header=NavFilterHeader(title,path),Binding=new Binding(path),MinWidth=path=="SupplierName"?180:60,Width=path=="SupplierName"?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(path switch{"State"=>110,"Number"=>150,"Net"=>90,"Currency"=>70,_=>100})});invoices.Columns.Add(NavActions());panel.Children.Add(invoices);
             var pages=new WrapPanel();pages.Children.Add(Button("Előző oldal","PreviousNavCommand"));pages.Children.Add(Button("Következő oldal","NextNavCommand"));pages.Children.Add(Bound(Muted(""),"NavPageLabel"));panel.Children.Add(pages);
         }
         if(!nav){panel.Children.Add(Text("Szállító", 14, true));panel.Children.Add(Suppliers());}
@@ -130,7 +131,7 @@ public sealed class ReceivingPageView : UserControl
         panel.SetBinding(VisibilityProperty, new Binding(navEditor?"IsNavEditor":"IsManualEditor") { Converter = new BooleanToVisibilityConverter() });
         panel.Children.Add(Text(navEditor?"NAV-számla – eredeti adatok":"Kézi bevételezés",18,true));
         var heading=new DockPanel{Margin=new(0,12,0,8)};var close=Button("×","BackCommand");close.Foreground=System.Windows.Media.Brushes.Firebrick;close.FontSize=20;close.Padding=new(9,0,9,0);close.ToolTip="Szerkesztő bezárása – az előkészítés automatikusan mentődik";DockPanel.SetDock(close,Dock.Right);heading.Children.Add(close);heading.Children.Add(Bound(Text("",18,true),"EditorTitle"));panel.Children.Add(heading);
-        panel.Children.Add(Bound(Muted(""),"PreparationStatus"));
+        panel.Children.Add(Bound(Muted(""),"PreparationStatus"));panel.Children.Add(Bound(Text("",14,true),"ExcludedInvoiceLines"));
         panel.Children.Add(Classify("Bevételezés", "ReceiveCommand"));
         var pdf=new StackPanel();pdf.SetBinding(VisibilityProperty,new Binding("HasPdfPreview"){Converter=new BooleanToVisibilityConverter()});
         pdf.Children.Add(Bound(Text("",14,true),"PdfName"));
@@ -151,9 +152,9 @@ public sealed class ReceivingPageView : UserControl
         lines.MinHeight=60;lines.RowDetailsVisibilityMode=DataGridRowDetailsVisibilityMode.Collapsed;ScrollViewer.SetVerticalScrollBarVisibility(lines,ScrollBarVisibility.Disabled);lines.PreviewMouseLeftButtonDown+=ToggleLineDetails;
         lines.SetBinding(ItemsControl.ItemsSourceProperty,"Lines");lines.SetBinding(DataGrid.IsReadOnlyProperty,"IsLocked");
         lines.Columns.Add(new DataGridCheckBoxColumn{Header="Készletre",Binding=new Binding("StockItem"){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged},Width=75});
-        foreach(var (title,path,width) in new[]{("Megnevezés","Name",230d),("Kategória","Category",120d),("Mennyiség","QuantityText",95d),("Egység","UnitCode",75d),("Nettó beszerzés","PriceText",120d),("Áfa %","VatText",70d),("Bruttó kisker (Ft)","RetailPrice",140d),("Haszonkulcs %","Markup",125d),("Eladási áfa %","SaleVat",115d),("Fedezet","Margin",85d),("Párosítás","MatchLabel",150d)})
+        foreach(var (title,path,width) in new[]{("Megnevezés","Name",230d),("Készlethatás","StockEffect",160d),("Kategória","Category",120d),("Mennyiség","QuantityText",95d),("Egység","UnitCode",75d),("Nettó beszerzés","PriceText",120d),("Áfa %","VatText",70d),("Bruttó kisker (Ft)","RetailPrice",140d),("Haszonkulcs %","Markup",125d),("Eladási áfa %","SaleVat",115d),("Fedezet","Margin",85d),("Párosítás","MatchLabel",150d)})
         {
-            var column=new DataGridTextColumn{Header=title,Width=width,IsReadOnly=path is "MatchLabel" or "Margin" or "Category" or "Name",Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged}};
+            var column=new DataGridTextColumn{Header=title,Width=width,IsReadOnly=path is "MatchLabel" or "Margin" or "Category" or "Name" or "StockEffect",Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged}};
             if(path is "Name" or "QuantityText" or "UnitCode" or "PriceText" or "VatText")column.IsReadOnly=true;
             lines.Columns.Add(column);
         }
@@ -223,14 +224,14 @@ public sealed class ReceivingPageView : UserControl
             foreach(var column in _lineGrids.SelectMany(g=>g.Columns).OfType<DataGridTextColumn>())if((column.Binding as Binding)?.Path.Path is "QuantityText" or "UnitCode" or "PriceText" or "VatText")BindingOperations.SetBinding(column,DataGridColumn.IsReadOnlyProperty,new Binding("CanEditInvoiceFacts"){Source=_page,Converter=new Negate()});
             _page.Lines.CollectionChanged += LinesChanged;
             _page.PropertyChanged += PageChanged;
-            ListGrid.Show(_receipts, _page);
+            ListGrid.Show(_receipts, _page,OpenInvoiceColumnFilter);
         }
         Rebuild();
     }
     private void PageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(ReceivingPageViewModel.LayoutRevision) && _page is not null)
-            ListGrid.Show(_receipts, _page);
+            ListGrid.Show(_receipts, _page,OpenInvoiceColumnFilter);
     }
     private void LinesChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();
     private void Rebuild()

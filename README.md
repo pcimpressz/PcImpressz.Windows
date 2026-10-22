@@ -1,3 +1,7 @@
+## 0.4.22 – Előjeles bevételezés és számlaszűrés
+
+A készletre nem vett költségsorok megmaradnak a számlaösszegben és jelölést kapnak. NAV- és kézi bevételezés negatív mennyiséggel, eredeti NAV-sorösszegekkel; oszlopfejléces keresés, szállító/dátum/bruttó összeghatár és modulonként kapcsolható élő számlaszűrés. [Használat](docs/SZAMLASZURES-ES-JOVAIRAS-0.4.22.md).
+
 ## 0.4.21 – Külön NAV és kézi szerkesztő, tartós kézi piszkozatok
 
 Számlaváltáskor a szállítót mindig az új NAV-számla adószámából választjuk. A NAV-nézethez nem adható új sor. Kézire áthelyezve külön szerkesztő nyílik, a félbehagyott kézi számlák SQL-piszkozatként folytathatók és törölhetők. Részletek: [használat](docs/NAV-KEZI-PISZKOZAT-0.4.21.md).

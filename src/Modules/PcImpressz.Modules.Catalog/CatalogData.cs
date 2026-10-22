@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PcImpressz.Contracts;
 
 namespace PcImpressz.Modules.Catalog;
 
@@ -21,6 +22,7 @@ public sealed record ProductData
 {
     public decimal? SaleNetUnitPrice { get; init; }
     public decimal SaleVatRate { get; init; } = 27;
+    public ProductSalePrice[]? SalePrices { get; init; }
     public string Name { get; init; } = "";
     public string Sku { get; init; } = "";
     public string ManufacturerPartNumber { get; init; } = "";
@@ -90,7 +92,8 @@ public static class CatalogValidation
             Barcode = Text(data.Barcode, 80, "Vonalkód"),
             Description = Text(data.Description, 4000, "Leírás"),
             Parameters = Parameters(data.Parameters),
-            Notes = Text(data.Notes, 4000, "Megjegyzés")
+            Notes = Text(data.Notes, 4000, "Megjegyzés"),
+            SalePrices = NormalizeSalePrices(data.SalePrices)
         };
         if (normalized.UnitCode.Length == 0) throw new ArgumentException("A mértékegység kötelező.");
         return normalized;
@@ -121,6 +124,33 @@ public static class CatalogValidation
         if (value.Length > maximum || value.Any(c => char.IsControl(c) && c is not '\n' and not '\r' and not '\t'))
             throw new ArgumentException(label + ": érvénytelen vagy túl hosszú érték.");
         return value;
+    }
+    public static ProductSalePrice[]? NormalizeSalePrices(ProductSalePrice[]? prices)
+    {
+        if (prices is null) return null;
+        if (prices.Length > 12) throw new ArgumentException("Legfeljebb 12 további eladási ár adható meg.");
+        var normalized = new List<ProductSalePrice>(prices.Length);
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var price in prices)
+        {
+            var name = (price.Name ?? "").Trim();
+            if (name.Length is < 1 or > 40 || name.Any(char.IsControl))
+                throw new ArgumentException("Az eladási ár neve 1–40 karakter legyen.");
+            if (!names.Add(name)) throw new ArgumentException("Az eladási árak neve egyedi legyen.");
+            var kind = (price.Kind ?? "").Trim().ToLowerInvariant();
+            if (kind is not ("percent" or "net" or "gross"))
+                throw new ArgumentException("Az eladási ár típusa kedvezmény százalék, nettó vagy bruttó ár lehet.");
+            var value = price.Value;
+            if (kind == "percent")
+            {
+                if (value is <= 0 or > 100 || decimal.Round(value, 2) != value)
+                    throw new ArgumentException("A kedvezmény 0-nál nagyobb és legfeljebb 100%, két tizedesig.");
+            }
+            else if (value is < 0 or > 1_000_000_000 || decimal.Round(value, kind == "gross" ? 2 : 4) != value)
+                throw new ArgumentException("Érvénytelen további eladási ár.");
+            normalized.Add(new ProductSalePrice(name, kind, value));
+        }
+        return normalized.ToArray();
     }
     public static string Parameters(string? value)
     {

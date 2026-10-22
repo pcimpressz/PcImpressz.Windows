@@ -49,7 +49,7 @@ public sealed class EntityPageView : UserControl
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false,
             CanUserDeleteRows = false, SelectionMode = DataGridSelectionMode.Single,
             SelectionUnit = DataGridSelectionUnit.FullRow, HeadersVisibility = DataGridHeadersVisibility.Column,
-            MinHeight = 360, MaxHeight = 480, GridLinesVisibility = DataGridGridLinesVisibility.None,
+            MinHeight = 0, MaxHeight = double.PositiveInfinity, GridLinesVisibility = DataGridGridLinesVisibility.None,
             BorderThickness = new(0), FontSize = 13, RowHeight = 44, ColumnHeaderHeight = 40 };
         grid.SetResourceReference(Control.FontSizeProperty, "BodySize");
         grid.SetResourceReference(Control.BackgroundProperty, "SurfaceBrush"); grid.SetResourceReference(Control.ForegroundProperty, "TextBrush");
@@ -67,7 +67,7 @@ public sealed class EntityPageView : UserControl
         grid.ColumnHeaderStyle = headerStyle;
         ListGrid.Prepare(grid, () => DataContext as IColumnList);
         ScrollViewer.SetHorizontalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
-        ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
+        ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
         var cellStyle = new Style(typeof(DataGridCell));
         cellStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
         cellStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10,4,10,4)));
@@ -130,10 +130,10 @@ public sealed class EntityPageView : UserControl
             }
             var basic=new HashSet<string>(StringComparer.Ordinal){"name","taxId","country","postalCode","city","address","email","phone","isCustomer","isSupplier","isActive","notes"};
             if(vm.IsProductMaster)basic=new HashSet<string>(StringComparer.Ordinal){"name","sku","manufacturerPartNumber","barcode","unitCode","categoryCode","saleNetUnitPrice","saleVatRate","isActive","isSalable","isPurchaseable"};
-            RenderGroup(fields,vm.Fields.Where(f=>f.Visible&&(!vm.IsPartnerMaster||f.Definition.Id!="taxId")&&(!vm.IsCompactMaster||f.Definition.Required||basic.Contains(f.Definition.Id))));
-            RenderGroup(advancedFields,vm.Fields.Where(f=>f.Visible&&vm.IsCompactMaster&&!f.Definition.Required&&!basic.Contains(f.Definition.Id)));
+            RenderGroup(fields,vm,vm.Fields.Where(f=>f.Visible&&(!vm.IsPartnerMaster||f.Definition.Id!="taxId")&&(!vm.IsCompactMaster||f.Definition.Required||basic.Contains(f.Definition.Id))));
+            RenderGroup(advancedFields,vm,vm.Fields.Where(f=>f.Visible&&vm.IsCompactMaster&&!f.Definition.Required&&!basic.Contains(f.Definition.Id)));
         }
-        void RenderGroup(Grid target,IEnumerable<EntityFieldViewModel> group)
+        void RenderGroup(Grid target,EntityPageViewModel vm,IEnumerable<EntityFieldViewModel> group)
         {
             target.Children.Clear(); target.RowDefinitions.Clear();
             var fieldRow = 0; var fieldColumn = 0;
@@ -143,7 +143,8 @@ public sealed class EntityPageView : UserControl
                 if (wide && fieldColumn > 0) { fieldRow++; fieldColumn = 0; }
                 while (target.RowDefinitions.Count <= fieldRow) target.RowDefinitions.Add(new() { Height = GridLength.Auto });
                 var panel = new StackPanel { Margin = new(fieldColumn == 0 ? 0 : 10,0,wide || fieldColumn == 1 ? 0 : 10,16), DataContext = field };
-                if (field.Definition.Kind == "boolean")
+                if (field.Definition.Id == "saleNetUnitPrice" && vm.IsProductMaster) ProductPriceEditor(panel, vm);
+                else if (field.Definition.Kind == "boolean")
                 {
                     var check = new CheckBox { Content = field.Label, Margin = new(0,8,0,4) };
                     check.SetBinding(CheckBox.IsCheckedProperty, new Binding("Checked") { Mode = BindingMode.TwoWay }); panel.Children.Add(check);
@@ -209,17 +210,8 @@ public sealed class EntityPageView : UserControl
             Grid.SetColumn(editorBorder,narrow ? 0 : 1); Grid.SetRow(editorBorder,editorOnly ? 0 : narrow ? 1 : 0);
             Grid.SetColumnSpan(listPanel,narrow ? 2 : 1); Grid.SetColumnSpan(editorBorder,narrow ? 2 : 1);
             editorBorder.Margin = separate ? new Thickness(0) : narrow ? new Thickness(0,22,0,0) : new Thickness(20,0,0,0);
-            var productList = DataContext is EntityPageViewModel { IsProductMaster: true };
-            if (productList)
-            {
-                grid.MinHeight = 0; grid.MaxHeight = double.PositiveInfinity;
-                ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
-            }
-            else
-            {
-                grid.MinHeight = ViewMode == "list" ? 480 : 360; grid.MaxHeight = ViewMode == "list" ? 680 : 480;
-                ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
-            }
+            grid.MinHeight = 0; grid.MaxHeight = double.PositiveInfinity;
+            ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
             if(partner)
             {
                 var sideBySide=body.ActualWidth>=1000&&ViewMode!="list";
@@ -234,7 +226,7 @@ public sealed class EntityPageView : UserControl
         SizeChanged += (_, _) => _applyLayout();
         body.SizeChanged += (_, _) => _applyLayout();
         _applyLayout();
-        Content=ArrangeableWorkspace.Split(root,body,"workspace","Lista és adatlap");
+        var workspace=ArrangeableWorkspace.Split(root,body,"workspace","Lista és adatlap");workspace.UsePageScrolling=true;Content=workspace;
     }
     private void OpenColumnSearch(string columnId, FrameworkElement anchor)
     {
@@ -374,9 +366,8 @@ public sealed class EntityPageView : UserControl
         notice.SetBinding(TextBlock.TextProperty, new Binding("DossierNotice")); panel.Children.Add(notice);
         cardHost = new WrapPanel(); sectionHost = new StackPanel();
         panel.Children.Add(cardHost); panel.Children.Add(sectionHost);
-        var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        scroll.SetBinding(VisibilityProperty, new Binding("IsDossierOpen") { Converter = new BooleanToVisibilityConverter() });
-        return scroll;
+        panel.SetBinding(VisibilityProperty, new Binding("IsDossierOpen") { Converter = new BooleanToVisibilityConverter() });
+        return panel;
     }
     private static DatePicker DateInput(string path)
     {
@@ -456,6 +447,91 @@ public sealed class EntityPageView : UserControl
         var amount = new TextBlock { Text = line.Amount, FontWeight = FontWeights.SemiBold, Margin = new(12, 0, 0, 0) };
         Grid.SetColumn(amount, 1); row.Children.Add(text); row.Children.Add(amount);
         return row;
+    }
+    private static void ProductPriceEditor(StackPanel panel, EntityPageViewModel page)
+    {
+        var toggle = new CheckBox { Content = "Bruttó árat írok", Margin = new(0, 4, 0, 10) };
+        toggle.SetBinding(CheckBox.IsCheckedProperty, new Binding("PriceAsGross") { Source = page, Mode = BindingMode.TwoWay });
+        panel.Children.Add(toggle);
+        var label = new TextBlock { Margin = new(0, 0, 0, 7) };
+        label.SetBinding(TextBlock.TextProperty, new Binding("PriceEntryLabel") { Source = page });
+        panel.Children.Add(label);
+        var input = Input();
+        input.SetBinding(TextBox.TextProperty, new Binding("Text") { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        panel.Children.Add(input);
+        var hint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0, 6, 0, 0) };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        hint.SetBinding(TextBlock.TextProperty, new Binding("PriceCounterpart") { Source = page });
+        panel.Children.Add(hint);
+        var title = new TextBlock { Text = "További eladási árak", FontWeight = FontWeights.SemiBold, Margin = new(0, 18, 0, 4) };
+        panel.Children.Add(title);
+        var help = new TextBlock
+        {
+            Text = "Kedvezmény százalékban az alapárból, vagy külön nettó illetve bruttó ár. Például törzsvásárlói ár vagy akciós ár.",
+            TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, 10)
+        };
+        help.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        panel.Children.Add(help);
+        var list = new ItemsControl();
+        list.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("SalePrices") { Source = page });
+        list.ItemTemplate = SalePriceTemplate();
+        panel.Children.Add(list);
+        var add = new Button { Content = "Új eladási ár", HorizontalAlignment = HorizontalAlignment.Left, Margin = new(0, 4, 0, 0) };
+        add.SetBinding(Button.CommandProperty, new Binding("AddSalePriceCommand") { Source = page });
+        add.SetBinding(IsEnabledProperty, new Binding("CanWrite") { Source = page });
+        panel.Children.Add(add);
+    }
+    private static DataTemplate SalePriceTemplate()
+    {
+        var root = new FrameworkElementFactory(typeof(StackPanel));
+        root.SetValue(MarginProperty, new Thickness(0, 0, 0, 12));
+        var row = new FrameworkElementFactory(typeof(DockPanel));
+        row.SetValue(DockPanel.LastChildFillProperty, true);
+        var remove = new FrameworkElementFactory(typeof(Button));
+        remove.SetValue(ContentControl.ContentProperty, "Törlés");
+        remove.SetValue(FrameworkElement.MinHeightProperty, 38d);
+        remove.SetValue(DockPanel.DockProperty, Dock.Right);
+        remove.SetBinding(Button.CommandProperty, new Binding("RemoveCommand"));
+        var value = new FrameworkElementFactory(typeof(TextBox));
+        StyleInput(value);
+        value.SetValue(FrameworkElement.WidthProperty, 110d);
+        value.SetValue(FrameworkElement.MarginProperty, new Thickness(8, 0, 8, 0));
+        value.SetValue(DockPanel.DockProperty, Dock.Right);
+        value.SetBinding(TextBox.TextProperty, new Binding("ValueText") { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        var kind = new FrameworkElementFactory(typeof(ComboBox));
+        StyleInput(kind);
+        kind.SetValue(FrameworkElement.WidthProperty, 160d);
+        kind.SetValue(FrameworkElement.MarginProperty, new Thickness(8, 0, 0, 0));
+        kind.SetValue(DockPanel.DockProperty, Dock.Right);
+        kind.SetValue(ItemsControl.DisplayMemberPathProperty, "Label");
+        kind.SetValue(Selector.SelectedValuePathProperty, "Value");
+        kind.SetBinding(ItemsControl.ItemsSourceProperty, new Binding("KindChoices"));
+        kind.SetBinding(Selector.SelectedValueProperty, new Binding("Kind") { Mode = BindingMode.TwoWay });
+        var name = new FrameworkElementFactory(typeof(TextBox));
+        StyleInput(name);
+        name.SetBinding(TextBox.TextProperty, new Binding("Name") { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        row.AppendChild(remove);
+        row.AppendChild(value);
+        row.AppendChild(kind);
+        row.AppendChild(name);
+        var hint = new FrameworkElementFactory(typeof(TextBlock));
+        hint.SetValue(TextBlock.MarginProperty, new Thickness(0, 4, 0, 0));
+        hint.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        hint.SetBinding(TextBlock.TextProperty, new Binding("Hint"));
+        root.AppendChild(row);
+        root.AppendChild(hint);
+        var template = new DataTemplate { VisualTree = root };
+        return template;
+    }
+    private static void StyleInput(FrameworkElementFactory box)
+    {
+        box.SetValue(Control.PaddingProperty, new Thickness(8, 6, 8, 6));
+        box.SetValue(FrameworkElement.MinHeightProperty, 38d);
+        box.SetValue(Control.BorderThicknessProperty, new Thickness(1));
+        box.SetResourceReference(Control.BackgroundProperty, "ElevatedBrush");
+        box.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+        box.SetResourceReference(Control.BorderBrushProperty, "StrokeBrush");
     }
     private static TextBox Input()
     {
