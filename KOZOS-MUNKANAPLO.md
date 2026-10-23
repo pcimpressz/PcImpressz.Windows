@@ -321,3 +321,7 @@ A Python-program 87 fájljának teljes AST-leltára (125 664 sor; történeti m�
 Ellenőrzés az elkülönített munkamásolatban: Release build 0 hiba/0 figyelmeztetés, 222/222 teszt a két benchmarkkal, wheel-ok és 73/73 WPF render kötési hiba nélkül. 50 000 termék + 50 000 mozgás: keresés p95 269,02 → 42,05 ms, első oldal 5,61 ms; termékmentés 9,17 ms; készletkönyvelés 8,62 ms. 20 001 rendelés: keresés p95 8,18 ms, első oldal 7,57 ms. Szintetikus, helyi 10 mintás mérések; nem teljes felületi válaszidők. A tesztek nem írtak az eredeti céges adatokba és nem hívtak külső író API-t.
 
 A teljes Python-port nem kész: árajánlatból rendelés, nagykerkosár/beszerzés, automatikus számla–rendelési sor összerendelés, szerviz/garancia és pénzügy további feladat. Használat: docs/VEVOI-RENDELESEK-0.5.0.md.
+
+## 2026-10-23 – 0.5.1 és a fejlesztési ütemterv szinkronizálása
+
+A rendelési szűrő, opcionális vevőmentés, rendelési állapotok és beállításváltás javítása a main ágon. A helyi vizuális szerkesztő hat forrásfájlja verziókövetésbe kerül, a helyi eszközmásolatok és mentések kihagyásával. Új aktív ütemterv: docs/FEJLESZTESI-UTEMTERV.md; dokumentációs tartalomjegyzék: docs/README.md. A régi architektúraterv történeti jelölést kapott. Ellenőrzött helyi alap: 225/225 működési teszt, wheel-ok, 73/73 WPF-render, ismételt Release fordítás 0 hibával/figyelmeztetéssel. A teljes Python-funkcióátvétel továbbra is folyamatban van.

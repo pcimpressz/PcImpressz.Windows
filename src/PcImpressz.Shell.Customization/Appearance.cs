@@ -35,6 +35,7 @@ public sealed record AppearancePreferences
     public int SchemaVersion { get; init; } = 1;
     public string SkinId { get; init; } = "midnight";
     public string? AccentOverride { get; init; }
+    public double NavigationWidth { get; init; } = 240;
     public bool CollapsedNavigation { get; init; }
     public bool CompactDensity { get; init; }
     public double FontScale { get; init; } = 1;
@@ -161,6 +162,7 @@ public sealed class AppearanceStore(string directory)
             || value.AccentOverride is not null && !SkinValidation.IsColor(value.AccentOverride)
             || value.MoneyDecimals is <0 or >4
             || value.FontScale is not (1 or 1.1 or 1.25)
+            || !double.IsFinite(value.NavigationWidth) || value.NavigationWidth is < 160 or > 330
             || !double.IsFinite(value.WindowWidth) || value.WindowWidth is < 1000 or > 4000
             || !double.IsFinite(value.WindowHeight) || value.WindowHeight is < 680 or > 2400)
             throw new InvalidDataException("Érvénytelen megjelenési beállítás.");

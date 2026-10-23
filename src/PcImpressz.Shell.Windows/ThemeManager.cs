@@ -37,7 +37,7 @@ internal static class ThemeManager
         resources["CardPadding"] = new Thickness(preferences.CompactDensity ? 18 : 26);
         resources["ControlPadding"] = new Thickness(16, preferences.CompactDensity ? 8 : 12, 16,
             preferences.CompactDensity ? 8 : 12);
-        resources["NavigationWidth"] = preferences.CollapsedNavigation ? 78d : 240d;
+        resources["NavigationWidth"] = preferences.CollapsedNavigation ? 78d : Math.Clamp(preferences.NavigationWidth, 160d, 330d);
         resources["NavigationLabelVisibility"] = preferences.CollapsedNavigation ? Visibility.Collapsed : Visibility.Visible;
         Applied?.Invoke();
     }

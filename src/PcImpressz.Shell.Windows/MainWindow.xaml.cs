@@ -9,11 +9,13 @@ namespace PcImpressz.Shell.Windows;
 public partial class MainWindow : Window
 {
     private readonly ShellViewModel _viewModel;
+    private readonly VisualLayoutEditor _visualEditor;
     private bool _checkingClose,_closeApproved;
     public MainWindow(ShellViewModel viewModel)
     {
         _viewModel = viewModel;
         InitializeComponent();
+        _visualEditor = new VisualLayoutEditor(this);
         DataContext = viewModel;
         Width = Math.Clamp(viewModel.InitialWidth, MinWidth, Math.Max(MinWidth, SystemParameters.WorkArea.Width));
         Height = Math.Clamp(viewModel.InitialHeight, MinHeight, Math.Max(MinHeight, SystemParameters.WorkArea.Height));

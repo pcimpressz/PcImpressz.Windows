@@ -1,6 +1,6 @@
 # PC-Impressz Windows Edition – architektúra és megvalósítási terv
 
-Állapot: döntésre előkészített terv, megvalósítás nélkül. Dátum: 2026. október 20.
+Történeti induló terv, 2026. október 20-i állapot. A megvalósítás azóta elkészült alapjait, a saját SQLite-tárolást és a következő munkacsomagokat a [2026. október 23-án frissített fejlesztési ütemterv](FEJLESZTESI-UTEMTERV.md) tartalmazza. Az alábbi eredeti javaslatok nem mindenütt egyeznek a jelenlegi megvalósítással.
 
 ## 1. Vezetői döntési javaslat
 
