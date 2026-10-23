@@ -80,9 +80,9 @@ public static class OperationCatalog
             new(Backup, "Biztonsági mentés", "\uE74E", "Helyi mentés készítése és a mentés mappája. Külső szolgáltatást nem hív.",
                 [Section("Helyi mentés", "A mentés az adatmappa másolata a megadott helyre. A titkosított kapcsolatfájlok is bemásolódnak.",
                     Folder("mentes_mappa", "Mentés helye", "Teljes elérési út, például D:\\PcImpressz\\mentesek. A mappa maga nem lehet az adatmappa."))]),
-            new(Wholesale, "Nagykereskedések", "\uE7BF", "Nagyker API- és XML-kapcsolatok. Kérést nem küldünk, csak a helyi adatokat mentjük.",
+            new(Wholesale, "Nagykereskedések", "\uE7BF", "Nagyker API- és XML-kapcsolatok. Az élő CompMarket-lekérdezés a Beállítások CompMarket kártyáján mentett VPS-proxyt használja (217.113.49.52). Üres proxy esetén a bolt IP-jéről nem indul kérés.",
                 [
-                    Section("CompMarket", "XML-katalógus és foglalás.",
+                    Section("CompMarket", "Az élő pid, kód és VPS-proxy a Beállítások főoldalának CompMarket kártyáján van. Az itteni mezők nem indítanak kérést.",
                         Secret("compmarket_pid", "Ügyfélazonosító (pid)", "Csak helyben tároljuk."),
                         Secret("compmarket_authcode", "Autentikációs kód", "Üresen hagyva a mentett kód marad.")),
                     Section("Caseking", "Websync ár- és készletadatok.",
