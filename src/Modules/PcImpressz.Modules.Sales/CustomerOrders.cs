@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using PcImpressz.Business;
 using PcImpressz.Contracts;
+using PcImpressz.Modules.Partners;
 namespace PcImpressz.Modules.Sales;
 
 public static class CustomerOrders
@@ -50,7 +51,8 @@ public static class CustomerOrders
             previous=Version(tx,request.Id,request.Version,at);
             if(previous.Lines.Any(l=>l.Delivered>0||l.Reserved>0))throw new ArgumentException("Szerkesztés előtt oldd fel a foglalást. Részben átadott rendelés tételei már nem szerkeszthetők.");
         }
-        var customer=CompanyReferenceQueries.Partners(tx).SingleOrDefault(p=>p.Id==request.CustomerId&&p.IsActive&&p.IsCustomer)??throw new ArgumentException("Válassz aktív vevőt.");
+        if(!OrderWorkflow.Editable(request.WorkflowStatus))throw new ArgumentException("Érvénytelen rendelési állapot.");
+        var customer=ResolveCustomer(tx,request,actor,at);
         var warehouse=StockLedger.Warehouse(request.Warehouse);var notes=Text(request.Notes,2000,"Megjegyzés");var due=Text(request.DueDate,10,"Határidő");
         if(due.Length>0&&!DateOnly.TryParseExact(due,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out _))throw new ArgumentException("A határidő formátuma ÉÉÉÉ-HH-NN.");
         var products=CompanyReferenceQueries.Products(tx,request.Lines.Select(l=>l.ProductId)).ToDictionary(p=>p.Id);
@@ -68,7 +70,7 @@ public static class CustomerOrders
             if(value>999999)throw new ArgumentException("Az éves rendelésszámtartomány megtelt.");tx.Write("sales",key,new SaleCounter(value));number="VR-"+at.Year+"-"+value.ToString("D6",CultureInfo.InvariantCulture);
         }
         if(previous is not null)foreach(var line in previous.Lines)tx.Delete("inventory",StockReservations.Key(previous.Id,line.Id));
-        var order=new CustomerOrder(request.Id,previous?.Version??0,number,customer.Id,customer.Name,warehouse,due,notes,"open",lines,amounts.Sum(a=>a.Net),amounts.Sum(a=>a.Vat),amounts.Sum(a=>a.Gross),previous?.CreatedAt??at,at,actor);
+        var order=new CustomerOrder(request.Id,previous?.Version??0,number,customer.Id,customer.Name,warehouse,due,notes,"open",lines,amounts.Sum(a=>a.Net),amounts.Sum(a=>a.Vat),amounts.Sum(a=>a.Gross),previous?.CreatedAt??at,at,actor,Customer:customer.Snapshot,WorkflowStatus:request.WorkflowStatus);
         return Store(tx,order,previous is null?"create":"edit",actor,at);
     });
     public static CustomerOrder Reserve(ICompanyTransaction tx,OrderAction request,string actor,DateTimeOffset at)=>Once(tx,request.RequestId,"reserve",request,()=>
@@ -83,7 +85,7 @@ public static class CustomerOrders
             return line with{Reserved=take};
         }).ToArray();
         var status=lines.Any(l=>l.Delivered>0)?"partial":lines.All(l=>l.Reserved==l.Quantity)?"reserved":"open";
-        return Store(tx,order with{Lines=lines,ReservationUntil=until,Status=status},"reserve",actor,at);
+        return Store(tx,order with{Lines=lines,ReservationUntil=until,Status=status,WorkflowStatus=lines.All(l=>l.Reserved+l.Delivered==l.Quantity)?"arrived":order.WorkflowStatus},"reserve",actor,at);
     });
     public static CustomerOrder Release(ICompanyTransaction tx,OrderAction request,string actor,DateTimeOffset at,bool cancel=false)=>Once(tx,request.RequestId,cancel?"cancel":"release",request,()=>
     {
@@ -106,16 +108,45 @@ public static class CustomerOrders
             if(remaining==0)tx.Delete("inventory",key);else tx.Write("inventory",key,new InventoryReservation(order.Id,line.Id,line.ProductId,order.Warehouse,remaining,order.ReservationUntil!.Value));
             saleLines.Add(new(line.ProductId,quantity,line.NetUnitPrice,line.VatRate));return line with{Delivered=line.Delivered+quantity,Reserved=remaining};
         }).ToArray();
-        var sale=SalesModule.Post(tx,new(request.CompanyId,request.RequestId,order.CustomerId,order.Warehouse,saleLines.ToArray(),request.PaymentMethod,request.InvoiceRequested),actor,at);
+        var sale=SalesModule.Post(tx,new(request.CompanyId,request.RequestId,order.CustomerId==Guid.Empty?null:order.CustomerId,order.Warehouse,saleLines.ToArray(),request.PaymentMethod,request.InvoiceRequested),actor,at,order.CustomerId==Guid.Empty&&order.Customer is {} c?new BillingCustomer(Guid.Empty,c.Name,c.TaxId,c.Country,c.PostalCode,c.City,c.Address,true,true):null);
         var status=lines.All(l=>l.Delivered==l.Quantity)?"completed":"partial";
         return Store(tx,order with{Lines=lines,Status=status,Deliveries=(order.Deliveries??[]).Append(new(sale.Id,sale.Number,at,request.Lines.Select(l=>l.LineId).ToArray())).ToArray()},"deliver",actor,at);
     });
+    public static CustomerOrder ChangeWorkflow(ICompanyTransaction tx,OrderWorkflowChange request,string actor,DateTimeOffset at)=>Once(tx,request.RequestId,"workflow",request,()=>
+    {
+        if(!OrderWorkflow.Editable(request.Status))throw new ArgumentException("Az Átadva állapot csak véglegesített átadással, a Lemondva csak lemondással állítható be.");
+        var order=Version(tx,request.Id,request.Version,at);
+        return Store(tx,order with{WorkflowStatus=request.Status},"workflow:"+request.Status,actor,at);
+    });
+    private sealed class OrderClock(DateTimeOffset now):TimeProvider{public override DateTimeOffset GetUtcNow()=>now;}
+    private sealed class BoundDatabase(ICompanyTransaction tx):ICompanyDatabase{public T Execute<T>(Guid companyId,Func<ICompanyTransaction,T> action)=>action(tx);}
+    private static (Guid Id,string Name,OrderCustomerDraft Snapshot) ResolveCustomer(ICompanyTransaction tx,OrderSave request,string actor,DateTimeOffset at)
+    {
+        var repository=new PartnerRepository(_=>"",new OrderClock(at),new BoundDatabase(tx));
+        OrderCustomerDraft Snapshot(PartnerData d)=>new(d.Name,d.Phone,d.Email,d.TaxId,d.Country,d.PostalCode,d.City,d.Address);
+        if(request.CustomerId!=Guid.Empty)
+        {
+            var selected=repository.Snapshot(request.CompanyId).GetAwaiter().GetResult().Partners.SingleOrDefault(p=>p.Id==request.CustomerId&&p.Data.IsActive&&p.Data.IsCustomer)??throw new ArgumentException("Válassz aktív vevőt.");
+            return(selected.Id,selected.Data.Name,Snapshot(selected.Data));
+        }
+        var input=request.Customer??throw new ArgumentException("Válassz vevőt vagy add meg az új vevő nevét.");
+        var data=PartnerValidation.Normalize(new PartnerData{Name=input.Name,Phone=input.Phone,Email=input.Email,TaxId=input.TaxId,Country=input.Country,PostalCode=input.PostalCode,City=input.City,Address=input.Address,IsCustomer=true,IsActive=true});
+        if(!request.SaveCustomerToPartners)return(Guid.Empty,data.Name,Snapshot(data));
+        PartnerRecord? match=null;
+        if(data.TaxId.Length>0)
+        {
+            var matches=repository.Snapshot(request.CompanyId).GetAwaiter().GetResult().Partners.Where(p=>p.Data.IsActive&&p.Data.Country==data.Country&&PartnerValidation.TaxKey(p.Data.TaxId)==PartnerValidation.TaxKey(data.TaxId)).ToArray();
+            if(matches.Length>1)throw new ArgumentException("Több partner tartozik az adószámhoz; válassz a meglévő vevők közül.");match=matches.SingleOrDefault();
+        }
+        var saved=match is null?repository.Save(new(request.CompanyId,null,0,data),actor).GetAwaiter().GetResult():match.Data.IsCustomer?match:repository.Save(new(request.CompanyId,match.Id,match.Version,match.Data with{IsCustomer=true}),actor).GetAwaiter().GetResult();
+        return(saved.Id,saved.Data.Name,Snapshot(saved.Data));
+    }
     public static (CustomerOrder[] Rows,int Total) List(ICompanyTransaction tx,OrderQuery query,DateTimeOffset at)
     {
-        if(query.Search is null||query.Search.Length>200||query.Search.Any(char.IsControl)||query.Status is not ("all" or "open" or "reserved" or "partial" or "completed" or "cancelled")||query.Page<0||query.PageSize is <1 or >100)throw new ArgumentException("Érvénytelen rendeléslista-szűrés.");
+        if(query.Search is null||query.Search.Length>200||query.Search.Any(char.IsControl)||query.Status is not ("all" or "open" or "reserved" or "partial" or "completed" or "cancelled" or "new" or "ordered" or "arrived" or "done")||query.Page<0||query.PageSize is <1 or >100)throw new ArgumentException("Érvénytelen rendeléslista-szűrés.");
         if(tx is IIndexedCompanyTransaction index)
         {var page=index.Orders(query,at);return (page.Records.Select(s=>JsonSerializer.Deserialize<CustomerOrder>(s,CompanyDocuments.Json)!).Select(o=>Get(tx,o.Id,at)).ToArray(),page.Total);}
-        var rows=tx.List("sales","order/").Select(s=>JsonSerializer.Deserialize<CustomerOrder>(s,CompanyDocuments.Json)!).Where(o=>query.Status=="all"||query.Status=="open"?query.Status=="all"||o.Status is "open" or "reserved" or "partial":o.Status==query.Status).Where(o=>SearchText.Fold(o.Number+" "+o.CustomerName+" "+o.Notes).Contains(SearchText.Fold(query.Search),StringComparison.Ordinal)).OrderByDescending(o=>o.UpdatedAt).ThenBy(o=>o.Id).ToArray();
+        var rows=tx.List("sales","order/").Select(s=>JsonSerializer.Deserialize<CustomerOrder>(s,CompanyDocuments.Json)!).Where(o=>query.Status=="all"||(query.Status=="open"?o.Status is "open" or "reserved" or "partial":query.Status is "new" or "ordered" or "arrived" or "done"?OrderWorkflow.Effective(o)==query.Status:o.Status==query.Status)).Where(o=>SearchText.Fold(o.Number+" "+o.CustomerName+" "+o.Notes).Contains(SearchText.Fold(query.Search),StringComparison.Ordinal)).OrderByDescending(o=>o.UpdatedAt).ThenBy(o=>o.Id).ToArray();
         return (rows.Skip((int)Math.Min(int.MaxValue,(long)query.Page*query.PageSize)).Take(query.PageSize).Select(o=>Get(tx,o.Id,at)).ToArray(),rows.Length);
     }
 }
@@ -127,6 +158,7 @@ public sealed partial class SalesModule
         DomainCommands.Register(context,"orders-list","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>{var result=CustomerOrders.List(tx,DomainCommands.Read<OrderQuery>(input),context.TimeProvider.GetUtcNow());return DomainCommands.Json(new{rows=result.Rows,total=result.Total});});
         DomainCommands.Register(context,"orders-get","sales.read",CommandAccess.RecoveryReadOnly,(tx,input,_)=>DomainCommands.Json(CustomerOrders.Get(tx,input.GetProperty("id").GetGuid(),context.TimeProvider.GetUtcNow())));
         DomainCommands.Register(context,"orders-save","sales.write",CommandAccess.Licensed,(tx,input,actor)=>DomainCommands.Json(CustomerOrders.Save(tx,DomainCommands.Read<OrderSave>(input),actor,context.TimeProvider.GetUtcNow())));
+        DomainCommands.Register(context,"orders-status","sales.write",CommandAccess.Licensed,(tx,input,actor)=>DomainCommands.Json(CustomerOrders.ChangeWorkflow(tx,DomainCommands.Read<OrderWorkflowChange>(input),actor,context.TimeProvider.GetUtcNow())));
         DomainCommands.Register(context,"orders-reserve","sales.write",CommandAccess.Licensed,(tx,input,actor)=>DomainCommands.Json(CustomerOrders.Reserve(tx,DomainCommands.Read<OrderAction>(input),actor,context.TimeProvider.GetUtcNow())));
         DomainCommands.Register(context,"orders-release","sales.write",CommandAccess.Licensed,(tx,input,actor)=>DomainCommands.Json(CustomerOrders.Release(tx,DomainCommands.Read<OrderAction>(input),actor,context.TimeProvider.GetUtcNow())));
         DomainCommands.Register(context,"orders-cancel","sales.write",CommandAccess.Licensed,(tx,input,actor)=>DomainCommands.Json(CustomerOrders.Release(tx,DomainCommands.Read<OrderAction>(input),actor,context.TimeProvider.GetUtcNow(),cancel:true)));

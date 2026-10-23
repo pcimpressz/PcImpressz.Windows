@@ -25,6 +25,11 @@ public sealed partial class CompanyDatabase
             foreach(var json in List("sales","order/")){var o=JsonSerializer.Deserialize<CustomerOrder>(json,CompanyDocuments.Json)!;IndexOrder("order/"+o.Id.ToString("N"),json);}
             Run("PRAGMA user_version=3");
         }
+        public void EnsureOrderWorkflowSchema()
+        {
+            using var version=Command("PRAGMA user_version");if(Convert.ToInt32(version.ExecuteScalar())>=4)return;
+            Run("CREATE INDEX order_workflow ON customer_orders(COALESCE(json_extract(body,'$.workflowStatus'),'new'),updated_at DESC,id); PRAGMA user_version=4");
+        }
         private void IndexReservation(string key,string json)
         {
             var r=JsonSerializer.Deserialize<InventoryReservation>(json,CompanyDocuments.Json)??throw new ArgumentException("Hiányzó foglalás.");
@@ -45,7 +50,7 @@ public sealed partial class CompanyDatabase
         }
         public OrderIndexPage Orders(OrderQuery query,DateTimeOffset at)
         {
-            var search=SearchText.Fold(query.Search);var where=query.Status=="all"?"1":query.Status=="open"?"status IN ('open','reserved','partial')":"status=$status";
+            var search=SearchText.Fold(query.Search);var where=query.Status=="all"?"1":query.Status=="open"?"status IN ('open','reserved','partial')":query.Status=="done"?"status='completed'":query.Status is "new" or "ordered" or "arrived"?"COALESCE(json_extract(body,'$.workflowStatus'),'new')=$status AND status NOT IN ('completed','cancelled')":"status=$status";
             if(query.Status=="reserved")where+=" AND COALESCE(unixepoch(json_extract(body,'$.reservationUntil')),0)>$now";
             if(search.Length>0)where+=" AND instr(search,$search)>0";
             if(search.Length>=3)where+=" AND rowid IN(SELECT rowid FROM order_fts WHERE order_fts MATCH $fts)";

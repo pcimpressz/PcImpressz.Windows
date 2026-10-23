@@ -76,6 +76,9 @@ public sealed record OperationSettingsPage(string GroupId);
 
 public sealed class OperationSettingsView : StackPanel
 {
+    public static readonly DependencyProperty WorkspaceProperty=DependencyProperty.Register(nameof(Workspace),typeof(OperationWorkspace),typeof(OperationSettingsView),new PropertyMetadata(null,(d,_)=>((OperationSettingsView)d).Rebuild()));
+    public OperationWorkspace? Workspace {get=>(OperationWorkspace?)GetValue(WorkspaceProperty);set=>SetValue(WorkspaceProperty,value);}
+
     private readonly Dictionary<string, TextBox> _texts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CheckBox> _checks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ComboBox> _choices = new(StringComparer.Ordinal);
@@ -92,9 +95,9 @@ public sealed class OperationSettingsView : StackPanel
     {
         Children.Clear();
         _texts.Clear(); _checks.Clear(); _choices.Clear(); _secrets.Clear();
-        if (DataContext is not OperationWorkspace workspace) return;
+        if (Workspace is not OperationWorkspace workspace) return;
         _workspace = workspace;
-        var page = Window.GetWindow(this)?.DataContext is ShellViewModel shell ? shell.CurrentPage as OperationSettingsPage : null;
+        var page = DataContext as OperationSettingsPage;
         if (page is null || OperationCatalog.Find(page.GroupId) is not { } group) return;
         foreach (var section in group.Sections) Children.Add(Card(workspace, section));
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 4, 0, 0) };
@@ -115,7 +118,7 @@ public sealed class OperationSettingsView : StackPanel
         Children.Add(row);
         var message = new TextBlock { Margin = new(0, 14, 0, 0) };
         message.SetResourceReference(StyleProperty, "Muted");
-        message.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Message"));
+        message.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Message"){Source=workspace});
         Children.Add(message);
         Children.Add(Muted("A mezők a helyi adatmappa operation-settings.json fájljába kerülnek. A jelszó, az API-kulcs és a token titkosítva, az operation-secrets.bin fájlba kerül, a gitbe nem."));
     }

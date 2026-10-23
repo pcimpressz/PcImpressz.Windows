@@ -38,13 +38,13 @@ public sealed partial class SalesModule:IModule
     public ValueTask StopAsync(CancellationToken cancellationToken)=>ValueTask.CompletedTask;
     private static SaleRecord[] MatchingRecords(ICompanyTransaction tx,JsonElement input)=>Records(tx).Where(s=>MatchesDay(s,input)).Where(s=>DomainCommands.Matches(s.Number+" "+s.CustomerName,DomainCommands.Search(input,"recordSearch"))).OrderByDescending(s=>s.At).ThenBy(s=>s.Id).ToArray();
     public static SaleRecord[] Records(ICompanyTransaction tx)=>tx.List("sales","sale/").Select(s=>JsonSerializer.Deserialize<SaleRecord>(s,CompanyDocuments.Json) ?? throw new IOException("Sérült eladás.")).ToArray();
-    public static SaleRecord Post(ICompanyTransaction tx,SaleRequest request,string actor,DateTimeOffset at)
+    public static SaleRecord Post(ICompanyTransaction tx,SaleRequest request,string actor,DateTimeOffset at,BillingCustomer? orderCustomer=null)
     {
         if(request.OperationId==Guid.Empty || request.Lines is null || request.Lines.Length is <1 or >400 || request.Lines.Any(l=>l is null))throw new ArgumentException("Egy eladáshoz 1–400 tétel és műveletazonosító kell.");
         if(request.ReturnOf is not null)return PostReturn(tx,request,actor,at);
         if(request.Lines.Any(l=>l.SourceLineIndex is not null))throw new ArgumentException("Visszavét csak eredeti bizonylathoz köthető.");
         if(request.PaymentMethod is not ("cash" or "card"))throw new ArgumentException("Válassz készpénzes vagy kártyás fizetést.");
-        if(request.InvoiceRequested&&request.CustomerId is null)throw new ArgumentException("Számlaigényhez válassz vevőt.");
+        if(request.InvoiceRequested&&request.CustomerId is null&&orderCustomer is null)throw new ArgumentException("Számlaigényhez válassz vevőt.");
         var fingerprint=Fingerprint(request);
         var legacyFingerprint=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {request.OperationId,request.CustomerId,request.Warehouse,request.Lines},CompanyDocuments.Json))));
         var key="sale/"+request.OperationId.ToString("N");
@@ -55,7 +55,7 @@ public sealed partial class SalesModule:IModule
         BillingCustomer? billing=null;
         if(request.InvoiceRequested)
         {
-            billing=CompanyReferenceQueries.BillingCustomers(tx).SingleOrDefault(c=>c.Id==request.CustomerId&&c.IsActive&&c.IsCustomer)??throw new ArgumentException("A vevő nem aktív.");
+            billing=orderCustomer??CompanyReferenceQueries.BillingCustomers(tx).SingleOrDefault(c=>c.Id==request.CustomerId&&c.IsActive&&c.IsCustomer)??throw new ArgumentException("A vevő nem aktív.");
             if(new[]{billing.Name,billing.Country,billing.PostalCode,billing.City,billing.Address}.Any(string.IsNullOrWhiteSpace))throw new ArgumentException("Számlaigényhez a vevő neve és teljes címe szükséges.");
         }
         var warehouse=StockLedger.Warehouse(request.Warehouse);
@@ -75,7 +75,7 @@ public sealed partial class SalesModule:IModule
         StockLedger.Post(tx,"sale:"+request.OperationId.ToString("N"),"sales",request.OperationId,
             lines.Select(l=>new StockChange(l.ProductId,l.Name,l.UnitCode,warehouse,-l.Quantity)).ToArray(),"Eladás "+number,actor,at);
         var netTotal=lines.Sum(l=>l.Net);var vatTotal=lines.Sum(l=>l.Vat);
-        var record=new SaleRecord(request.OperationId,1,number,customer?.Id,customer?.Name??"Alkalmi vevő",warehouse,"HUF",lines,netTotal,vatTotal,netTotal+vatTotal,"vegleges",at,actor,fingerprint,PaymentMethod:request.PaymentMethod,InvoiceRequested:request.InvoiceRequested,InvoiceCustomer:billing,Rounding:PaymentRounding.Payable(netTotal+vatTotal,request.PaymentMethod)-(netTotal+vatTotal),Payable:PaymentRounding.Payable(netTotal+vatTotal,request.PaymentMethod));
+        var record=new SaleRecord(request.OperationId,1,number,customer?.Id,customer?.Name??orderCustomer?.Name??"Alkalmi vevő",warehouse,"HUF",lines,netTotal,vatTotal,netTotal+vatTotal,"vegleges",at,actor,fingerprint,PaymentMethod:request.PaymentMethod,InvoiceRequested:request.InvoiceRequested,InvoiceCustomer:billing,Rounding:PaymentRounding.Payable(netTotal+vatTotal,request.PaymentMethod)-(netTotal+vatTotal),Payable:PaymentRounding.Payable(netTotal+vatTotal,request.PaymentMethod));
         tx.Write("sales",key,record);tx.Write("sales","counter/"+year,new SaleCounter(counter+1));return record;
     }
     public static SaleRecord Reverse(ICompanyTransaction tx,SaleReverse request,string actor,DateTimeOffset at)

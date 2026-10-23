@@ -63,7 +63,7 @@ public sealed partial class ShellViewModel
             var key = page.ModuleId + "." + page.Id;
             if (_entityPages.ContainsKey(key)) continue;
             IWorkspacePage vm = page.ViewKind == "orders"
-                ? new OrdersPageViewModel(page,_connection,()=>IsSignedIn&&_connection.Allows(page.ModuleId+".read")?SelectedCompany?.Id:null,_shutdown.Token)
+                ? new OrdersPageViewModel(page,_connection,()=>IsSignedIn&&_connection.Allows(page.ModuleId+".read")?SelectedCompany?.Id:null,_shutdown.Token,()=>_preferences.SaveOrderCustomers)
                 : page.ViewKind is "inventory" or "sales"
                 ? new OperationsPageViewModel(page, _connection, () => IsSignedIn && _connection.Allows(page.ModuleId+".read") ? SelectedCompany?.Id : null, _shutdown.Token, _layouts)
                 : page.ViewKind == "receiving"

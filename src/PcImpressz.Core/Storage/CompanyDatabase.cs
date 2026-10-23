@@ -7,7 +7,7 @@ namespace PcImpressz.Core.Storage;
 
 public sealed partial class CompanyDatabase(Func<Guid, string> companyFolder) : ICompanyDatabase
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
     public string DatabasePath(Guid company) => Path.Combine(companyFolder(company), "company.db");
     public T Execute<T>(Guid companyId, Func<ICompanyTransaction,T> action)
     {
@@ -88,6 +88,7 @@ public sealed partial class CompanyDatabase(Func<Guid, string> companyFolder) : 
         }
         session.EnsureIndexes();
         session.EnsureOrderSchema();
+        session.EnsureOrderWorkflowSchema();
     }
     private static void MigrateLegacy(string folder,Session session)
     {

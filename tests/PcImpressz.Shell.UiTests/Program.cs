@@ -79,6 +79,7 @@ internal static class Program
             VerifyBusyEditor();
             UiProductChecks.VerifyAppliedQuery();
             RunDispatcherCheck(()=>CustomerOrderUiChecks.VerifyAsync(output));
+            RunDispatcherCheck(()=>OrderSettingsRegressionChecks.VerifyAsync(output));
             foreach(var skin in BuiltInSkins.All)
             {
                 ThemeManager.Apply(skin,new AppearancePreferences{SkinId=skin.Id});

@@ -90,6 +90,51 @@ internal static class CustomerOrderTests
                 Check.Throws<ArgumentException>(()=>f.Db.Execute(f.Company,tx=>CustomerOrders.Save(tx,bad,"seller",f.Clock.Now)));
             return Task.CompletedTask;
         });
+        yield return Case("new order customer defaults to partner save and replay creates only one customer",f=>
+        {
+            var request=f.SaveRequest(Guid.NewGuid(),0,1) with{CustomerId=Guid.Empty,Customer=new("Új vevő","0612345678","uj@example.test")};
+            var order=f.Db.Execute(f.Company,tx=>CustomerOrders.Save(tx,request,"seller/trusted",f.Clock.Now));
+            Check.True(order.CustomerId!=Guid.Empty);Check.Equal("Új vevő",order.CustomerName);
+            var partner=f.Db.Read(f.Company,tx=>CompanyReferenceQueries.Partners(tx).Single(p=>p.Id==order.CustomerId));Check.True(partner.IsCustomer);
+            f.Db.Execute(f.Company,tx=>CustomerOrders.Save(tx,request,"seller/trusted",f.Clock.Now));
+            Check.Equal(2,f.Db.Read(f.Company,tx=>CompanyReferenceQueries.Partners(tx).Length));
+            var repository=new PartnerRepository(id=>f.Companies.ModuleDataDirectory(id,"partners"),f.Clock,f.Db);var saved=repository.Snapshot(f.Company).GetAwaiter().GetResult().Partners.Single(p=>p.Id==order.CustomerId);Check.Equal("seller/trusted",saved.CreatedBy);Check.Equal(f.Clock.Now,saved.CreatedAt);
+            return Task.CompletedTask;
+        });
+        yield return Case("order-only customer remains outside partners and delivery retains customer snapshot",f=>
+        {
+            var request=f.SaveRequest(Guid.NewGuid(),0,2) with{CustomerId=Guid.Empty,Customer=new("Csak rendelési vevő","0612345678","helyi@example.test",PostalCode:"1111",City:"Budapest",Address:"Teszt utca 1"),SaveCustomerToPartners=false};
+            var order=f.Db.Execute(f.Company,tx=>CustomerOrders.Save(tx,request,"seller",f.Clock.Now));Check.Equal(Guid.Empty,order.CustomerId);Check.Equal("helyi@example.test",f.Get(order.Id).Customer!.Email);Check.Equal(1,f.Db.Read(f.Company,tx=>CompanyReferenceQueries.Partners(tx).Length));
+            order=f.Reserve(new(f.Company,Guid.NewGuid(),order.Id,order.Version));order=f.Deliver(new(f.Company,Guid.NewGuid(),order.Id,order.Version,[new(order.Lines[0].Id,1)],"card",true));
+            var sale=f.Db.Read(f.Company,tx=>SalesModule.Records(tx).Single());Check.Equal("Csak rendelési vevő",sale.CustomerName);Check.True(sale.CustomerId is null);Check.Equal("Teszt utca 1",sale.InvoiceCustomer!.Address);Check.Equal(1,f.Db.Read(f.Company,tx=>CompanyReferenceQueries.Partners(tx).Length));return Task.CompletedTask;
+        });
+        yield return Case("failed order with new partner rolls back partner creation",f=>
+        {
+            var request=f.SaveRequest(Guid.NewGuid(),0,-1) with{CustomerId=Guid.Empty,Customer=new("Nem menthető vevő")};
+            Check.Throws<ArgumentException>(()=>f.Db.Execute(f.Company,tx=>CustomerOrders.Save(tx,request,"seller",f.Clock.Now)));Check.Equal(1,f.Db.Read(f.Company,tx=>CompanyReferenceQueries.Partners(tx).Length));return Task.CompletedTask;
+        });
+        yield return Case("order workflow supports ordered and arrived filters without moving stock",f=>
+        {
+            var order=f.Save(1);var before=f.Physical();
+            foreach(var state in new[]{"ordered","arrived","new"})
+            {
+                order=f.Db.Execute(f.Company,tx=>CustomerOrders.ChangeWorkflow(tx,new(f.Company,Guid.NewGuid(),order.Id,order.Version,state),"seller",f.Clock.Now));Check.Equal(state,order.WorkflowStatus);
+                Check.Equal(1,f.Db.Read(f.Company,tx=>CustomerOrders.List(tx,new(f.Company,Status:state),f.Clock.Now).Total));Check.Equal(before,f.Physical());
+            }
+            foreach(var invalid in new[]{"done","cancelled","nonsense"})Check.Throws<ArgumentException>(()=>f.Db.Execute(f.Company,tx=>CustomerOrders.ChangeWorkflow(tx,new(f.Company,Guid.NewGuid(),order.Id,order.Version,invalid),"seller",f.Clock.Now)));
+            return Task.CompletedTask;
+        });
+        yield return Case("schema 3 orders keep default workflow and get a verified pre-upgrade backup",f=>
+        {
+            var order=f.Save(1);var file=f.Db.DatabasePath(f.Company);
+            using(var c=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+file+";Pooling=False"))
+            {
+                c.Open();c.CreateCollation("HU",StringComparer.OrdinalIgnoreCase.Compare);using var cmd=c.CreateCommand();
+                cmd.CommandText="UPDATE documents SET body=json_remove(body,'$.workflowStatus','$.customer') WHERE module='sales' AND id=$id;UPDATE customer_orders SET body=json_remove(body,'$.workflowStatus','$.customer');DROP INDEX order_workflow;PRAGMA user_version=3";cmd.Parameters.AddWithValue("$id","order/"+order.Id.ToString("N"));cmd.ExecuteNonQuery();
+            }
+            var upgraded=new CompanyDatabase(f.Companies.DataDirectory);var page=upgraded.Read(f.Company,tx=>CustomerOrders.List(tx,new(f.Company,Status:"new"),f.Clock.Now));Check.Equal(1,page.Total);Check.Equal("new",page.Rows[0].WorkflowStatus);Check.Equal(order.CustomerId,page.Rows[0].CustomerId);
+            var backup=Path.Combine(Path.GetDirectoryName(file)!,".migration-backups","company-v3-before-v4.db");Check.True(File.Exists(backup));CompanyDatabase.ValidateBackup(backup);return Task.CompletedTask;
+        });
         if(Environment.GetEnvironmentVariable("PCIMPRESSZ_BENCHMARK")=="1")yield return ("benchmark 20000 customer orders with indexed search and paging",BenchmarkOrders);
     }
     private static Task BenchmarkOrders()

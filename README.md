@@ -1,3 +1,7 @@
+## 0.5.1 – Rendelési vevők, állapotok és beállításváltás
+
+Olvasható, automatikusan szűrő rendelési lenyíló; Új / Megrendelve / Beérkezett állapotok; új vevő opcionális partnertörzsbe mentéssel (alapból bekapcsolva, a Beállításokban állítható). Javított közvetlen váltás a Nagykereskedések, E-mail és Nyomtatók között. [Használat](docs/VEVOI-RENDELESEK-0.5.0.md#051--vevőkezelés-és-rendelési-állapotok).
+
 ## 0.5.0 – Gyorsított tárolás és vevői rendeléskezelés
 
 Indexelt terméktárolás és trigram keresés, SQL-lapozás, tranzakciós készletegyenleg, egységes decimal áfaszámítás. Eladás → Vevői rendelések: árpillanatkép, lejáró foglalás, részátadás eladási bizonylattal, feloldás és lemondás. A normál pénztár is figyeli a más rendeléshez foglalt készletet. A migráció előtt ellenőrzött adatbázismentés készül. [Használat és korlátok](docs/VEVOI-RENDELESEK-0.5.0.md), [Python-átvételi jegyzék](docs/PYTHON-WINDOWS-ATVETEL.md).

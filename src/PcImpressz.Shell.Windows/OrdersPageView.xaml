@@ -12,24 +12,36 @@
   <Border Style="{StaticResource Card}"><StackPanel>
    <WrapPanel IsEnabled="{Binding IsUsable}">
     <TextBox Text="{Binding Search,UpdateSourceTrigger=PropertyChanged}" Width="240" ToolTip="Keresés rendelésszám, vevő és megjegyzés alapján" Margin="0,0,8,8"/>
-    <ComboBox SelectedValue="{Binding StatusFilter}" SelectedValuePath="Tag" DisplayMemberPath="Content" Width="160" Margin="0,0,8,8">
-     <ComboBoxItem Content="Nyitott rendelések" Tag="open"/><ComboBoxItem Content="Minden rendelés" Tag="all"/><ComboBoxItem Content="Lefoglalva" Tag="reserved"/><ComboBoxItem Content="Részben átadva" Tag="partial"/><ComboBoxItem Content="Átadva" Tag="completed"/><ComboBoxItem Content="Lemondva" Tag="cancelled"/>
-    </ComboBox>
+    <ComboBox ItemsSource="{Binding StatusFilters}" SelectedValue="{Binding StatusFilter,Mode=TwoWay}" SelectedValuePath="Value" DisplayMemberPath="Label" Width="180" Margin="0,0,8,8"/>
     <Button Content="Keresés / frissítés" Command="{Binding RefreshCommand}" Margin="0,0,8,8"/>
     <Button Content="Új rendelés" Command="{Binding NewCommand}" IsEnabled="{Binding CanWrite}" Margin="0,0,0,8"/>
    </WrapPanel>
    <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedOrder,Mode=TwoWay}" IsEnabled="{Binding IsUsable}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single" Height="215" HeadersVisibility="Column" ScrollViewer.HorizontalScrollBarVisibility="Auto">
-    <DataGrid.Columns><DataGridTextColumn Header="Rendelés" Binding="{Binding Number}" Width="155"/><DataGridTextColumn Header="Vevő" Binding="{Binding Customer}" Width="260"/><DataGridTextColumn Header="Határidő" Binding="{Binding Due}" Width="110"/><DataGridTextColumn Header="Állapot" Binding="{Binding Status}" Width="130"/><DataGridTextColumn Header="Bruttó (Ft)" Binding="{Binding Gross,StringFormat=N2}" Width="120"/></DataGrid.Columns>
+    <DataGrid.Columns><DataGridTextColumn Header="Rendelés" Binding="{Binding Number}" Width="155"/><DataGridTextColumn Header="Vevő" Binding="{Binding Customer}" Width="260"/><DataGridTextColumn Header="Határidő" Binding="{Binding Due}" Width="110"/><DataGridTextColumn Header="Állapot" Binding="{Binding Status}" Width="130"/><DataGridTextColumn Header="Készlet / átadás" Binding="{Binding Fulfilment}" Width="140"/><DataGridTextColumn Header="Bruttó (Ft)" Binding="{Binding Gross,StringFormat=N2}" Width="120"/></DataGrid.Columns>
    </DataGrid>
    <WrapPanel Margin="0,10,0,0" IsEnabled="{Binding IsUsable}"><Button Content="Előző" Command="{Binding PreviousCommand}"/><TextBlock Text="{Binding PageLabel}" Margin="12,6"/><Button Content="Következő" Command="{Binding NextCommand}"/></WrapPanel>
   </StackPanel></Border>
   <TextBlock Text="{Binding Header}" Style="{StaticResource SectionTitle}" Margin="0,22,0,8"/>
   <Border Style="{StaticResource Card}"><StackPanel>
    <Grid IsEnabled="{Binding CanEdit}"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <StackPanel Margin="0,0,12,0"><TextBlock Text="Vevő (a partnertörzsből)"/><ComboBox ItemsSource="{Binding Customers}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedCustomer,Mode=TwoWay}" Margin="0,5,0,0"/></StackPanel>
+    <StackPanel Margin="0,0,12,0"><TextBlock Text="Vevő (a partnertörzsből)"/><ComboBox IsEnabled="{Binding ExistingCustomer}" ItemsSource="{Binding Customers}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedCustomer,Mode=TwoWay}" Margin="0,5,0,0"/></StackPanel>
     <StackPanel Grid.Column="1" Margin="0,0,12,0"><TextBlock Text="Raktár"/><TextBox Text="{Binding Warehouse,UpdateSourceTrigger=PropertyChanged}" Margin="0,5,0,0"/></StackPanel>
     <StackPanel Grid.Column="2"><TextBlock Text="Határidő · ÉÉÉÉ-HH-NN"/><TextBox Text="{Binding DueDate,UpdateSourceTrigger=PropertyChanged}" Margin="0,5,0,0"/></StackPanel>
    </Grid>
+   <StackPanel IsEnabled="{Binding CanEdit}" Margin="0,12,0,10">
+    <CheckBox Content="Új vevő (nincs a partnertörzsben)" IsChecked="{Binding NewCustomer,Mode=TwoWay}"/>
+    <StackPanel Visibility="{Binding NewCustomer,Converter={StaticResource BoolVisibility}}" Margin="0,10,0,0">
+     <CheckBox Content="Mentés a partnertörzsbe vevőként" IsChecked="{Binding SaveCustomerToPartners,Mode=TwoWay}" Margin="0,0,0,8"/>
+     <TextBlock Text="Kikapcsolva a vevő adatai csak ezen a rendelésen maradnak meg." Style="{StaticResource Muted}"/>
+     <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <StackPanel Margin="0,0,10,0"><TextBlock Text="Vevő neve *"/><TextBox Text="{Binding CustomerName,UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
+      <StackPanel Grid.Column="1" Margin="0,0,10,0"><TextBlock Text="Telefon"/><TextBox Text="{Binding CustomerPhone,UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
+      <StackPanel Grid.Column="2"><TextBlock Text="E-mail"/><TextBox Text="{Binding CustomerEmail,UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
+     </Grid>
+     <Expander Header="Adószám és számlázási cím" Margin="0,8,0,0"><StackPanel><TextBlock Text="Adószám"/><TextBox Text="{Binding CustomerTaxId,UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="Irányítószám"/><TextBox Text="{Binding CustomerPostalCode,UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="Település"/><TextBox Text="{Binding CustomerCity,UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="Cím"/><TextBox Text="{Binding CustomerAddress,UpdateSourceTrigger=PropertyChanged}"/></StackPanel></Expander>
+    </StackPanel>
+   </StackPanel>
+   <WrapPanel Margin="0,0,0,10"><TextBlock Text="Rendelési állapot" Margin="0,10,10,0"/><ComboBox ItemsSource="{Binding WorkflowChoices}" SelectedValuePath="Value" DisplayMemberPath="Label" SelectedValue="{Binding WorkflowStatus,Mode=TwoWay}" IsEnabled="{Binding CanAct}" Width="170"/><Button Content="Állapot mentése" Command="{Binding StatusCommand}" IsEnabled="{Binding CanAct}" Margin="10,0,0,0"/></WrapPanel>
    <TextBox Text="{Binding Notes,UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEdit}" ToolTip="Megjegyzés a rendeléshez" Margin="0,10,0,10"/>
    <WrapPanel IsEnabled="{Binding IsUsable}"><TextBox Text="{Binding ProductSearch,UpdateSourceTrigger=PropertyChanged}" Width="230" ToolTip="Termékkeresés név, cikkszám vagy vonalkód alapján" Margin="0,0,8,8"/><TextBox Text="{Binding CustomerSearch,UpdateSourceTrigger=PropertyChanged}" Width="200" ToolTip="Vevőkeresés név vagy adószám alapján" Margin="0,0,8,8"/><Button Content="Termékek / vevők keresése" Command="{Binding ReferencesCommand}" Margin="0,0,0,8"/></WrapPanel>
    <Grid Margin="0,0,0,10" IsEnabled="{Binding CanEdit}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><ComboBox ItemsSource="{Binding Products}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedProduct}"/><Button Grid.Column="1" Content="Tétel hozzáadása" Command="{Binding AddLineCommand}" Margin="8,0"/><Button Grid.Column="2" Content="Kijelölt törlése" Command="{Binding RemoveLineCommand}"/></Grid>
