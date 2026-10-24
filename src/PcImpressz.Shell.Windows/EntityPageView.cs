@@ -37,6 +37,7 @@ public sealed class EntityPageView : UserControl
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,16) };
         message.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); message.SetBinding(TextBlock.TextProperty, new Binding("Message"));
         root.Children.Add(message);
+        root.Children.Add(SourceSearchPanel());
         var applied = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0,0,0,10) };
         applied.SetBinding(TextBlock.TextProperty, new Binding("AppliedSearchLabel")); root.Children.Add(applied);
         var filterPanel = ProductFilterPanel();
@@ -289,6 +290,47 @@ public sealed class EntityPageView : UserControl
         border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         border.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
         return new Popup { PlacementTarget = anchor, Placement = PlacementMode.Bottom, StaysOpen = false, Child = border };
+    }
+    private static FrameworkElement SourceSearchPanel()
+    {
+        var panel = new StackPanel { Margin = new(0, 0, 0, 16) };
+        panel.SetBinding(VisibilityProperty, new Binding("IsProductMaster") { Converter = new BooleanToVisibilityConverter() });
+        var card = new Border { Padding = new(16), CornerRadius = new(12), BorderThickness = new(1) };
+        card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+        card.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+        var stack = new StackPanel();
+        stack.Children.Add(new TextBlock { Text = "Terméktörzs – termékkeresés", FontWeight = FontWeights.SemiBold, Margin = new(0, 0, 0, 8) });
+        stack.Children.Add(new TextBlock { Text = "Tervezett keresési források. A fenti keresőmező szövegét használja.", TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, 6) });
+        var filters = new WrapPanel();
+        filters.Children.Add(SourceCheck("Saját készlet", "SourceOwn", true, null));
+        filters.Children.Add(SourceCheck("CompMarket", "SourceCompMarket", true, null));
+        filters.Children.Add(SourceCheck("JTC", "SourceJtc", false, "Még nincs bekötve."));
+        filters.Children.Add(SourceCheck("Cédrus", "SourceCedrus", false, "Még nincs bekötve."));
+        filters.Children.Add(SourceCheck("Orink", "SourceOrink", false, "Még nincs bekötve."));
+        filters.Children.Add(SourceCheck("Caseking", "SourceCaseking", false, "Még nincs bekötve."));
+        stack.Children.Add(filters);
+        var search = ActionButton("Források keresése", "SearchSourcesCommand");
+        search.Margin = new(0, 8, 0, 8);
+        stack.Children.Add(search);
+        var note = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, 8) };
+        note.SetResourceReference(StyleProperty, "Muted");
+        note.SetBinding(TextBlock.TextProperty, "SourceNote");
+        stack.Children.Add(note);
+        var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, MaxHeight = 280, HeadersVisibility = DataGridHeadersVisibility.Column };
+        grid.SetBinding(ItemsControl.ItemsSourceProperty, "SourcePrices");
+        grid.Columns.Add(new DataGridTextColumn { Header = "Termék", Binding = new Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Forrás", Binding = new Binding("Source"), Width = 140 });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Nettó ár", Binding = new Binding("Net"), Width = 140 });
+        stack.Children.Add(grid);
+        card.Child = stack;
+        panel.Children.Add(card);
+        return panel;
+    }
+    private static CheckBox SourceCheck(string caption, string path, bool enabled, string? tip)
+    {
+        var box = new CheckBox { Content = caption, Margin = new(0, 0, 16, 6), IsEnabled = enabled, ToolTip = tip };
+        box.SetBinding(ToggleButton.IsCheckedProperty, new Binding(path) { Mode = BindingMode.TwoWay });
+        return box;
     }
     private static FrameworkElement ProductFilterPanel()
     {

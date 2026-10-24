@@ -80,6 +80,7 @@ internal static class Program
             UiProductChecks.VerifyAppliedQuery();
             RunDispatcherCheck(()=>CustomerOrderUiChecks.VerifyAsync(output));
             RunDispatcherCheck(()=>OrderSettingsRegressionChecks.VerifyAsync(output));
+            RunDispatcherCheck(()=>WholesaleUiChecks.VerifyAsync(output));
             foreach(var skin in BuiltInSkins.All)
             {
                 ThemeManager.Apply(skin,new AppearancePreferences{SkinId=skin.Id});
