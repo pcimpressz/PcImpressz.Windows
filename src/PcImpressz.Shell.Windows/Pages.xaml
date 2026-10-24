@@ -1,4 +1,5 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:PcImpressz.Shell.Windows">
+  <DataTemplate DataType="{x:Type local:QuotesPageViewModel}"><local:QuotesPageView /></DataTemplate>
   <DataTemplate DataType="{x:Type local:OrdersPageViewModel}"><local:OrdersPageView /></DataTemplate>
   <DataTemplate DataType="{x:Type local:OperationsPageViewModel}">
     <local:OperationsPageView />
@@ -416,6 +417,7 @@
               <TextBox Text="{Binding NavPendingColor, Mode=TwoWay}" Width="130" HorizontalAlignment="Left"/>
       </StackPanel></Border></Expander>
       <Expander Header="Számlázás · szolgáltató és számlatömbök" Margin="0,0,0,18"><local:InvoicingSettingsCard Margin="0,16,0,0" IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
+      <Expander Header="Árajánlat · logó és aláírás" Margin="0,0,0,18"><local:QuoteBrandingCard Margin="0,16,0,0" IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
       <Expander Header="Beszállítói API-k · CompMarket" Margin="0,0,0,18"><local:SupplierConnectionCard IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
       <Expander Header="NAV-kapcsolat" IsExpanded="True" Margin="0,0,0,18">
         <StackPanel>

@@ -145,6 +145,12 @@ public sealed class OperationSettingsStore(string directory)
 
     public OperationSnapshot Load() => Project(ReadSettings(), ReadSecrets());
 
+    public string ReadSecret(string key)
+    {
+        if (!OperationCatalog.SecretKeys.Contains(key)) throw new ArgumentException("Ismeretlen titkos mező.");
+        return ReadSecrets().TryGetValue(key, out var value) ? value : "";
+    }
+
     public bool SecretEquals(string key, string expected)
     {
         if (!OperationCatalog.SecretKeys.Contains(key)) return false;

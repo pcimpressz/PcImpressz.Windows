@@ -12,15 +12,6 @@ using System.Windows.Media;
 using PcImpressz.Contracts;
 namespace PcImpressz.Shell.Windows;
 
-internal sealed class QuoteEditLine:Observable
-{
-    private readonly Action _dirty;public Guid ProductId{get;set;}private string _name="",_quantity="1",_price="0",_vat="27";
-    public QuoteEditLine(Action dirty)=>_dirty=dirty;
-    public string Name{get=>_name;set{_name=value;Changed();_dirty();}}
-    public string Quantity{get=>_quantity;set{_quantity=value;Changed();_dirty();}}
-    public string Price{get=>_price;set{_price=value;Changed();_dirty();}}
-    public string Vat{get=>_vat;set{_vat=value;Changed();_dirty();}}
-}
 internal sealed record QuoteReference(Guid Id,string Name,string Detail,JsonElement Data) { public override string ToString()=>Name+ (string.IsNullOrWhiteSpace(Detail)?"":" · "+Detail); }
 internal sealed class OfferCandidate
 {
@@ -28,8 +19,8 @@ internal sealed class OfferCandidate
     public static SolidColorBrush OwnStripe{get;}=Freeze(Color.FromRgb(0x1F,0x8A,0x5B));
     public static SolidColorBrush CompMarketStripe{get;}=Freeze(Color.FromRgb(0xD9,0x77,0x06));
     private static SolidColorBrush Freeze(Color color){var brush=new SolidColorBrush(color);brush.Freeze();return brush;}
-    public OfferCandidate(string sourceId,string sourceLabel,Brush stripe,Guid productId,string name,string sku,string stock,decimal price,decimal vat,string lineName)
-    {SourceId=sourceId;SourceLabel=sourceLabel;Stripe=stripe;ProductId=productId;Name=name;Sku=sku;Stock=stock;Price=price;Vat=vat;LineName=lineName;}
+    public OfferCandidate(string sourceId,string sourceLabel,Brush stripe,Guid productId,string name,string sku,string stock,decimal price,decimal vat,string lineName,decimal? purchase=null)
+    {SourceId=sourceId;SourceLabel=sourceLabel;Stripe=stripe;ProductId=productId;Name=name;Sku=sku;Stock=stock;Price=price;Vat=vat;LineName=lineName;Purchase=purchase;}
     public string SourceId{get;}
     public string SourceLabel{get;}
     public Brush Stripe{get;}
@@ -40,22 +31,25 @@ internal sealed class OfferCandidate
     public decimal Price{get;}
     public decimal Vat{get;}
     public string LineName{get;}
+    public decimal? Purchase{get;}
     public string Summary=>string.Join(" · ",new[]{Sku,Stock,Price.ToString("N2",Hu)+" Ft nettó",SourceLabel}.Where(part=>!string.IsNullOrWhiteSpace(part)));
 }
 internal sealed record QuoteListItem(Guid Id,long Version,string Number,string CustomerName,string Status,decimal Gross,JsonElement Data);
 internal sealed class QuotesPageViewModel:Observable,IWorkspacePage
 {
-    private readonly HostConnection _connection;private readonly Func<Guid?> _company;private readonly CancellationToken _shutdown;
+    private readonly HostConnection _connection;private readonly Func<Guid?> _company;private readonly CancellationToken _shutdown;private readonly string _dataDirectory;private readonly Func<string> _companyName;private readonly Func<OutgoingMailAccount> _mail;
     private Guid? _customerId;private Guid _id=Guid.NewGuid();private long _version;private bool _busy,_dirty,_filling,_partners,_catalog,_accepted,_own=true,_compMarket=true,_availableOnly=true,_compMarketBlocked;
-    private string _message="",_name="",_notes="",_until=DateTime.Today.AddDays(30).ToString("yyyy-MM-dd"),_offerQuery="",_margin="20",_compMarketHint="";
+    private string _message="",_name="",_notes="",_number="",_customerEmail="",_until=DateTime.Today.AddDays(30).ToString("yyyy-MM-dd"),_offerQuery="",_margin="20",_compMarketHint="";
     private JsonElement? _pending;private CancellationTokenSource? _customerCts,_offerCts;private int _customerGeneration,_offerGeneration;private bool _offerOnNextLoad;
-    public QuotesPageViewModel(EntityPageDescriptor definition,HostConnection connection,Func<Guid?> company,CancellationToken shutdown)
+    public QuotesPageViewModel(EntityPageDescriptor definition,HostConnection connection,Func<Guid?> company,CancellationToken shutdown,string dataDirectory,Func<string> companyName,Func<OutgoingMailAccount> mail)
     {
-        Definition=definition;_connection=connection;_company=company;_shutdown=shutdown;
+        Definition=definition;_connection=connection;_company=company;_shutdown=shutdown;_dataDirectory=dataDirectory;_companyName=companyName;_mail=mail;
         Customers.CollectionChanged+=(_,_)=>Changed(nameof(ShowCustomerSuggestions));
+        Lines.CollectionChanged+=(_,_)=>Changed(nameof(LinesTotal));
         RefreshCommand=new RelayCommand(()=>{_offerOnNextLoad=true;_=LoadAsync();});NewCommand=new RelayCommand(New);SaveCommand=new RelayCommand(()=>_=SaveAsync());AcceptCommand=new RelayCommand(()=>_=AcceptAsync());
-        AddCommand=new RelayCommand(()=>{if(CanEdit){Lines.Add(new(Dirty));Dirty();}});RemoveCommand=new RelayCommand(()=>{if(CanEdit&&SelectedLine is {} line){Lines.Remove(line);Dirty();}});
+        AddCommand=new RelayCommand(()=>{if(!CanEdit)return;AddLine("",1,null,null,0,27,"");});RemoveCommand=new RelayCommand(()=>{if(CanEdit&&SelectedLine is {} line){Lines.Remove(line);Dirty();}});
         OpenCommand=new RelayCommand(Open);ImportCompMarketCommand=new RelayCommand(()=>_=ImportCompMarketAsync());InsertOfferCommand=new RelayCommand(InsertSelectedOffer);
+        PrintCommand=new RelayCommand(ShowPrint);MailCommand=new RelayCommand(ShowMail);
     }
     public EntityPageDescriptor Definition{get;}
     public ObservableCollection<QuoteListItem> Rows{get;}=[];public ObservableCollection<QuoteEditLine> Lines{get;}=[];
@@ -70,13 +64,26 @@ internal sealed class QuotesPageViewModel:Observable,IWorkspacePage
     public bool AvailableOnly{get=>_availableOnly;set{if(_availableOnly==value)return;_availableOnly=value;Changed();ScheduleOfferSearch();}}
     public string OfferQuery{get=>_offerQuery;set{if(_offerQuery==value)return;_offerQuery=value;Changed();ScheduleOfferSearch();}}
     public string CompMarketMargin{get=>_margin;set{if(_margin==value)return;_margin=value;Changed();ScheduleOfferSearch();}}
-    public ICommand ImportCompMarketCommand{get;}public ICommand InsertOfferCommand{get;}
+    public ICommand ImportCompMarketCommand{get;}public ICommand InsertOfferCommand{get;}public ICommand PrintCommand{get;}public ICommand MailCommand{get;}
     public QuoteListItem? Selected{get;set;}public QuoteEditLine? SelectedLine{get;set;}public string Search{get;set;}="";
-    public string CustomerName{get=>_name;set{if(_name==value)return;_name=value;if(!_filling)_customerId=null;Changed();Dirty();ScheduleCustomerSearch();}}
+    public string CustomerName{get=>_name;set{if(_name==value)return;_name=value;if(!_filling){_customerId=null;_customerEmail="";}Changed();Dirty();ScheduleCustomerSearch();}}
     public string Notes{get=>_notes;set{_notes=value;Changed();Dirty();}}
     public string ValidUntil{get=>_until;set{_until=value;Changed();Dirty();}}
     public string Message{get=>_message;private set{_message=value;Changed();}}
     public bool IsBusy{get=>_busy;private set{_busy=value;Changed();Changed(nameof(CanEdit));}}
+    public string LinesTotal
+    {
+        get
+        {
+            decimal gross=0;
+            foreach(var line in Lines)
+            {
+                if(!decimal.TryParse(line.Quantity.Trim().Replace(',','.'),NumberStyles.AllowDecimalPoint|NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture,out var qty)||qty<=0||!VatMath.IsSupportedRate(line.VatValue))continue;
+                gross+=VatMath.Line(qty,line.NetValue,line.VatValue).Gross;
+            }
+            return "Bruttó összesen: "+gross.ToString("N0",CultureInfo.GetCultureInfo("hu-HU"))+" Ft";
+        }
+    }
     public bool IsDirty=>_dirty;public bool HasUnresolvedOperation=>_pending is not null;
     public bool CanEdit=>!IsBusy&&!HasUnresolvedOperation&&!_accepted&&_connection.Allows("quotes.write");
     public ICommand RefreshCommand{get;}public ICommand NewCommand{get;}public ICommand SaveCommand{get;}public ICommand AcceptCommand{get;}public ICommand AddCommand{get;}public ICommand RemoveCommand{get;}public ICommand OpenCommand{get;}
@@ -97,7 +104,7 @@ internal sealed class QuotesPageViewModel:Observable,IWorkspacePage
     }
     public void PickCustomer(QuoteReference partner)
     {
-        CancelCustomerSearch();_filling=true;_customerId=partner.Id;_name=partner.Name;Changed(nameof(CustomerName));Customers.Clear();_filling=false;_dirty=true;Changed(nameof(IsDirty));
+        CancelCustomerSearch();_filling=true;_customerId=partner.Id;_customerEmail=Str(partner.Data,"email");_name=partner.Name;Changed(nameof(CustomerName));Customers.Clear();_filling=false;_dirty=true;Changed(nameof(IsDirty));
     }
     private void ScheduleCustomerSearch()
     {
@@ -175,7 +182,7 @@ internal sealed class QuotesPageViewModel:Observable,IWorkspacePage
                             var availability=Str(item,"availability");
                             if(AvailableOnly&&availability.Contains("nincs",StringComparison.OrdinalIgnoreCase))continue;
                             var sku=Str(item,"supplierSku");var name=Str(item,"name");
-                            items.Add(new("compmarket","CompMarket",OfferCandidate.CompMarketStripe,Guid.Empty,name,sku,availability,NumberOr(item,"saleNet",0m),NumberOr(item,"vatRate",27m),TrimName((sku+" "+name).Trim())));
+                            items.Add(new("compmarket","CompMarket",OfferCandidate.CompMarketStripe,Guid.Empty,name,sku,availability,NumberOr(item,"saleNet",0m),NumberOr(item,"vatRate",27m),TrimName((sku+" "+name).Trim()),item.TryGetProperty("purchaseNet",out var buy)&&buy.ValueKind==JsonValueKind.Number?buy.GetDecimal():null));
                             cmCount++;
                         }
                     }
@@ -197,8 +204,8 @@ internal sealed class QuotesPageViewModel:Observable,IWorkspacePage
     public void InsertSelectedOffer()
     {
         if(!CanEdit||SelectedOffer is not {} item)return;
-        Lines.Add(new(Dirty){ProductId=item.SourceId=="own"&&CatalogAvailable?item.ProductId:Guid.Empty,Name=item.LineName,Quantity="1",Price=item.Price.ToString(CultureInfo.InvariantCulture),Vat=item.Vat.ToString(CultureInfo.InvariantCulture)});
-        Dirty();
+        var line=AddLine(item.LineName,1,item.Purchase,null,item.Price,item.Vat,"");
+        line.ProductId=item.SourceId=="own"&&CatalogAvailable?item.ProductId:Guid.Empty;
     }
     private async Task ImportCompMarketAsync()
     {
@@ -216,18 +223,18 @@ internal sealed class QuotesPageViewModel:Observable,IWorkspacePage
             foreach(var item in result.EnumerateArray())
             {
                 if(count++>=200)break;
-                Lines.Add(new(Dirty){Name=Str(item,"name"),Quantity="1",Price=item.GetProperty("saleNet").GetDecimal().ToString(CultureInfo.InvariantCulture),Vat="27"});
+                AddLine(Str(item,"name"),1,null,null,item.GetProperty("saleNet").GetDecimal(),27,"");
             }
             Dirty();Message=$"CompMarket fájl: {Math.Min(count,200)} tétel. Az ár a fájl letöltésekor volt érvényes.";
         }
         catch(Exception ex){Message="CompMarket import: "+ex.Message;}
     }
-    private void Dirty(){if(!_filling){_dirty=true;Changed(nameof(IsDirty));}}
+    private void Dirty(){if(!_filling){_dirty=true;Changed(nameof(IsDirty));Changed(nameof(LinesTotal));}}
     public void PermissionsChanged()=>Changed(nameof(CanEdit));
     public void CompanyChanged()
     {
         CancelCustomerSearch();CancelOfferSearch();_compMarketBlocked=false;_compMarketHint="";
-        _filling=true;_id=Guid.NewGuid();_version=0;Rows.Clear();Lines.Clear();Offers.Clear();Customers.Clear();_dirty=false;_accepted=false;_pending=null;_customerId=null;_name="";Changed(nameof(CustomerName));_offerQuery="";Changed(nameof(OfferQuery));Notes="";_dirty=false;_filling=false;Changed(nameof(IsDirty));Changed(nameof(CanEdit));_offerOnNextLoad=true;_=LoadAsync();
+        _filling=true;_id=Guid.NewGuid();_version=0;Rows.Clear();Lines.Clear();Offers.Clear();Customers.Clear();_dirty=false;_accepted=false;_pending=null;_customerId=null;_customerEmail="";_number="";_name="";Changed(nameof(CustomerName));_offerQuery="";Changed(nameof(OfferQuery));Notes="";_dirty=false;_filling=false;Changed(nameof(IsDirty));Changed(nameof(CanEdit));Changed(nameof(LinesTotal));_offerOnNextLoad=true;_=LoadAsync();
     }
     private async Task<JsonElement> Send(string command,object input)=>await Module("quotes",command,input,_shutdown);
     internal async Task LoadAsync()
@@ -252,17 +259,51 @@ internal sealed class QuotesPageViewModel:Observable,IWorkspacePage
         catch(Exception ex){Message=ex.Message;return false;}
     }
     private bool CanLeave()=>!IsDirty||UnsavedChanges.Confirm("Elveted a nem mentett ajánlatot?","Árajánlat");
-    private void New(){if(IsBusy||HasUnresolvedOperation||!CanLeave())return;_id=Guid.NewGuid();_version=0;_accepted=false;_filling=true;CustomerName="";_customerId=null;Customers.Clear();Notes="";Lines.Clear();_filling=false;_dirty=false;Changed(nameof(IsDirty));Changed(nameof(CanEdit));}
+    private void New(){if(IsBusy||HasUnresolvedOperation||!CanLeave())return;_id=Guid.NewGuid();_version=0;_accepted=false;_number="";_customerEmail="";_filling=true;CustomerName="";_customerId=null;Customers.Clear();Notes="";Lines.Clear();_filling=false;_dirty=false;Changed(nameof(IsDirty));Changed(nameof(CanEdit));Changed(nameof(LinesTotal));}
     private void Open(){if(IsBusy||HasUnresolvedOperation||Selected is not {} selected||!CanLeave())return;Apply(selected.Data);}
+    private QuoteEditLine AddLine(string name,decimal quantity,decimal? purchase,decimal? margin,decimal net,decimal vat,string note)
+    {
+        var line=new QuoteEditLine(Dirty);line.PropertyChanged+=(_,_)=>Changed(nameof(LinesTotal));line.Load(name,quantity,purchase,margin,net,vat,note);Lines.Add(line);return line;
+    }
+    private void ShowPrint(){try{QuotePrint.Show(BuildPrint());}catch(Exception ex) when(ex is not OutOfMemoryException){Message=ex.Message;}}
+    private void ShowMail()
+    {
+        try
+        {
+            OutgoingMailAccount account;try{account=_mail();}catch(Exception ex) when(ex is not OutOfMemoryException){account=new(){Problem=ex.Message};}
+            QuotePrint.ShowMail(BuildPrint(),account,text=>Message=text);
+        }
+        catch(Exception ex) when(ex is not OutOfMemoryException){Message=ex.Message;}
+    }
+    private QuotePrintDocument BuildPrint()
+    {
+        if(Lines.Count==0)throw new ArgumentException("Előbb vegyél fel legalább egy tételt.");
+        foreach(var line in Lines)line.EnsureClosed();
+        var company=_company()??throw new InvalidOperationException("Nincs kiválasztott cég.");
+        string? logo=null,signature=null;
+        try{var folder=QuoteBranding.Folder(_dataDirectory,company);logo=QuoteBranding.Logo(folder);signature=QuoteBranding.Signature(folder);}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){}
+        return new(_companyName(),string.IsNullOrWhiteSpace(_number)?"Piszkozat":_number,CustomerName.Trim(),ValidUntil,Notes.Trim(),_customerEmail,Lines.Select(l=>new QuotePrintLine(l.Name.Trim(),Number(l.Quantity),l.NetValue,l.VatValue,l.NoteValue)).ToArray(),logo,signature);
+    }
     private void Apply(JsonElement row)
-    {_filling=true;_id=row.GetProperty("id").GetGuid();_version=row.GetProperty("version").GetInt64();_accepted=row.GetProperty("status").GetString()=="accepted";ValidUntil=row.GetProperty("validUntil").GetString()??"";Notes=row.GetProperty("notes").GetString()??"";_customerId=row.TryGetProperty("customerId",out var cid)&&cid.ValueKind==JsonValueKind.String?cid.GetGuid():null;CustomerName=row.TryGetProperty("customer",out var customer)&&customer.ValueKind==JsonValueKind.Object?customer.GetProperty("name").GetString()??"":"";Customers.Clear();Lines.Clear();foreach(var line in row.GetProperty("lines").EnumerateArray())Lines.Add(new(Dirty){ProductId=line.TryGetProperty("productId",out var pid)&&pid.ValueKind==JsonValueKind.String?pid.GetGuid():Guid.Empty,Name=line.GetProperty("description").GetString()??"",Quantity=line.GetProperty("quantity").GetDecimal().ToString(CultureInfo.InvariantCulture),Price=line.GetProperty("netUnitPrice").GetDecimal().ToString(CultureInfo.InvariantCulture),Vat=line.GetProperty("vatRate").GetDecimal().ToString(CultureInfo.InvariantCulture)});_filling=false;_dirty=false;Changed(nameof(IsDirty));Changed(nameof(CanEdit));}
+    {
+        _filling=true;_id=row.GetProperty("id").GetGuid();_version=row.GetProperty("version").GetInt64();_accepted=row.GetProperty("status").GetString()=="accepted";_number=row.TryGetProperty("number",out var number)&&number.ValueKind==JsonValueKind.String?number.GetString()??"":"" ;ValidUntil=row.GetProperty("validUntil").GetString()??"";Notes=row.GetProperty("notes").GetString()??"";_customerEmail="";_customerId=row.TryGetProperty("customerId",out var cid)&&cid.ValueKind==JsonValueKind.String?cid.GetGuid():null;CustomerName=row.TryGetProperty("customer",out var customer)&&customer.ValueKind==JsonValueKind.Object?customer.GetProperty("name").GetString()??"":"";Customers.Clear();Lines.Clear();
+        foreach(var line in row.GetProperty("lines").EnumerateArray())
+        {
+            decimal? purchase=line.TryGetProperty("purchaseNet",out var cost)&&cost.ValueKind==JsonValueKind.Number?cost.GetDecimal():null;
+            decimal? margin=line.TryGetProperty("marginPercent",out var percent)&&percent.ValueKind==JsonValueKind.Number?percent.GetDecimal():null;
+            var item=AddLine(line.GetProperty("description").GetString()??"",line.GetProperty("quantity").GetDecimal(),purchase,margin,line.GetProperty("netUnitPrice").GetDecimal(),line.GetProperty("vatRate").GetDecimal(),Str(line,"lineNote"));
+            item.ProductId=line.TryGetProperty("productId",out var pid)&&pid.ValueKind==JsonValueKind.String?pid.GetGuid():Guid.Empty;
+        }
+        _filling=false;_dirty=false;Changed(nameof(IsDirty));Changed(nameof(CanEdit));Changed(nameof(LinesTotal));
+    }
     private static decimal Number(string s)=>decimal.Parse(s.Replace(',','.'),NumberStyles.AllowDecimalPoint|NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture);
     internal async Task SaveAsync()
     {
         if(IsBusy||_company() is not {} company)return;
         try
         {
-            if(_pending is null){if(!CanEdit)return;if(!DateOnly.TryParseExact(ValidUntil,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var until))throw new ArgumentException("Érvényesség: ÉÉÉÉ-HH-NN.");var customerId=PartnersAvailable?_customerId:null;_pending=JsonSerializer.SerializeToElement(new{companyId=company,requestId=Guid.NewGuid(),id=_id,version=_version,customerId,customer=string.IsNullOrWhiteSpace(CustomerName)?null:new BillingCustomer(Guid.Empty,CustomerName.Trim(),"","HU","","","",true,true),validUntil=until,notes=Notes,lines=Lines.Select(l=>new{productId=CatalogAvailable?l.ProductId:Guid.Empty,description=l.Name,quantity=Number(l.Quantity),netUnitPrice=Number(l.Price),vatRate=Number(l.Vat)}).ToArray()},CompanyDocuments.Json);Changed(nameof(HasUnresolvedOperation));}
+            if(_pending is null){if(!CanEdit)return;foreach(var line in Lines)line.EnsureClosed();if(!DateOnly.TryParseExact(ValidUntil,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var until))throw new ArgumentException("Érvényesség: ÉÉÉÉ-HH-NN.");var customerId=PartnersAvailable?_customerId:null;_pending=JsonSerializer.SerializeToElement(new{companyId=company,requestId=Guid.NewGuid(),id=_id,version=_version,customerId,customer=string.IsNullOrWhiteSpace(CustomerName)?null:new BillingCustomer(Guid.Empty,CustomerName.Trim(),"","HU","","","",true,true),validUntil=until,notes=Notes,lines=Lines.Select(l=>new{productId=CatalogAvailable?l.ProductId:Guid.Empty,description=l.Name.Trim(),quantity=Number(l.Quantity),netUnitPrice=l.NetValue,vatRate=l.VatValue,purchaseNet=l.PurchaseValue,marginPercent=l.MarginValue,lineNote=l.NoteValue}).ToArray()},CompanyDocuments.Json);Changed(nameof(HasUnresolvedOperation));}
             IsBusy=true;var result=await Send("save",_pending.Value);_pending=null;Apply(result);Message="Az árajánlat mentve.";
         }
         catch(HostCommandException ex) when(ex.Code is "validation" or "denied" or "not-found"){_pending=null;Message=ex.Message;}
@@ -301,10 +342,14 @@ internal sealed class QuotesPageView:UserControl
         offers.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter&&DataContext is QuotesPageViewModel page){page.InsertSelectedOffer();e.Handled=true;}};
         editor.Children.Add(offers);
         var rowButtons=new WrapPanel();rowButtons.Children.Add(Button("Kijelölt tétel beszúrása","InsertOfferCommand"));rowButtons.Children.Add(Button("XML fájl betöltése","ImportCompMarketCommand"));rowButtons.Children.Add(Button("Kézi tétel hozzáadása","AddCommand"));rowButtons.Children.Add(Button("Kijelölt törlése","RemoveCommand"));editor.Children.Add(rowButtons);
-        var lines=new DataGrid{AutoGenerateColumns=false,CanUserAddRows=false,Height=230};lines.SetBinding(ItemsControl.ItemsSourceProperty,"Lines");lines.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedLine"){Mode=BindingMode.TwoWay});foreach(var (label,path) in new[]{("Megnevezés","Name"),("Mennyiség","Quantity"),("Nettó egységár","Price"),("Áfa %","Vat")})lines.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged},Width=new DataGridLength(1,DataGridLengthUnitType.Star)});editor.Children.Add(lines);
-        var actions=new WrapPanel();actions.Children.Add(Button("Mentés / újraellenőrzés","SaveCommand"));actions.Children.Add(Button("Elfogadás","AcceptCommand"));root.Children.Add(actions);var message=new TextBlock{TextWrapping=TextWrapping.Wrap};message.SetBinding(TextBlock.TextProperty,"Message");root.Children.Add(message);Content=scroll;
+        var lines=new DataGrid{AutoGenerateColumns=false,CanUserAddRows=false,MinHeight=260,MaxHeight=420,HeadersVisibility=DataGridHeadersVisibility.Column};lines.SetBinding(ItemsControl.ItemsSourceProperty,"Lines");lines.SetBinding(DataGrid.SelectedItemProperty,new Binding("SelectedLine"){Mode=BindingMode.TwoWay});lines.SetResourceReference(Control.BackgroundProperty,"SurfaceBrush");lines.SetResourceReference(Control.ForegroundProperty,"TextBrush");
+        lines.Columns.Add(Column("Megnevezés","Name",false,true));lines.Columns.Add(Column("Mennyiség","Quantity",false,false,90));lines.Columns.Add(Column("Beszerzési nettó","Purchase",false,false,130));lines.Columns.Add(Column("Haszonkulcs %","Margin",false,false,120));lines.Columns.Add(Column("Nettó egységár","Net",true,false,120));lines.Columns.Add(Column("Bruttó egységár","Gross",false,false,130));lines.Columns.Add(Column("Áfa %","Vat",false,false,70));lines.Columns.Add(Column("Sor bruttó","LineGross",true,false,110));lines.Columns.Add(Column("Megjegyzés","Note",false,true));editor.Children.Add(lines);
+        var priceHint=new TextBlock{Text="A haszonkulcs a nettó beszerzési árhoz képest értendő. Ha a bruttó árat írod, a haszonkulcs számolódik; ha a haszonkulcsot, a bruttó ár. A beszerzési ár és a haszonkulcs nem kerül a PDF-re és a levélbe.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,0)};priceHint.SetResourceReference(StyleProperty,"Muted");editor.Children.Add(priceHint);
+        var total=new TextBlock{FontWeight=FontWeights.SemiBold,Margin=new Thickness(0,8,0,0)};total.SetBinding(TextBlock.TextProperty,"LinesTotal");editor.Children.Add(total);
+        var actions=new WrapPanel();actions.Children.Add(Button("Mentés / újraellenőrzés","SaveCommand"));actions.Children.Add(Button("Elfogadás","AcceptCommand"));actions.Children.Add(Button("Nyomtatási kép","PrintCommand"));actions.Children.Add(Button("E-mail előnézet","MailCommand"));root.Children.Add(actions);var message=new TextBlock{TextWrapping=TextWrapping.Wrap};message.SetBinding(TextBlock.TextProperty,"Message");root.Children.Add(message);Content=scroll;
     }
     private static TextBlock Label(string text)=>new(){Text=text,Margin=new Thickness(0,8,0,4)};
+    private static DataGridTextColumn Column(string header,string path,bool readOnly,bool star,double width=120)=>new(){Header=header,IsReadOnly=readOnly,Binding=new Binding(path){Mode=readOnly?BindingMode.OneWay:BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged},Width=star?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(width)};
     private static TextBox Input(string path){var input=new TextBox{MinHeight=34};input.SetBinding(TextBox.TextProperty,new Binding(path){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged});return input;}
     private static ListBox List(string path){var list=new ListBox{Margin=new Thickness(0,6,0,0),HorizontalContentAlignment=HorizontalAlignment.Stretch};list.SetBinding(ItemsControl.ItemsSourceProperty,path);list.SetResourceReference(Control.BackgroundProperty,"SurfaceBrush");list.SetResourceReference(Control.ForegroundProperty,"TextBrush");list.SetResourceReference(Control.BorderBrushProperty,"StrokeBrush");return list;}
     private static CheckBox Check(string caption,string path,string? visible)

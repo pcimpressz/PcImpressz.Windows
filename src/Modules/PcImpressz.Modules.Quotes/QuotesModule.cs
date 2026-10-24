@@ -4,7 +4,7 @@ using PcImpressz.Contracts;
 
 namespace PcImpressz.Modules.Quotes;
 
-public sealed record QuoteLine(Guid ProductId, string Description, decimal Quantity, decimal NetUnitPrice, decimal VatRate);
+public sealed record QuoteLine(Guid ProductId, string Description, decimal Quantity, decimal NetUnitPrice, decimal VatRate, decimal? PurchaseNet = null, decimal? MarginPercent = null, string? LineNote = null);
 public sealed record QuoteDocument(Guid Id, long Version, Guid? CustomerId, string Number, DateOnly ValidUntil,
     string Notes, string Status, QuoteLine[] Lines, decimal Net, decimal Vat, decimal Gross,
     DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Actor,BillingCustomer? Customer=null);
@@ -66,13 +66,14 @@ public sealed class QuotesModule : IModule
             if (request.RequestId == Guid.Empty) throw new ArgumentException("Hiányzó művelet- vagy partnerazonosító.");
             if (request.Lines is not { Length: > 0 and <= 200 }) throw new ArgumentException("Legalább egy, legfeljebb 200 ajánlati sor szükséges.");
             if (request.Notes is null || request.Notes.Length > 2000) throw new ArgumentException("Túl hosszú megjegyzés.");
-            if (request.Lines.Any(l => string.IsNullOrWhiteSpace(l.Description) || l.Description.Length > 300 || l.Quantity <= 0 || l.NetUnitPrice < 0 || !VatMath.IsSupportedRate(l.VatRate)))
+            var lines = request.Lines.Select(l => l with { Description = (l.Description ?? "").Trim(), LineNote = (l.LineNote ?? "").Trim() }).ToArray();
+            if (lines.Any(l => string.IsNullOrWhiteSpace(l.Description) || l.Description.Length > 300 || l.Quantity <= 0 || l.NetUnitPrice < 0 || !VatMath.IsSupportedRate(l.VatRate) || l.PurchaseNet is < 0 or > 100_000_000m || l.MarginPercent is < -100 or > 1000 || l.LineNote!.Length > 500))
                 throw new ArgumentException("Érvénytelen ajánlati sor.");
             var id = request.Id == Guid.Empty ? request.RequestId : request.Id;
             var existing = tx.Read<QuoteDocument>(Store, Key(id));
             if (existing is null && request.Version != 0 || existing is not null && (existing.Version != request.Version || existing.Status != "draft"))
                 throw new InvalidOperationException("Az ajánlat időközben módosult vagy már nem szerkeszthető.");
-            var amounts=request.Lines.Select(l=>VatMath.Line(l.Quantity,l.NetUnitPrice,l.VatRate)).ToArray();
+            var amounts=lines.Select(l=>VatMath.Line(l.Quantity,l.NetUnitPrice,l.VatRate)).ToArray();
             var net=amounts.Sum(a=>a.Net);var vat=amounts.Sum(a=>a.Vat);
             var customer=request.Customer;
             if(request.CustomerId is {} customerId&&customer is null)customer=CompanyReferenceQueries.BillingCustomers(tx).SingleOrDefault(c=>c.Id==customerId&&c.IsActive)??throw new ArgumentException("A partnertörzs nem használható; adj meg kézi vevőadatot.");
@@ -80,7 +81,7 @@ public sealed class QuotesModule : IModule
             var now = context.TimeProvider.GetUtcNow();
             var result = new QuoteDocument(id, (existing?.Version ?? 0) + 1, request.CustomerId,
                 existing?.Number ?? "AJ-" + now.ToString("yyyyMMdd") + "-" + id.ToString("N")[..8].ToUpperInvariant(),
-                request.ValidUntil, request.Notes, "draft", request.Lines, net, vat, net + vat,
+                request.ValidUntil, request.Notes, "draft", lines, net, vat, net + vat,
                 existing?.CreatedAt ?? now, now, actor,customer);
             tx.Write(Store, Key(id), result);
             Remember(tx,request.RequestId,"save",request,result);
