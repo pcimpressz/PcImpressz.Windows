@@ -39,14 +39,34 @@ internal sealed class HostConnection(string directory, string? hostOverride, Fun
         if(sender is not null)return await sender(operation,payload,ct);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(100));
-        await using var pipe = new NamedPipeClientStream(".", DiagnosticChannel.ForDirectory(directory) + "-commands",
-            PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-        await pipe.ConnectAsync(3000, deadline.Token);
-        await LocalProtocol.WriteAsync(pipe, new LocalRequest(operation, JsonSerializer.SerializeToElement(payload), SessionCompany, Session?.Token), deadline.Token);
-        var result = await LocalProtocol.ReadAsync<LocalResponse>(pipe, deadline.Token);
-        if (!result.Success) throw new HostCommandException(result.Error ?? "A művelet nem sikerült.",result.Code);
-        return result.Data ?? JsonSerializer.SerializeToElement(new { });
+        var started = Environment.TickCount64;
+        try
+        {
+            while (true)
+            {
+                deadline.Token.ThrowIfCancellationRequested();
+                await using var pipe = new NamedPipeClientStream(".", DiagnosticChannel.ForDirectory(directory) + "-commands",
+                    PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                try { await pipe.ConnectAsync(2000, deadline.Token); }
+                catch (Exception ex) when (IsBusyPipe(ex))
+                {
+                    if (Environment.TickCount64 - started >= 20_000)
+                        throw new TimeoutException("A háttérszolgáltatás foglalt, a kérés nem indult el. Próbáld újra.");
+                    await Task.Delay(150, deadline.Token);
+                    continue;
+                }
+                await LocalProtocol.WriteAsync(pipe, new LocalRequest(operation, JsonSerializer.SerializeToElement(payload), SessionCompany, Session?.Token), deadline.Token);
+                var result = await LocalProtocol.ReadAsync<LocalResponse>(pipe, deadline.Token);
+                if (!result.Success) throw new HostCommandException(result.Error ?? "A művelet nem sikerült.",result.Code);
+                return result.Data ?? JsonSerializer.SerializeToElement(new { });
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { throw new TimeoutException("A művelet túllépte az időkeretet. Próbáld újra."); }
     }
+
+    private static bool IsBusyPipe(Exception ex) => ex is TimeoutException
+        || ex is IOException && ex.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase);
 
     public void StartIfNeeded()
     {

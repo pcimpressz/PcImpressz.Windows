@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "pcimpressz.business": {
+        "type": "Project",
+        "dependencies": {
+          "PcImpressz.Contracts": "[0.5.1, )"
+        }
+      },
+      "pcimpressz.contracts": {
+        "type": "Project"
+      }
+    }
+  }
+}

@@ -20,13 +20,26 @@ public static class SupplierConnectionStore
         byte[] plain;try{plain=WindowsSecret.Unprotect(File.ReadAllBytes(path),Entropy(company));}catch(CryptographicException){throw new IOException("A CompMarket-kapcsolat másik Windows-fiókhoz tartozik.");}
         try{return JsonSerializer.Deserialize<SupplierConnection>(plain,ReceivingJson.Options)??throw new IOException("Hibás CompMarket-kapcsolat.");}finally{CryptographicOperations.ZeroMemory(plain);}
     }
-    public static SupplierConnectionStatus Status(string directory,Guid company){var c=Read(directory,company);return new(c is not null,c?.CustomerId??"",c?.ProxyUrl??"",c?.Enabled??false);}
+    public static SupplierConnectionStatus Status(string directory,Guid company){var c=Read(directory,company);return new(c is not null,c?.CustomerId??"",c is null?"":Redact(c.ProxyUrl),c?.Enabled??false);}
+    public static void RequireProxy(string? url)
+    {
+        var text=(url??"").Trim();
+        if(text.Length==0)throw new ArgumentException("Nincs VPS-proxy. A CompMarket a 217.113.49.52 fix IP-t várja. Közvetlen kapcsolattal nem próbálkozunk.");
+        if(text.Length>500||text.Any(char.IsControl)||!Uri.TryCreate(text,UriKind.Absolute,out var uri)||uri.Scheme is not ("http" or "https")||string.IsNullOrEmpty(uri.Host))throw new ArgumentException("A nagyker-proxy csak http:// vagy https:// cím lehet, például http://felhasznalo:jelszo@217.113.49.52:8888");
+    }
+    public static string Redact(string url){if(!Uri.TryCreate(url,UriKind.Absolute,out var uri))return "";var bare=new UriBuilder(uri){UserName="",Password=""};return bare.Uri.GetComponents(UriComponents.SchemeAndServer,UriFormat.UriEscaped);}
+    public static string MergeProxy(string submitted,string? previous)
+    {
+        RequireProxy(submitted);var next=new Uri(submitted.Trim());
+        if(string.IsNullOrEmpty(next.UserInfo)&&previous is not null&&Uri.TryCreate(previous,UriKind.Absolute,out var old)&&!string.IsNullOrEmpty(old.UserInfo)&&old.Scheme.Equals(next.Scheme,StringComparison.OrdinalIgnoreCase)&&old.Host.Equals(next.Host,StringComparison.OrdinalIgnoreCase)&&old.Port==next.Port)return previous;
+        return submitted.Trim();
+    }
     public static SupplierConnectionStatus Save(string directory,SupplierConnectionSave request)
     {
         var old=Read(directory,request.CompanyId);var auth=string.IsNullOrWhiteSpace(request.AuthCode)?old?.AuthCode??"":request.AuthCode.Trim();
         if(request.CustomerId.Length is <1 or >100||auth.Length is <1 or >500||request.CustomerId.Any(char.IsControl)||auth.Any(char.IsControl))throw new ArgumentException("Ügyfélazonosító és hitelesítő kód szükséges.");
-        if(!Uri.TryCreate(request.ProxyUrl,UriKind.Absolute,out var proxy)||proxy.Scheme is not ("http" or "https")||!string.IsNullOrEmpty(proxy.UserInfo))throw new ArgumentException("A CompMarkethez a rögzített IP-című proxy http(s) címe szükséges; közvetlen kapcsolatot nem használunk.");
-        var plain=JsonSerializer.SerializeToUtf8Bytes(new SupplierConnection(request.CustomerId.Trim(),auth,proxy.AbsoluteUri,request.Enabled),ReceivingJson.Options);
+        var proxyUrl=MergeProxy(request.ProxyUrl,old?.ProxyUrl);
+        var plain=JsonSerializer.SerializeToUtf8Bytes(new SupplierConnection(request.CustomerId.Trim(),auth,proxyUrl,request.Enabled),ReceivingJson.Options);
         byte[] cipher;try{cipher=WindowsSecret.Protect(plain,Entropy(request.CompanyId));}finally{CryptographicOperations.ZeroMemory(plain);}
         Directory.CreateDirectory(directory);var path=Path.Combine(directory,"compmarket-connection.bin");if(File.Exists(path)&&(File.GetAttributes(path)&FileAttributes.ReparsePoint)!=0)throw new IOException("A kapcsolatfájl hivatkozás.");
         var temporary=path+"."+Guid.NewGuid().ToString("N")+".tmp";try{File.WriteAllBytes(temporary,cipher);if(File.Exists(path))File.Replace(temporary,path,null);else File.Move(temporary,path);}finally{if(File.Exists(temporary))File.Delete(temporary);}
@@ -39,8 +52,8 @@ public static class SupplierInvoiceClient
     {
         if(!connection.Enabled)return [];
         if(string.IsNullOrWhiteSpace(number)||number.Length>80||number.Any(char.IsControl))throw new ArgumentException("Teljes CompMarket-számlaszám szükséges.");
-        if(string.IsNullOrWhiteSpace(connection.ProxyUrl))throw new ArgumentException("CompMarket proxy nincs beállítva.");
-        using var owned=testClient is null?new HttpClient(new HttpClientHandler{Proxy=new WebProxy(connection.ProxyUrl),UseProxy=true,AllowAutoRedirect=false,UseCookies=false}){Timeout=TimeSpan.FromSeconds(30)}:null;
+        SupplierConnectionStore.RequireProxy(connection.ProxyUrl);
+        using var owned=testClient is null?new HttpClient(ProxyHandler(connection.ProxyUrl)){Timeout=TimeSpan.FromSeconds(30)}:null;
         try
         {
             var url="https://compmarket.hu/xml/szamla.php?pid="+Uri.EscapeDataString(connection.CustomerId)+"&authcode="+Uri.EscapeDataString(connection.AuthCode)+"&szamlaszam="+Uri.EscapeDataString(number);
@@ -50,7 +63,13 @@ public static class SupplierInvoiceClient
             while((length=await input.ReadAsync(buffer,ct))>0){if(memory.Length+length>4_000_000)throw new ArgumentException("Túl nagy CompMarket-válasz.");memory.Write(buffer,0,length);}
             return Parse(memory.ToArray(),number);
         }
-        catch(HttpRequestException){throw new IOException("A CompMarket-kapcsolat nem érhető el. Ellenőrizd a proxyt és a kapcsolat beállításait.");}
+        catch(HttpRequestException){throw new IOException("A CompMarket a VPS-proxyn keresztül nem elérhető. Közvetlen kapcsolattal nem próbálkozunk.");}
+    }
+    private static HttpClientHandler ProxyHandler(string proxyUrl)
+    {
+        var uri=new Uri(proxyUrl.Trim());var bare=new UriBuilder(uri){UserName="",Password=""}.Uri;var proxy=new WebProxy(bare){BypassProxyOnLocal=false};
+        if(!string.IsNullOrEmpty(uri.UserInfo)){var raw=Uri.UnescapeDataString(uri.UserInfo);var split=raw.Split(':',2);proxy.Credentials=new NetworkCredential(split[0],split.Length==2?split[1]:"");}
+        return new HttpClientHandler{Proxy=proxy,UseProxy=true,AllowAutoRedirect=false,UseCookies=false};
     }
     public static SupplierInvoiceLine[] Parse(byte[] xml,string expectedNumber)
     {

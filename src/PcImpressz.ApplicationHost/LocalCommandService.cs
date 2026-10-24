@@ -25,38 +25,70 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
         using var identity = WindowsIdentity.GetCurrent();
         var actor = identity.User?.Value ?? throw new IOException("A Windows-felhasználó nem azonosítható.");
         var name = DiagnosticChannel.ForDirectory(options.DataDirectory) + "-commands";
+        // Több ablak egyszerre kér adatot. Egyetlen csőpéldánynál a későbbi hívás
+        // három másodperc után angol időtúllépéssel elhasalt.
+        using var gate = new SemaphoreSlim(1, 1);
         while (!stoppingToken.IsCancellationRequested)
+        {
+            NamedPipeServerStream pipe;
+            try
+            {
+                pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 16,
+                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogDebug("Local command listener busy: {Reason}", ex.GetType().Name);
+                try { await Task.Delay(200, stoppingToken); } catch (OperationCanceledException) { break; }
+                continue;
+            }
+            try { await pipe.WaitForConnectionAsync(stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { await pipe.DisposeAsync(); break; }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException)
+            {
+                logger.LogDebug("Local command channel closed: {Reason}", ex.GetType().Name);
+                await pipe.DisposeAsync();
+                continue;
+            }
+            var connected = pipe;
+            _ = ServeAsync(connected);
+        }
+
+        async Task ServeAsync(NamedPipeServerStream pipe)
         {
             try
             {
-                await using var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1,
-                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                await pipe.WaitForConnectionAsync(stoppingToken);
-                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                deadline.CancelAfter(TimeSpan.FromSeconds(90));
-                LocalResponse response;
+                await gate.WaitAsync(stoppingToken);
                 try
                 {
-                    var request = await LocalProtocol.ReadAsync<LocalRequest>(pipe, deadline.Token);
-                    response = await Execute(request, actor, deadline.Token);
+                    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                    deadline.CancelAfter(TimeSpan.FromSeconds(90));
+                    LocalResponse response;
+                    try
+                    {
+                        var request = await LocalProtocol.ReadAsync<LocalRequest>(pipe, deadline.Token);
+                        response = await Execute(request, actor, deadline.Token);
+                    }
+                    catch (RecordNotFoundException ex) { response = new(false, Error: ex.Message, Code: "not-found"); }
+                    catch (UnauthorizedAccessException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
+                    catch (CommandDeniedException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
+                    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                    { response = new(false, Error: ex.Message, Code: "validation"); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException && !stoppingToken.IsCancellationRequested)
+                    {
+                        logger.LogWarning("Local command failed: {ErrorType}", ex.GetType().Name);
+                        response = new(false, Error: ex is IOException ? ex.Message
+                            : ex.GetType().Name is "PartnerConflictException" or "CatalogConflictException" or "ReceivingConflictException" ? ex.Message
+                            : ex is HttpRequestException ? ex.Message : "A művelet nem sikerült. Ellenőrizd az adatokat és a naplót.", Code: "failed");
+                    }
+                    await LocalProtocol.WriteAsync(pipe, response, deadline.Token);
                 }
-                catch (RecordNotFoundException ex) { response = new(false, Error: ex.Message, Code: "not-found"); }
-                catch (UnauthorizedAccessException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
-                catch (CommandDeniedException ex) { response = new(false, Error: ex.Message, Code: "denied"); }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-                { response = new(false, Error: ex.Message, Code: "validation"); }
-                catch (Exception ex) when (ex is not OutOfMemoryException && !stoppingToken.IsCancellationRequested)
-                {
-                    logger.LogWarning("Local command failed: {ErrorType}", ex.GetType().Name);
-                    response = new(false, Error: ex is IOException ? ex.Message
-                        : ex.GetType().Name is "PartnerConflictException" or "CatalogConflictException" or "ReceivingConflictException" ? ex.Message
-                        : ex is HttpRequestException ? ex.Message : "A művelet nem sikerült. Ellenőrizd az adatokat és a naplót.", Code: "failed");
-                }
-                await LocalProtocol.WriteAsync(pipe, response, deadline.Token);
+                finally { gate.Release(); }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
             catch (Exception ex) when (ex is IOException or OperationCanceledException)
             { logger.LogDebug("Local command channel closed: {Reason}", ex.GetType().Name); }
+            finally { await pipe.DisposeAsync(); }
         }
     }
 
@@ -146,9 +178,28 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                 foreach (var key in payload.Select(p => p.Key).Where(k => k.Equals("companyId", StringComparison.OrdinalIgnoreCase)).ToArray())
                     payload.Remove(key);
                 payload["companyId"] = command.CompanyId;
+                // Host-owned capability flags: never trust flags supplied by a client.
+                foreach (var key in payload.Select(p => p.Key).Where(k => k.StartsWith("__module", StringComparison.OrdinalIgnoreCase)).ToArray())
+                    payload.Remove(key);
+                if (command.ModuleId == "sales")
+                {
+                    payload["__moduleCatalogEnabled"] = modulesEnabled.IsEnabled("catalog");
+                    payload["__modulePartnersEnabled"] = modulesEnabled.IsEnabled("partners");
+                    payload["__moduleInventoryEnabled"] = modulesEnabled.IsEnabled("inventory");
+                    if (command.Command == "customer-save" && !modulesEnabled.IsEnabled("partners"))
+                        throw new CommandDeniedException("A partnertörzs ki van kapcsolva; kézi vevőadatokat használj.");
+                    if (command.Command == "save")
+                    {
+                        if (!modulesEnabled.IsEnabled("partners") && payload.TryGetPropertyValue("customerId", out var cid) && cid is not null)
+                            throw new CommandDeniedException("A partnertörzs ki van kapcsolva; kézi vevőadatokat használj.");
+                        if (!modulesEnabled.IsEnabled("catalog") && payload.TryGetPropertyValue("lines", out var lineNode) && lineNode is JsonArray lineArray && lineArray.Any(line => line is JsonObject obj && obj.TryGetPropertyValue("productId", out var pid) && pid is not null && pid.ToString() != Guid.Empty.ToString()))
+                            throw new CommandDeniedException("A cikktörzs ki van kapcsolva; kézi tételeket használj.");
+                    }
+                }
+
                 var session=Session(command.CompanyId);
                 // Dossiers expose cross-module history; NAV settings contain local secrets.
-                if ((command.ModuleId=="receiving" && command.Command is "supplier-save" or "nav-save" or "bizonylat-save" or "invoicing-settings" or "invoicing-settings-save" or "bizonylat-status" or "outgoing-issue-sale") || (command.ModuleId=="partners" && command.Command=="dossier") || (command.ModuleId=="catalog"&&command.Command=="products-overview"))
+                if ((command.ModuleId=="receiving" && command.Command is "supplier-save" or "nav-save" or "bizonylat-save" or "invoicing-settings" or "invoicing-settings-save" or "bizonylat-status" or "outgoing-issue-sale") || (command.ModuleId=="partners" && command.Command=="dossier") || (command.ModuleId=="catalog"&&command.Command=="products-overview") || (command.ModuleId=="quotes" && command.Command=="compmarket-save"))
                     Admin(command.CompanyId);
                 var caller = new CallerIdentity(actor+"/"+session.UserName, commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(session.Role,p)).ToHashSet(StringComparer.Ordinal), session.Role);
                 if(command.ModuleId=="sales"&&command.Command=="customer-save")CustomerWriteLicense();

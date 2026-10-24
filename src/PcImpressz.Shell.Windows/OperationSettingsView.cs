@@ -30,6 +30,32 @@ public sealed class OperationWorkspace : Observable
     public string Message { get => _message; private set { _message = value; Changed(); } }
     public OperationSnapshot Snapshot => _snapshot;
 
+    public OutgoingMailAccount MailAccount()
+    {
+        try
+        {
+            string Value(string key)
+            {
+                if (_snapshot.Values.TryGetValue(key, out var stored)) return stored;
+                return OperationCatalog.Defaults.TryGetValue(key, out var fallback) ? fallback : "";
+            }
+            var port = int.TryParse(Value("smtp_port"), out var parsed) && parsed is > 0 and <= 65535 ? parsed : 587;
+            return new OutgoingMailAccount
+            {
+                Host = Value("smtp_host").Trim(),
+                Port = port,
+                Ssl = Value("smtp_ssl").Equals("true", StringComparison.OrdinalIgnoreCase),
+                User = Value("smtp_user").Trim(),
+                Password = _broken ? "" : _store.ReadSecret("smtp_jelszo"),
+                SignatureName = Value("email_alairas").Trim(),
+                Website = Value("ceg_web").Trim(),
+                Problem = _broken ? _message : ""
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Security.Cryptography.CryptographicException)
+        { return new OutgoingMailAccount { Problem = ex.Message }; }
+    }
+
     public bool TrySave(IReadOnlyDictionary<string, string> submitted)
     {
         if (!_canEdit()) { Message = "Adminbejelentkezés szükséges."; return false; }
