@@ -333,7 +333,9 @@ internal sealed class QuotesPageView:UserControl
         editor.Children.Add(Label("Tétel keresése"));
         var offerQuery=Input("OfferQuery");offerQuery.MaxLength=200;offerQuery.ToolTip="Név, cikkszám vagy vonalkód. A saját készlet és a bekötött nagykerek egy listában jelennek meg.";editor.Children.Add(offerQuery);
         var filters=new WrapPanel{Margin=new Thickness(0,4,0,0)};
-        filters.Children.Add(Check("Saját készlet","IncludeOwn","CatalogAvailable"));filters.Children.Add(Check("CompMarket","IncludeCompMarket",null));filters.Children.Add(Check("Csak elérhető","AvailableOnly",null));editor.Children.Add(filters);
+        filters.Children.Add(Check("Saját készlet","IncludeOwn","CatalogAvailable"));filters.Children.Add(Check("CompMarket","IncludeCompMarket",null));
+        foreach(var planned in new[]{"JTC","Cédrus","Orink","Caseking"})filters.Children.Add(new CheckBox{Content=planned,IsEnabled=false,IsChecked=false,Margin=new Thickness(0,8,16,0),ToolTip="Még nincs bekötve. A kapcsoló a többi nagyker adapterével együtt lesz használható."});
+        filters.Children.Add(Check("Csak elérhető","AvailableOnly",null));editor.Children.Add(filters);
         editor.Children.Add(Label("Felár % a CompMarket beszerzési nettó árára"));
         var margin=Input("CompMarketMargin");margin.Width=120;margin.HorizontalAlignment=HorizontalAlignment.Left;editor.Children.Add(margin);
         var legend=new TextBlock{Text="Zöld csík: saját készlet. Borostyán csík: CompMarket. A később bekötött nagykerek ugyanebbe a listába kerülnek.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,0,4)};legend.SetResourceReference(StyleProperty,"Muted");editor.Children.Add(legend);

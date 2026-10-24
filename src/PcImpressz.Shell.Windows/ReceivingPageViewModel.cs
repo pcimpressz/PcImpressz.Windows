@@ -245,7 +245,25 @@ internal sealed partial class ReceivingPageViewModel : Observable, IWorkspacePag
             foreach (var row in result.GetProperty("rows").EnumerateArray())
                 line.Matches.Add(new(row.GetProperty("id").GetGuid(), row.GetProperty("name").GetString() ?? "", row.GetProperty("sku").GetString() ?? "",
                     row.TryGetProperty("barcode", out var barcode) ? barcode.GetString() ?? "" : "", row.GetProperty("unitCode").GetString() ?? ""));
-            Message = line.Matches.Count == 0 ? "Nincs ilyen aktív termék. Az Új termék gombbal felveheted." : line.Matches.Count + " termék a találatok között.";
+            var note = line.Matches.Count == 0 ? "Nincs ilyen aktív termék. Az Új termék gombbal felveheted." : line.Matches.Count + " saját termék a találatok között.";
+            var lookup = string.IsNullOrWhiteSpace(line.SearchText) ? line.Name : line.SearchText;
+            if (lookup.Trim().Length >= 2)
+            {
+                try
+                {
+                    var wholesale = await ModuleAsync("quotes", "wholesale-search-cached", new { query = lookup.Trim(), context = "receiving", providers = new[] { "compmarket" }, marginPercent = 0m, vatRate = 27m });
+                    if (wholesale.GetArrayLength() > 0)
+                    {
+                        var first = wholesale[0];
+                        note += " CompMarket: " + wholesale.GetArrayLength() + " tétel, például " + first.GetProperty("name").GetString()
+                            + " · " + first.GetProperty("purchaseNet").GetDecimal().ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("hu-HU")) + " Ft nettó.";
+                    }
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException && ex.Message.Contains("Még nincs letöltött", StringComparison.Ordinal))
+                { note += " " + ex.Message; }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { }
+            }
+            Message = note;
         }
         catch (Exception ex) { Message = ex.Message; }
         finally { IsBusy = false; }

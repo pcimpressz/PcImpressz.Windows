@@ -67,6 +67,12 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                     try
                     {
                         var request = await LocalProtocol.ReadAsync<LocalRequest>(pipe, deadline.Token);
+                        if (IsCompMarketDownload(request))
+                        {
+                            // A 90 másodperces parancskeret a nagy XML-t félbeszakította, a válasz
+                            // pedig a már lejárt tokennel nem ért vissza a felületre.
+                            deadline.CancelAfter(TimeSpan.FromMinutes(35));
+                        }
                         response = await Execute(request, actor, deadline.Token);
                     }
                     catch (RecordNotFoundException ex) { response = new(false, Error: ex.Message, Code: "not-found"); }
@@ -81,7 +87,8 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
                             : ex.GetType().Name is "PartnerConflictException" or "CatalogConflictException" or "ReceivingConflictException" ? ex.Message
                             : ex is HttpRequestException ? ex.Message : "A művelet nem sikerült. Ellenőrizd az adatokat és a naplót.", Code: "failed");
                     }
-                    await LocalProtocol.WriteAsync(pipe, response, deadline.Token);
+                    // A lejárt munka tokenje nem nyelheti el a hibaválaszt.
+                    await LocalProtocol.WriteAsync(pipe, response, stoppingToken);
                 }
                 finally { gate.Release(); }
             }
@@ -90,6 +97,15 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
             { logger.LogDebug("Local command channel closed: {Reason}", ex.GetType().Name); }
             finally { await pipe.DisposeAsync(); }
         }
+    }
+
+    private static bool IsCompMarketDownload(LocalRequest request)
+    {
+        if (request.Operation != "module.execute" || request.Payload.ValueKind != JsonValueKind.Object) return false;
+        if (!request.Payload.TryGetProperty("ModuleId", out var module) && !request.Payload.TryGetProperty("moduleId", out module)) return false;
+        if (!string.Equals(module.GetString(), "quotes", StringComparison.Ordinal)) return false;
+        if (!request.Payload.TryGetProperty("Command", out var command) && !request.Payload.TryGetProperty("command", out command)) return false;
+        return command.GetString() is "compmarket-test" or "compmarket-search" or "compmarket-job-start";
     }
 
     private LocalResponse AdminCommand(LocalRequest request, string sid)
@@ -199,7 +215,7 @@ internal sealed partial class LocalCommandService(HostOptions options, CompanySt
 
                 var session=Session(command.CompanyId);
                 // Dossiers expose cross-module history; NAV settings contain local secrets.
-                if ((command.ModuleId=="receiving" && command.Command is "supplier-save" or "nav-save" or "bizonylat-save" or "invoicing-settings" or "invoicing-settings-save" or "bizonylat-status" or "outgoing-issue-sale") || (command.ModuleId=="partners" && command.Command=="dossier") || (command.ModuleId=="catalog"&&command.Command=="products-overview") || (command.ModuleId=="quotes" && command.Command=="compmarket-save"))
+                if ((command.ModuleId=="receiving" && command.Command is "supplier-save" or "nav-save" or "bizonylat-save" or "invoicing-settings" or "invoicing-settings-save" or "bizonylat-status" or "outgoing-issue-sale") || (command.ModuleId=="partners" && command.Command=="dossier") || (command.ModuleId=="catalog"&&command.Command=="products-overview") || (command.ModuleId=="quotes" && command.Command is "compmarket-save" or "wholesale-save" or "wholesale-list" or "compmarket-test" or "compmarket-proxy-test" or "compmarket-job-start" or "compmarket-job-status"))
                     Admin(command.CompanyId);
                 var caller = new CallerIdentity(actor+"/"+session.UserName, commands.RegisteredPermissions.Where(p=>CompanyRoles.Allows(session.Role,p)).ToHashSet(StringComparer.Ordinal), session.Role);
                 if(command.ModuleId=="sales"&&command.Command=="customer-save")CustomerWriteLicense();

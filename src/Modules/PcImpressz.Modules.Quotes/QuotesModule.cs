@@ -29,6 +29,73 @@ public sealed class QuotesModule : IModule
     private static string Key(Guid id) => "quote/" + id.ToString("N");
     public ValueTask StartAsync(IModuleContext context, CancellationToken cancellationToken)
     {
+        Register(context, "wholesale-list", "quotes.read", CommandAccess.RecoveryReadOnly, (input, _, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var id=input.GetProperty("companyId").GetGuid();
+            return Task.FromResult(DomainCommands.Json(WholesaleConnections.List(context.GetCompanyDataDirectory(id),id)));
+        });
+        Register(context, "wholesale-save", "quotes.write", CommandAccess.Licensed, (input, _, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();var request=DomainCommands.Read<WholesaleSave>(input);
+            return Task.FromResult(DomainCommands.Json(WholesaleConnections.Save(context.GetCompanyDataDirectory(request.CompanyId),request)));
+        });
+        Register(context, "wholesale-visibility-save", "quotes.write", CommandAccess.Licensed, (input, _, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var request = DomainCommands.Read<WholesaleVisibilitySave>(input);
+            return Task.FromResult(DomainCommands.Json(WholesaleConnections.SaveVisibility(context.GetCompanyDataDirectory(request.CompanyId), request)));
+        });
+        Register(context, "compmarket-proxy-test", "quotes.read", CommandAccess.RecoveryReadOnly, async (input, _, ct) =>
+        {
+            var id = input.GetProperty("companyId").GetGuid();
+            var connection = CompMarketQuoteConnectionStore.Read(context.GetCompanyDataDirectory(id), id)
+                ?? throw new ArgumentException("Előbb mentsd a CompMarket kapcsolatot.");
+            return DomainCommands.Json(await CompMarketQuoteFeed.ProxyTestAsync(connection, ct));
+        });
+        Register(context, "compmarket-job-start", "quotes.read", CommandAccess.RecoveryReadOnly, (input, _, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var id = input.GetProperty("companyId").GetGuid();
+            var directory = context.GetCompanyDataDirectory(id);
+            var connection = CompMarketQuoteConnectionStore.Read(directory, id)
+                ?? throw new ArgumentException("Előbb mentsd a CompMarket-kapcsolatot.");
+            return Task.FromResult(DomainCommands.Json(WholesaleDownloadJobs.Start(directory, connection)));
+        });
+        Register(context, "compmarket-job-status", "quotes.read", CommandAccess.RecoveryReadOnly, (input, _, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var id = input.GetProperty("companyId").GetGuid();
+            return Task.FromResult(DomainCommands.Json(WholesaleDownloadJobs.Status(context.GetCompanyDataDirectory(id))));
+        });
+        Register(context, "compmarket-test", "quotes.read", CommandAccess.RecoveryReadOnly, (input, _, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var id = input.GetProperty("companyId").GetGuid();
+            var directory = context.GetCompanyDataDirectory(id);
+            var connection = CompMarketQuoteConnectionStore.Read(directory, id)
+                ?? throw new ArgumentException("Még nincs mentett CompMarket-kapcsolat.");
+            // A nagy XML a parancs válaszától függetlenül töltődik, különben a 90 másodperces
+            // parancskeret félbeszakítja, és a felület nem kap folyamatjelzést.
+            return Task.FromResult(DomainCommands.Json(WholesaleDownloadJobs.Start(directory, connection)));
+        });
+        Register(context, "wholesale-search-cached", "quotes.read", CommandAccess.RecoveryReadOnly, (input, _, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var company = input.GetProperty("companyId").GetGuid();
+            var query = DomainCommands.Search(input, "query");
+            var sources = input.TryGetProperty("providers", out var selected) && selected.ValueKind == JsonValueKind.Array
+                ? selected.EnumerateArray().Select(x => x.GetString() ?? "").ToArray()
+                : new[] { "compmarket" };
+            var markup = input.TryGetProperty("marginPercent", out var value) && value.TryGetDecimal(out var m) ? m : 20m;
+            var vat = input.TryGetProperty("vatRate", out var tax) && tax.TryGetDecimal(out var v) ? v : 27m;
+            var directory = context.GetCompanyDataDirectory(company);
+            var view = input.TryGetProperty("context", out var contextValue) && contextValue.ValueKind == JsonValueKind.String
+                ? contextValue.GetString() ?? "quotes" : "quotes";
+            var permitted = sources.Where(id => WholesaleConnections.IsVisible(directory, company, id, view)).ToArray();
+            return Task.FromResult(DomainCommands.Json(WholesaleCatalogEngine.SearchCached(
+                directory, company, query, permitted, markup, vat)));
+        });
         Register(context, "compmarket-status", "quotes.read", CommandAccess.RecoveryReadOnly, (input, _, ct) =>
         {
             ct.ThrowIfCancellationRequested();
@@ -45,11 +112,13 @@ public sealed class QuotesModule : IModule
         {
             var id = input.GetProperty("companyId").GetGuid();
             var directory = context.GetCompanyDataDirectory(id);
+            if (!WholesaleConnections.IsVisible(directory, id, "compmarket", "quotes"))
+                throw new InvalidOperationException("A CompMarket az Árajánlat modulban ki van kapcsolva.");
             var connection = CompMarketQuoteConnectionStore.Read(directory, id) ?? throw new ArgumentException("Nincs CompMarket-kapcsolat. A Beállítások CompMarket kártyáján add meg a proxyt, a pid-et és a kódot.");
             var query = DomainCommands.Search(input, "query");
             var margin = input.TryGetProperty("marginPercent", out var marginValue) && marginValue.TryGetDecimal(out var parsed) ? parsed : 20m;
             var vat = input.TryGetProperty("vatRate", out var vatValue) && vatValue.TryGetDecimal(out var parsedVat) ? parsedVat : 27m;
-            return DomainCommands.Json(await CompMarketQuoteFeed.SearchAsync(directory, connection, query, margin, vat, ct));
+            return DomainCommands.Json(CompMarketQuoteFeed.SearchCached(directory, query, margin, vat));
         });
         DomainCommands.Register(context, "list", "quotes.read", CommandAccess.RecoveryReadOnly, (tx, input, _) =>
         {

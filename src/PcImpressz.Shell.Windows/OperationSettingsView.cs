@@ -125,6 +125,12 @@ public sealed class OperationSettingsView : StackPanel
         _workspace = workspace;
         var page = DataContext as OperationSettingsPage;
         if (page is null || OperationCatalog.Find(page.GroupId) is not { } group) return;
+        if(group.Id == OperationCatalog.Wholesale)
+        {
+            var providers=new ExternalProvidersCard();
+            providers.SetBinding(DataContextProperty,new System.Windows.Data.Binding("DataContext"){RelativeSource=new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.FindAncestor,typeof(Window),1)});
+            Children.Add(providers);return;
+        }
         foreach (var section in group.Sections) Children.Add(Card(workspace, section));
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 4, 0, 0) };
         var save = new Button { Content = "Mentés", HorizontalAlignment = HorizontalAlignment.Left };

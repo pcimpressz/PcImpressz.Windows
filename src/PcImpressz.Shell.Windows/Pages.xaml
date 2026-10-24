@@ -115,7 +115,8 @@
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                  <TextBlock Text="{Binding Id}" Style="{StaticResource SectionTitle}" />
+                  <TextBlock Text="{Binding DisplayName}" Style="{StaticResource SectionTitle}" />
+                  <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Style="{StaticResource Muted}" />
                   <TextBlock Text="{Binding Reason}" Style="{StaticResource Muted}" />
                   <TextBlock Text="{Binding UsageLabel}" Margin="0,12,0,8" FontWeight="SemiBold" />
                   <CheckBox Content="Használatban" IsChecked="{Binding Enabled}" IsEnabled="{Binding DataContext.IsCompanyAdmin, RelativeSource={RelativeSource AncestorType=Window}}" AutomationProperties.Name="{Binding ToggleName}" HorizontalAlignment="Left" />
@@ -324,7 +325,19 @@
     </StackPanel>
   </DataTemplate>
   <DataTemplate DataType="{x:Type local:SettingsPage}">
-    <StackPanel DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+    <TabControl DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}" Background="Transparent" BorderThickness="0" Padding="0,14,0,0" Foreground="{DynamicResource TextBrush}">
+      <TabControl.Resources>
+        <Style TargetType="TabItem">
+          <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
+            <Border x:Name="Frame" Background="{DynamicResource ElevatedBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="18,12" Margin="0,0,8,0">
+              <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate></Setter.Value></Setter>
+        </Style>
+      </TabControl.Resources><TabItem Header="Általános beállítások"><StackPanel>
       <Expander Header="Általános és listák" IsExpanded="True" Margin="0,0,0,18">
         <StackPanel>
           <Border Style="{StaticResource Card}">
@@ -418,7 +431,7 @@
       </StackPanel></Border></Expander>
       <Expander Header="Számlázás · szolgáltató és számlatömbök" Margin="0,0,0,18"><local:InvoicingSettingsCard Margin="0,16,0,0" IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
       <Expander Header="Árajánlat · logó és aláírás" Margin="0,0,0,18"><local:QuoteBrandingCard Margin="0,16,0,0" IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
-      <Expander Header="Beszállítói API-k · CompMarket" Margin="0,0,0,18"><local:SupplierConnectionCard IsEnabled="{Binding IsCompanyAdmin}" /></Expander>
+
       <Expander Header="NAV-kapcsolat" IsExpanded="True" Margin="0,0,0,18">
         <StackPanel>
           <local:NavConnectionCard Margin="0,20,0,0" IsEnabled="{Binding IsCompanyAdmin}" />
@@ -448,7 +461,7 @@
           </Border>
         </StackPanel>
       </Expander>
-    </StackPanel>
+    </StackPanel></TabItem><TabItem Header="Külső szolgáltatók"><local:ExternalProvidersCard /></TabItem></TabControl>
   </DataTemplate>
   <DataTemplate DataType="{x:Type local:OperationSettingsPage}"><local:OperationSettingsView Workspace="{Binding DataContext.Operations, RelativeSource={RelativeSource AncestorType=Window}}" /></DataTemplate>
 </ResourceDictionary>
